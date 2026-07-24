@@ -23,28 +23,49 @@ function containsPhrase(haystack: string, phrase: string): boolean {
 }
 
 /**
- * Detects an explicit `City, Province` pair, which is the most reliable form
- * because the province disambiguates cities that exist in several countries.
+ * Detects every explicit `City, Province` pair in the text, in the order they
+ * appear. This is the most reliable form because the province disambiguates
+ * cities that exist in several countries.
+ *
+ * All pairs are returned rather than just the first: a posting that lists
+ * "Calgary, AB / Edmonton, AB / Regina, SK" states three equally valid work
+ * locations, and reporting only the first as though it were the answer hides a
+ * choice the user has to make. Returning them all lets the scoring tie-break
+ * downgrade confidence and flag the ambiguity.
  */
-function matchCityProvince(text: string): { value: string; city: string } | null {
+function matchCityProvince(
+  text: string,
+): Array<{ value: string; city: string; offset: number }> {
+  const found = new Map<string, { value: string; city: string; offset: number }>();
+
   for (const location of CANADIAN_LOCATIONS) {
     for (const alias of [location.city.toLowerCase(), ...location.aliases]) {
       const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const pattern = new RegExp(
         `(?:^|[^a-z0-9])${escaped}\\s*,\\s*([a-zé][a-zé\\s]{1,30})(?:[^a-z]|$)`,
-        "i",
+        "gi",
       );
-      const match = pattern.exec(text);
-      if (!match) continue;
 
-      const provinceText = match[1].trim().toLowerCase();
-      const code = PROVINCE_CODES.get(provinceText);
-      if (code && code === location.provinceCode) {
-        return { value: formatLocation(location), city: location.city };
+      for (const match of text.matchAll(pattern)) {
+        const provinceText = match[1].trim().toLowerCase();
+        const code = PROVINCE_CODES.get(provinceText);
+        if (!code || code !== location.provinceCode) continue;
+
+        const value = formatLocation(location);
+        // One entry per distinct place, keyed on the formatted value so the
+        // same city written two ways is corroboration, not a second option.
+        if (!found.has(value)) {
+          found.set(value, {
+            value,
+            city: location.city,
+            offset: match.index ?? 0,
+          });
+        }
       }
     }
   }
-  return null;
+
+  return [...found.values()].sort((left, right) => left.offset - right.offset);
 }
 
 function matchCityAlone(
@@ -71,15 +92,17 @@ export function extractLocation(
     const labelled = matchLabel(line.original, "location");
     const haystack = labelled ?? line.original;
 
-    const pair = matchCityProvince(haystack);
-    if (pair) {
-      candidates.push({
-        value: pair.value,
-        score: labelled ? 125 : 100,
-        evidence: line.original,
-        ruleId: "location:city-province",
-        lineIndex: line.index,
-      });
+    const pairs = matchCityProvince(haystack);
+    if (pairs.length) {
+      for (const pair of pairs) {
+        candidates.push({
+          value: pair.value,
+          score: labelled ? 125 : 100,
+          evidence: line.original,
+          ruleId: "location:city-province",
+          lineIndex: line.index,
+        });
+      }
       continue;
     }
 

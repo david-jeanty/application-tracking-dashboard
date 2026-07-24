@@ -22,6 +22,18 @@ const ROLE_WORDS =
 const QUALIFIER_WORDS =
   /\b(junior|senior|entry[\s-]level|graduate|new grad|summer|fall|winter|spring|20\d{2})\b/i;
 
+/**
+ * Recovers a title stated only in prose: "Silverbrook Grain Cooperative is
+ * looking for a Business Operations Analyst to join our planning team."
+ *
+ * The capture is the run of capitalized words after the hiring verb, plus an
+ * optional trailing parenthetical such as "(Co-op)". Stopping at the first
+ * lowercase word is what bounds the match — "to join our planning team" is
+ * excluded for free, with no need to enumerate sentence tails.
+ */
+const PROSE_TITLE =
+  /\b(?:looking for|seeking|hiring|recruiting)\s+(?:an?|our|the)?\s*([A-Z][\w&.'/-]*(?:[,\s]+[A-Z][\w&.'/-]*){0,6}(?:\s*\([^)]{1,20}\))?)/;
+
 function scoreTitleLine(line: NormalizedLine): number {
   let score = 0;
   const words = line.original.split(/\s+/);
@@ -73,6 +85,21 @@ export function extractTitle(
         lineIndex: line.index,
       });
       continue;
+    }
+
+    // A hiring sentence names the role explicitly, so it is trusted anywhere in
+    // the document. It scores into the Medium band: below a labelled title and
+    // below a strong heading, but enough to stand alone when the posting never
+    // puts the title on its own line.
+    const prose = PROSE_TITLE.exec(line.original)?.[1]?.replace(/[,\s]+$/, "");
+    if (prose && prose.length <= MAX_TITLE_LENGTH && ROLE_WORDS.test(prose)) {
+      candidates.push({
+        value: prose,
+        score: 70,
+        evidence: line.original,
+        ruleId: "title:prose-hiring-sentence",
+        lineIndex: line.index,
+      });
     }
 
     // Heuristics only apply near the top; scanning the whole body produces

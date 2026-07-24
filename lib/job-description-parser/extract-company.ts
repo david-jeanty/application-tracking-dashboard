@@ -62,6 +62,40 @@ const STOP_WORDS = new Set([
 /** Legal abbreviations whose trailing period is part of the name, not prose. */
 const ABBREVIATION_END = /\b(inc|ltd|corp|co|llc|llp|plc|gmbh|s\.a)\.$/i;
 
+/**
+ * Glyphs that join independent facts into one header line, as job boards do:
+ * "Northwind Cloud Services · Edmonton, AB · On-site". Each segment has to be
+ * considered separately or the employer name arrives glued to the location.
+ */
+const SEGMENT_SEPARATOR = /\s*[·•|]\s*/;
+
+/**
+ * Lead-ins that introduce an employer rather than forming part of its name, as
+ * on a careers page header ("Careers at Ironwood Labs") or a banner line
+ * ("Join Brightpath Systems"). The lookahead keeps the strip anchored to a
+ * following proper noun so ordinary prose is untouched.
+ */
+const HEADER_LEAD_IN =
+  /^(?:careers|jobs|opportunities|openings|work|life|welcome)?\s*(?:at|with|to|join)\s+(?=[A-Z])/i;
+
+/** Role vocabulary, used here only to tell a job title apart from an employer. */
+const ROLE_WORD =
+  /\b(intern|internship|co-?op|student|analyst|coordinator|associate|specialist|manager|engineer|developer|designer|consultant|advisor|assistant|representative|administrator|technician|lead|director|officer|strategist)\b/i;
+
+/** Two to five capitalized words and nothing else: the shape of a bare name. */
+const BARE_NAME = /^[A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*){1,4}$/;
+
+/**
+ * Splits a header line into the independent names it may contain and removes
+ * any lead-in phrase from each. Returns the segments in source order.
+ */
+function headerSegments(line: string): string[] {
+  return line
+    .split(SEGMENT_SEPARATOR)
+    .map((segment) => segment.replace(HEADER_LEAD_IN, "").trim())
+    .filter((segment) => segment.length > 0);
+}
+
 function cleanCandidate(value: string): string | null {
   const withoutTrailingPunctuation = ABBREVIATION_END.test(value.trim())
     ? value.replace(/[,;:]+$/, "")
@@ -119,16 +153,44 @@ export function extractCompany(
     // A short leading line carrying a legal suffix is very likely the employer,
     // but only when an intro phrase has not already isolated the name: "Join
     // Brightpath Systems" would otherwise yield the whole line as the name.
-    if (!introMatched && line.index < 4 && COMPANY_SUFFIX.test(line.original)) {
-      const cleaned = cleanCandidate(line.original);
-      if (cleaned && cleaned.split(/\s+/).length <= 8) {
-        candidates.push({
-          value: cleaned,
-          score: 95,
-          evidence: line.original,
-          ruleId: "company:legal-suffix",
-          lineIndex: line.index,
-        });
+    // Each segment is judged on its own so a composite header line contributes
+    // just the name, not the location and work arrangement stapled to it.
+    if (!introMatched && line.index < 4) {
+      for (const segment of headerSegments(line.original)) {
+        if (!COMPANY_SUFFIX.test(segment)) continue;
+
+        const cleaned = cleanCandidate(segment);
+        if (cleaned && cleaned.split(/\s+/).length <= 8) {
+          candidates.push({
+            value: cleaned,
+            score: 95,
+            evidence: line.original,
+            ruleId: "company:legal-suffix",
+            lineIndex: line.index,
+          });
+        }
+      }
+    }
+
+    // Last resort: a bare title-case name sitting just under the job title,
+    // which is how a plain posting states its employer. Deliberately scored
+    // into the Low band — it is a guess from position alone, so it stays
+    // visible in the summary without ever populating the form on its own.
+    if (!introMatched && line.index >= 1 && line.index <= 3 && !line.original.includes(":")) {
+      for (const segment of headerSegments(line.original)) {
+        if (!BARE_NAME.test(segment)) continue;
+        if (ROLE_WORD.test(segment)) continue;
+
+        const cleaned = cleanCandidate(segment);
+        if (cleaned) {
+          candidates.push({
+            value: cleaned,
+            score: 45,
+            evidence: line.original,
+            ruleId: "company:bare-name",
+            lineIndex: line.index,
+          });
+        }
       }
     }
   }

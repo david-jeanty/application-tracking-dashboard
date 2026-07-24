@@ -24,8 +24,11 @@ export type PrefillResult = {
  * Fields below this confidence are reported but not written into the form.
  * A wrong confident answer is worse than a blank field, and a Low-confidence
  * prefill is one the user is likely to accept without checking.
+ *
+ * Exported so the evaluation harness scores against the policy the form
+ * actually applies instead of a second copy that could drift from it.
  */
-function shouldApply(confidence: ExtractionConfidence): boolean {
+export function shouldPrefill(confidence: ExtractionConfidence): boolean {
   return confidence === "High" || confidence === "Medium";
 }
 
@@ -49,7 +52,8 @@ export function mapToFormValues(parsed: ParsedJobDescription): PrefillResult {
     label: string,
     extracted: ExtractedField<ApplicationFormValues[K]>,
   ) => {
-    const applied = extracted.value !== null && shouldApply(extracted.confidence);
+    const applied =
+      extracted.value !== null && shouldPrefill(extracted.confidence);
     if (applied && extracted.value !== null) {
       values[field] = extracted.value;
     }

@@ -54,14 +54,53 @@ const MONTH_RANGE_SEASONS: Array<{
   },
 ];
 
+/**
+ * Unit vocabulary. French forms are accepted alongside English because a
+ * Quebec posting states its length as "4 mois" while labelling the rest of the
+ * document in either language; the normalized output stays English.
+ */
+const MONTH_UNIT = "(?:months?|mois)";
+const WEEK_UNIT = "(?:weeks?|semaines?)";
+
+/** Matches a French unit so a match can be normalized to the right noun. */
+const WEEK_UNIT_TEST = /week|semaine/i;
+
 const DURATION_PATTERNS: Array<{ pattern: RegExp; value: string; score: number }> = [
-  { pattern: /\b4\s*(?:or|to|-|–)\s*8[\s-]?months?\b/i, value: "4 or 8 months", score: 115 },
-  { pattern: /\b8\s*(?:or|to|-|–)\s*12[\s-]?months?\b/i, value: "8 or 12 months", score: 115 },
-  { pattern: /\b(?:four)[\s-]?months?\b/i, value: "4 months", score: 100 },
-  { pattern: /\b(?:eight)[\s-]?months?\b/i, value: "8 months", score: 100 },
-  { pattern: /\b(?:twelve)[\s-]?months?\b/i, value: "12 months", score: 100 },
-  { pattern: /\b(\d{1,2})[\s-]?months?\b/i, value: "", score: 95 },
-  { pattern: /\b(\d{1,2})[\s-]?weeks?\b/i, value: "", score: 70 },
+  {
+    pattern: new RegExp(`\\b4\\s*(?:or|to|ou|-|–)\\s*8[\\s-]?${MONTH_UNIT}\\b`, "i"),
+    value: "4 or 8 months",
+    score: 115,
+  },
+  {
+    pattern: new RegExp(`\\b8\\s*(?:or|to|ou|-|–)\\s*12[\\s-]?${MONTH_UNIT}\\b`, "i"),
+    value: "8 or 12 months",
+    score: 115,
+  },
+  {
+    pattern: new RegExp(`\\b(?:four|quatre)[\\s-]?${MONTH_UNIT}\\b`, "i"),
+    value: "4 months",
+    score: 100,
+  },
+  {
+    pattern: new RegExp(`\\b(?:eight|huit)[\\s-]?${MONTH_UNIT}\\b`, "i"),
+    value: "8 months",
+    score: 100,
+  },
+  {
+    pattern: new RegExp(`\\b(?:twelve|douze)[\\s-]?${MONTH_UNIT}\\b`, "i"),
+    value: "12 months",
+    score: 100,
+  },
+  {
+    pattern: new RegExp(`\\b(\\d{1,2})[\\s-]?${MONTH_UNIT}\\b`, "i"),
+    value: "",
+    score: 95,
+  },
+  {
+    pattern: new RegExp(`\\b(\\d{1,2})[\\s-]?${WEEK_UNIT}\\b`, "i"),
+    value: "",
+    score: 70,
+  },
 ];
 
 function extractSeason(document: NormalizedDocument): FieldCandidate<string>[] {
@@ -128,7 +167,7 @@ function extractDuration(
       const match = pattern.exec(haystack);
       if (!match) continue;
 
-      const unit = /week/i.test(match[0]) ? "weeks" : "months";
+      const unit = WEEK_UNIT_TEST.test(match[0]) ? "weeks" : "months";
       const resolved = value || `${match[1]} ${unit}`;
 
       candidates.push({

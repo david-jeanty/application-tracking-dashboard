@@ -41,6 +41,18 @@ const NEGATIVE_CONTEXT: Array<[RegExp, number]> = [
 /** Beyond this many characters a context phrase no longer describes the date. */
 const CONTEXT_WINDOW = 90;
 
+/**
+ * Ceiling for a date whose day/month order is genuinely ambiguous, chosen to
+ * sit just below the High threshold.
+ *
+ * `03/04/2027` is either 3 April or 4 March depending on the writer's locale,
+ * and nothing in the posting settles it. The reading is still offered, because
+ * a deadline the user can correct beats no deadline at all — but never at High,
+ * where it would populate the form as if it were certain. A deadline wrong by
+ * months is the failure most likely to cost a real application.
+ */
+const AMBIGUOUS_ORDER_CEILING = 85;
+
 type ContextHit = { weight: number; distance: number };
 
 /**
@@ -124,7 +136,7 @@ export function extractDeadline(
       }
 
       if (date.ambiguousOrder) {
-        score -= 20;
+        score = Math.min(score - 20, AMBIGUOUS_ORDER_CEILING);
         warnings.push(
           `"${date.text}" could be day-first or month-first; it was read as day-first.`,
         );

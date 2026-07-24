@@ -35,9 +35,9 @@ export const LABEL_RULES = {
     labelPattern("date\\s*limite"),
   ],
   location: [
-    labelPattern("location"),
-    labelPattern("job\\s*location"),
-    labelPattern("work\\s*location"),
+    labelPattern("locations?"),
+    labelPattern("job\\s*locations?"),
+    labelPattern("work\\s*locations?"),
     labelPattern("city"),
     labelPattern("lieu"),
   ],
@@ -58,6 +58,7 @@ export const LABEL_RULES = {
     labelPattern("length\\s*of\\s*term"),
     labelPattern("term\\s*length"),
     labelPattern("contract\\s*length"),
+    labelPattern("dur[ée]e"),
   ],
   salary: [
     labelPattern("salary"),
