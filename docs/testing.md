@@ -10,9 +10,11 @@ npm run build
 npm run test:e2e
 ```
 
-Unit tests cover environment validation, safe routes, auth schemas, and date-only
-behavior. Public Playwright tests cover login/signup/recovery presentation,
-unauthenticated route protection, and a mobile viewport.
+Unit tests cover environment validation, safe routes, auth/application schemas,
+optional application normalization, enum validation, ownership-free insert
+mapping, and date-only behavior. Public Playwright tests cover
+login/signup/recovery presentation, unauthenticated route protection, and a
+mobile viewport.
 
 When Supabase variables are absent, the application deliberately keeps public
 auth pages available and redirects protected routes to login. Auth actions return
@@ -55,9 +57,34 @@ Ensure the account already exists and is confirmed, then run:
 npm run test:e2e -- --project=chromium
 ```
 
-The authenticated shell test is explicitly skipped when any required value is
-missing. Do not use a production account or point destructive future E2E tests at
-production.
+The authenticated shell and Ticket 2.1 application tests are explicitly skipped
+when any required value is missing. The application test deletes only records
+whose company starts with its unique test prefix. Use a dedicated account; do
+not use a production account.
+
+## Hosted Ticket 2.1 verification
+
+The hosted verifier creates confirmed disposable users without sending email.
+It reads the cleanup credential only from an ephemeral
+`SUPABASE_SERVICE_ROLE_KEY` process environment variable. Enter or inject that
+value through a trusted terminal/secret manager; never add it to `.env.local`,
+another file, shell history, or source control:
+
+```bash
+node --env-file=.env.local scripts/verify-hosted-ticket-2-1.mjs
+```
+
+The verifier checks authenticated creation, server-compatible date strings,
+initial history, two-user isolation, forged ownership rejection, active-list
+archive filtering, and cleanup.
+
+The authenticated browser runner uses the same ephemeral environment variable
+to create one no-email disposable account, passes only that user’s temporary
+credentials to Playwright in memory, and deletes the account afterward:
+
+```bash
+node --env-file=.env.local scripts/run-hosted-ticket-2-1-e2e.mjs
+```
 
 ## Manual accessibility/responsive check
 

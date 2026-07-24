@@ -1,7 +1,7 @@
 # JobTrack
 
 JobTrack is a student internship and co-op application tracker. The repository is
-currently at **Phase 1: secure technical foundation**.
+currently at **Phase 2, Ticket 2.1: create and list applications**.
 
 ## What works now
 
@@ -10,6 +10,8 @@ currently at **Phase 1: secure technical foundation**.
 - Cookie-based server-rendered sessions and protected route redirects
 - Responsive desktop sidebar and mobile navigation drawer
 - Accessible public auth forms with validation, pending, success, and error states
+- Authenticated application creation with shared server-side validation
+- Responsive own-application list that excludes archived records
 - Versioned PostgreSQL schema for profiles, applications, and status history
 - Row-level security policies for every user-owned table and operation
 - Database-owned initial/transition history events
@@ -18,14 +20,14 @@ currently at **Phase 1: secure technical foundation**.
 
 ## What is only scaffolded
 
-`/applications`, `/pipeline`, `/analytics`, `/archive`, and `/settings` are
-protected, polished placeholders. They show no mock records and expose no controls
-that pretend to save data.
+`/pipeline`, `/analytics`, `/archive`, and `/settings` remain protected, polished
+placeholders. They show no mock records and expose no controls that pretend to
+save data.
 
 ## Deliberately deferred
 
-- Application create/view/edit/delete and archive workflows: Phase 2
-- Search, filters, next actions, deadlines, and status UI: Phase 2
+- Application detail/edit/delete and archive workflows: later Phase 2 tickets
+- Search, filters, status-change controls, and expanded workflows: later Phase 2
 - Dashboard metrics and charts: Phase 3
 - Kanban pipeline: Phase 4
 - Deterministic title classification: Phase 5

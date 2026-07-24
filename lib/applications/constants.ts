@@ -1,0 +1,44 @@
+export const APPLICATION_STATUSES = [
+  "Interested",
+  "Preparing",
+  "Applied",
+  "Screening",
+  "Assessment",
+  "Interview",
+  "Offer",
+  "Rejected",
+  "Withdrawn",
+  "Accepted",
+] as const;
+
+export const JOB_CATEGORIES = [
+  "Marketing",
+  "Marketing Operations",
+  "Sales",
+  "Revenue Operations",
+  "Business Analysis",
+  "Strategy and Operations",
+  "Project Management",
+  "Product Management",
+  "Data and Analytics",
+  "Finance",
+  "Accounting",
+  "Human Resources",
+  "Consulting",
+  "Information Technology",
+  "Software Engineering",
+  "Other",
+] as const;
+
+export const WORK_ARRANGEMENTS = [
+  "Remote",
+  "Hybrid",
+  "On-site",
+  "Unknown",
+] as const;
+
+export const UNSPECIFIED_DATABASE_VALUE = "Not specified";
+
+export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
+export type JobCategory = (typeof JOB_CATEGORIES)[number];
+export type WorkArrangement = (typeof WORK_ARRANGEMENTS)[number];

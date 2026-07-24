@@ -42,38 +42,6 @@ function makeClient(url, key) {
   });
 }
 
-async function readStdin() {
-  let input = "";
-  for await (const chunk of process.stdin) input += chunk;
-  return input;
-}
-
-function findServiceKey(payload) {
-  const entries = Array.isArray(payload)
-    ? payload
-    : payload?.api_keys ?? payload?.keys ?? payload?.data ?? [];
-  const serviceEntry = entries.find((entry) => {
-    const label = [
-      entry?.name,
-      entry?.id,
-      entry?.type,
-      entry?.role,
-      entry?.secret_jwt_template?.role,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    return label.includes("service_role") || label.includes("secret");
-  });
-
-  return (
-    serviceEntry?.api_key ??
-    serviceEntry?.key ??
-    serviceEntry?.secret ??
-    serviceEntry?.value
-  );
-}
-
 async function createConfirmedUser(email, password, fullName) {
   const { data, error } = await admin.auth.admin.createUser({
     email,
@@ -107,15 +75,11 @@ async function verify() {
     Boolean(publishableKey),
   );
 
-  const rawKeys = await readStdin();
-  let keyPayload;
-  try {
-    keyPayload = JSON.parse(rawKeys);
-  } catch {
-    throw new Error("Supabase CLI API-key output was not valid JSON.");
-  }
-  const serviceKey = findServiceKey(keyPayload);
-  assert("service credential received through private pipe", Boolean(serviceKey));
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  assert(
+    "ephemeral service credential environment variable is readable",
+    Boolean(serviceKey),
+  );
 
   admin = makeClient(url, serviceKey);
 

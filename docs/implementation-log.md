@@ -122,3 +122,52 @@ This machine has no `docker`, `psql`, Colima, or Podman command. `npx supabase
 test db` reached the CLI but returned `LegacyDbConnectError` because no local
 PostgreSQL service exists. Migration replay and pgTAP execution therefore require
 Docker installation/startup before they can be reported as passed.
+
+## 2026-07-24 — Phase 2, Ticket 2.1
+
+### Scope
+
+Implemented authenticated application creation and the default own-applications
+list only. Search, filters, detail, edit, delete, archive actions, status-change
+controls, and Kanban behavior remain deferred.
+
+### Implementation
+
+- Added shared enum constants and a Zod creation schema for every Ticket 2.1
+  field.
+- Normalized blank optional values to `undefined`, preserved date-only strings,
+  and mapped missing values to database nulls.
+- Kept the existing non-null location/source schema by mapping their blank form
+  values to the internal `Not specified` sentinel.
+- Added a server action that verifies the authenticated user, inserts without a
+  `user_id` property, reports validation/database errors, and revalidates the
+  applications route.
+- Added a server-only repository. The list uses the server-derived user ID,
+  `archived_at IS NULL`, and RLS.
+- Added a responsive create panel, accessible field errors and status labels,
+  pending feedback, synchronous duplicate-submit locking, empty/loading/error
+  states, desktop table, and mobile cards.
+- Relied exclusively on the deployed database trigger for the initial history
+  event.
+
+### Verification
+
+- Hosted database verifier: passed authenticated creation, exact date strings,
+  one initial history event, two-user read isolation, forged-owner rejection
+  (`42501`), archived-row exclusion, and disposable-user cleanup.
+- Authenticated Playwright: passed empty state, missing-required-field errors,
+  valid creation, duplicate rapid-click protection, immediate list refresh, and
+  mobile card usability using a no-email disposable user.
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run test`: passed, 39 tests across 5 files.
+- `npm run build`: passed with 14 generated routes.
+- Full credential-free Playwright regression: 10 passed and 4 expected
+  credential-dependent cases skipped.
+- Final hosted cleanup query: zero profiles, applications, history records, and
+  disposable Ticket 2.1 Auth users remained.
+
+The browser test initially revealed a real rapid-click race that created two
+records before React’s pending state rendered. A synchronous submit lock now
+blocks the second event, while the pending button state remains visible for
+normal submissions.

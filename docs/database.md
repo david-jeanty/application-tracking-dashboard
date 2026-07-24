@@ -25,6 +25,12 @@ classifier ran.
 Salary is optional text with a 100-character limit. It is display-only and
 excluded from analytics.
 
+Ticket 2.1 keeps the deployed schema unchanged even though its form treats
+location and application source as optional. Blank values for those two
+non-null database columns are stored as the internal sentinel `Not specified`;
+the default list hides the location sentinel as absent. A future schema
+migration may make these columns nullable if the product decision is revised.
+
 ## Date model
 
 Calendar dates use `date`: application deadline, date applied, and next-action
