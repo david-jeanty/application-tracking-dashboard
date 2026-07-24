@@ -1,0 +1,22 @@
+Business Intelligence Analyst (Intern)
+
+Company: Quillfeather Data Works
+Work Arrangement: Remote
+Work Term: Fall 2027
+Duration: 8 months
+Salary: $30.00 per hour
+Application Deadline: 2027-05-30
+
+About Us
+
+Quillfeather Data Works is a remote-first analytics consultancy. Our registered office is
+located at 4200 Bay Street, Toronto, ON M5H 2Y4, but this role is fully remote and you may
+work from anywhere in Canada.
+
+What You Will Do
+
+- Build and maintain dashboards in Power BI for client engagements
+- Write SQL against our reporting warehouse
+- Support data visualization standards across client projects
+
+Location: Remote (Canada)

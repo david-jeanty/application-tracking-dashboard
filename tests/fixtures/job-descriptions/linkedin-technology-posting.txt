@@ -1,0 +1,22 @@
+Cloud Infrastructure Intern
+Northwind Cloud Services · Edmonton, AB · On-site
+
+About the job
+
+Northwind Cloud Services is hiring a Cloud Infrastructure Intern to support our platform
+reliability team. You will work alongside our infrastructure engineers on monitoring,
+automation, and incident response.
+
+Responsibilities
+• Support infrastructure automation using Terraform and Ansible
+• Assist with monitoring and alerting configuration
+• Participate in on-call shadowing and incident review
+
+Qualifications
+• Enrolled in a computer science, information technology, or systems program
+• Familiarity with Linux and at least one scripting language
+
+Term: Fall 2027 (8 months)
+Pay rate: $28.50 per hour
+
+Applications close 2027-06-18.

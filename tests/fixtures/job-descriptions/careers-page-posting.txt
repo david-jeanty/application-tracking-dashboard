@@ -1,0 +1,31 @@
+Careers at Ironwood Labs
+
+Backend Software Developer, Co-op
+
+Ironwood Labs builds developer tooling for embedded systems teams. We are a fully remote
+company with roughly 90 people across Canada.
+
+The Role
+
+We are looking for a Backend Software Developer, Co-op to join our platform team for an
+eight month work term starting in September 2027.
+
+What You Will Do
+
+- Design and ship backend services in Rust and TypeScript
+- Improve our build and release automation alongside the DevOps group
+- Write design documents and participate in architecture review
+
+What You Bring
+
+- Enrolled in a software engineering or computer science program
+- Familiarity with at least one systems programming language
+
+Details
+
+Work Term: Fall 2027
+Duration: 8 months
+Location: Halifax, NS
+Work Arrangement: Remote
+Salary: $32.00 per hour
+Application Deadline: April 15, 2027

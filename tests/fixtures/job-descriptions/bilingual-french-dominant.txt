@@ -1,0 +1,19 @@
+Analyste de données junior / Junior Data Analyst
+
+Entreprise: Groupe Beauchemin
+Lieu: Québec City, QC
+Date limite: 12 février 2028
+Durée: 4 mois
+
+Description du poste
+
+Groupe Beauchemin is looking for a Junior Data Analyst to support business intelligence reporting for our retail division. Le poste est offert en mode hybride.
+
+Responsabilités / Responsibilities
+
+- Produire des rapports hebdomadaires / Produce weekly reports
+- Maintenir les tableaux de bord Power BI
+- Écrire des requêtes SQL pour l'entrepôt de données
+
+Work Term: Winter 2028
+Salary: $24.00 per hour

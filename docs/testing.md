@@ -20,6 +20,52 @@ When Supabase variables are absent, the application deliberately keeps public
 auth pages available and redirects protected routes to login. Auth actions return
 a clear configuration message.
 
+## Job description parser evaluation
+
+The parser is measured against a fixture corpus that needs no database, no
+browser, and no credentials. Ground truth lives in
+`tests/fixtures/job-descriptions/corpus.ts`; the postings themselves are
+synthetic, with invented employers and figures.
+
+```bash
+npm run test -- tests/unit/parser-evaluation.test.ts
+WRITE_PARSER_REPORT=1 npm run test   # regenerates docs/parser-evaluation.md
+```
+
+Every field on every fixture lands in exactly one of five outcomes:
+
+| Outcome | Meaning |
+| --- | --- |
+| correct | Stated in the posting and extracted correctly. |
+| incorrect | Stated in the posting, but a different value came back. |
+| missing | Stated in the posting, and nothing came back. |
+| expected absence | Not stated, and the parser correctly stayed blank. |
+| fabricated | Not stated, but the parser produced a value anyway. |
+
+A field counts as blank when its confidence is `null`. `normalizedJobCategory`
+and `workArrangement` fall back to `Other` and `Unknown` with null confidence, so
+those placeholders score as blanks rather than as extracted values.
+
+Fabrication is the worst class, because it is the only failure the user cannot
+catch by proofreading the form against the posting. Fixtures are graded on the
+same reasoning:
+
+- **Fully correct** — every field is correct or a correct blank.
+- **Usable with minor edits** — some fields are blank or wrong, but every wrong
+  value stayed below the prefill threshold, so the user only ever adds
+  information rather than having to notice and undo a silent mistake.
+- **Unusable result** — at least one wrong or fabricated value was confident
+  enough to populate the form.
+
+Because High and Medium prefill and Low does not, confidence is scored against
+that boundary: a wrong value held at Low is a safe hedge, while the same value at
+Medium is overconfident. `tests/unit/parser-evaluation.test.ts` fails the build
+on any fabricated value, any High-confidence wrong value, or any wrong value
+reaching the form, and holds each field to a recall floor.
+
+Fixture expectations are ground truth, not a snapshot. A failing gate is fixed in
+the parser; an expectation changes only when the posting text justifies it.
+
 ## Local database tests
 
 Prerequisites:
