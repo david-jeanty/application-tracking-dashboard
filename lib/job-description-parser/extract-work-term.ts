@@ -14,6 +14,21 @@ const SEASON_PATTERNS: Array<{ pattern: RegExp; season: string; score: number }>
 ];
 
 /**
+ * An optional day between a month name and the range connector, so
+ * "September 8th through December 31st" is recognized as the same span as
+ * "September to December".
+ */
+const DAY_IN_RANGE = "(?:\\s+\\d{1,2}(?:st|nd|rd|th)?)?";
+const RANGE_CONNECTOR = "\\s*(?:to|through|until|-|–|—)\\s*";
+
+function monthRange(from: string, to: string): RegExp {
+  return new RegExp(
+    `\\b(?:${from})\\.?${DAY_IN_RANGE}${RANGE_CONNECTOR}(?:${to})\\b`,
+    "i",
+  );
+}
+
+/**
  * Month ranges imply a season on the standard Canadian co-op calendar.
  * Mapped conservatively: only ranges that align cleanly with a term.
  */
@@ -22,37 +37,35 @@ const MONTH_RANGE_SEASONS: Array<{
   season: string;
   months: number;
 }> = [
-  {
-    pattern: /\b(?:september|sept?)\.?\s*(?:to|through|-|–|—)\s*december\b/i,
-    season: "Fall",
-    months: 4,
-  },
-  {
-    pattern: /\bjanuary\s*(?:to|through|-|–|—)\s*april\b/i,
-    season: "Winter",
-    months: 4,
-  },
-  {
-    pattern: /\bmay\s*(?:to|through|-|–|—)\s*august\b/i,
-    season: "Summer",
-    months: 4,
-  },
-  {
-    pattern: /\b(?:september|sept?)\.?\s*(?:to|through|-|–|—)\s*april\b/i,
-    season: "Fall",
-    months: 8,
-  },
-  {
-    pattern: /\bmay\s*(?:to|through|-|–|—)\s*december\b/i,
-    season: "Summer",
-    months: 8,
-  },
-  {
-    pattern: /\bjanuary\s*(?:to|through|-|–|—)\s*august\b/i,
-    season: "Winter",
-    months: 8,
-  },
+  { pattern: monthRange("september|sept?", "december|dec"), season: "Fall", months: 4 },
+  { pattern: monthRange("january|jan", "april|apr"), season: "Winter", months: 4 },
+  { pattern: monthRange("may", "august|aug"), season: "Summer", months: 4 },
+  { pattern: monthRange("september|sept?", "april|apr"), season: "Fall", months: 8 },
+  { pattern: monthRange("may", "december|dec"), season: "Summer", months: 8 },
+  { pattern: monthRange("january|jan", "august|aug"), season: "Winter", months: 8 },
 ];
+
+/** Month name to the co-op term that starts in it. */
+const MONTH_SEASONS: Record<string, string> = {
+  january: "Winter", february: "Winter", march: "Winter", april: "Winter",
+  may: "Summer", june: "Summer", july: "Summer", august: "Summer",
+  september: "Fall", october: "Fall", november: "Fall", december: "Fall",
+};
+
+const MONTH_ALTERNATION = Object.keys(MONTH_SEASONS).join("|");
+
+/**
+ * A placement stated as "September 2026 - August 2027".
+ *
+ * The recruiting term is named for when the placement *begins*, so only the
+ * first month and year are read. Taking the end instead would label a 12-month
+ * Fall 2026 placement as "Summer 2027" — a term the student never applied to,
+ * and one that sorts the application into the wrong recruiting cycle.
+ */
+const START_END_MONTH_YEARS = new RegExp(
+  `\\b(${MONTH_ALTERNATION})\\s+(20\\d{2})${RANGE_CONNECTOR}(?:${MONTH_ALTERNATION})\\s+(20\\d{2})\\b`,
+  "i",
+);
 
 /**
  * Unit vocabulary. French forms are accepted alongside English because a
@@ -118,6 +131,18 @@ function extractSeason(document: NormalizedDocument): FieldCandidate<string>[] {
         score: labelled ? score + 25 : score,
         evidence: line.original,
         ruleId: `work-term:season:${season.toLowerCase()}`,
+        lineIndex: line.index,
+      });
+    }
+
+    // An explicit start-and-end placement names its term by the start date.
+    const startEnd = START_END_MONTH_YEARS.exec(haystack);
+    if (startEnd) {
+      candidates.push({
+        value: `${MONTH_SEASONS[startEnd[1].toLowerCase()]} ${startEnd[2]}`,
+        score: labelled ? 100 : 88,
+        evidence: line.original,
+        ruleId: "work-term:start-of-placement",
         lineIndex: line.index,
       });
     }

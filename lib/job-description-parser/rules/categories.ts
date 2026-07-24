@@ -116,9 +116,18 @@ export const CATEGORY_RULES: CategoryRule[] = [
       "product management": 110,
       "product owner": 105,
       roadmap: 70,
+      "product roadmap": 90,
       "product strategy": 85,
+      "product discovery": 85,
+      "product requirement": 80,
+      "product requirements": 80,
       "user research": 60,
+      // A bare "product" in a title is a weak but real signal, and it is what
+      // carries roles named "Product & AI Intern" that never spell out the
+      // discipline. Product marketing is excluded so it stays with Marketing.
+      product: 60,
     },
+    exclusions: ["product marketing"],
   },
   {
     category: "Data and Analytics",

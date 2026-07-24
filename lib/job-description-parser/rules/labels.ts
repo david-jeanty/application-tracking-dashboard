@@ -64,13 +64,68 @@ export const LABEL_RULES = {
     labelPattern("salary"),
     labelPattern("compensation"),
     labelPattern("pay\\s*rate"),
+    labelPattern("pay\\s*details"),
     labelPattern("rate\\s*of\\s*pay"),
     labelPattern("wage"),
     labelPattern("hourly\\s*rate"),
+    labelPattern("(?:pay|salary|hiring|compensation)\\s*range"),
+    labelPattern("range"),
   ],
 } as const;
 
 export type LabelKind = keyof typeof LABEL_RULES;
+
+/**
+ * Labels that carry employment metadata, never a job title. A line such as
+ * "Type: Student Full Time" reads exactly like a title to a scoring heuristic —
+ * short, title-case, and carrying the role word "Student" — so these have to be
+ * rejected by name rather than by shape.
+ */
+const METADATA_LABELS = [
+  "type",
+  "employment\\s*type",
+  "employment\\s*status",
+  "job\\s*type",
+  "position\\s*type",
+  "schedule",
+  "work\\s*schedule",
+  "status",
+  "category",
+  "job\\s*category",
+  "job\\s*family",
+  "job\\s*function",
+  "pay\\s*type",
+  "vacanc(?:y|ies)",
+  "work\\s*hours",
+  "hours\\s*per\\s*week",
+  "number\\s*of\\s*positions",
+  "job\\s*(?:id|reference|req(?:uisition)?)",
+].map((label) => new RegExp(`^${label}${SEPARATOR}`, "i"));
+
+/** True when a line states employment metadata rather than the role itself. */
+export function isMetadataLabelLine(line: string): boolean {
+  return METADATA_LABELS.some((pattern) => pattern.test(line.trim()));
+}
+
+/** Every label kind that states a field other than the job title. */
+const NON_TITLE_LABEL_KINDS = (
+  Object.keys(LABEL_RULES) as LabelKind[]
+).filter((kind) => kind !== "title");
+
+/**
+ * True when a line states some *other* field — "Duration: Fall (September -
+ * December 2026)", "Range: $18.50 - $28.50", "Location: Toronto (Onsite)".
+ *
+ * Such a line already has an owner, so no other extractor should compete for
+ * it. Title extraction in particular is vulnerable: these lines are short and
+ * title-case, which is most of what its heuristic looks for.
+ */
+export function isFieldLabelLine(line: string): boolean {
+  if (isMetadataLabelLine(line)) return true;
+  return NON_TITLE_LABEL_KINDS.some((kind) =>
+    LABEL_RULES[kind].some((pattern) => pattern.test(line.trim())),
+  );
+}
 
 /** Returns the trimmed value following a recognized label, if any. */
 export function matchLabel(line: string, kind: LabelKind): string | null {

@@ -9,10 +9,23 @@ const MEDIUM_THRESHOLD = 55;
 const LOW_THRESHOLD = 25;
 
 /**
- * Two candidates within this many points are treated as a genuine tie, which
- * downgrades confidence rather than silently picking the first one.
+ * Two candidates this close are treated as a genuine tie, which downgrades
+ * confidence rather than silently picking the first one.
+ *
+ * The threshold is proportional because scores span a wide range: six points
+ * between two candidates scoring 130 is noise, while the same six points
+ * between candidates scoring 38 is a clear preference. A fixed gap treats those
+ * identically and collapses every low-scoring field into "ambiguous", which is
+ * how a category backed by real evidence ends up reported as nothing at all.
+ * The absolute floor keeps near-identical scores tied at the low end.
  */
-const AMBIGUITY_GAP = 10;
+const AMBIGUITY_RATIO = 0.1;
+const AMBIGUITY_FLOOR = 5;
+
+function isAmbiguous(bestScore: number, runnerUpScore: number): boolean {
+  const threshold = Math.max(AMBIGUITY_FLOOR, bestScore * AMBIGUITY_RATIO);
+  return bestScore - runnerUpScore < threshold;
+}
 
 export function confidenceFromScore(score: number): ExtractionConfidence {
   if (score >= HIGH_THRESHOLD) return "High";
@@ -62,7 +75,7 @@ export function resolveField<T>(
   if (
     runnerUp &&
     !valuesMatch(best.value, runnerUp.value) &&
-    best.score - runnerUp.score < AMBIGUITY_GAP
+    isAmbiguous(best.score, runnerUp.score)
   ) {
     confidence = downgradeConfidence(confidence);
     collected.push("Multiple similarly likely values were found.");

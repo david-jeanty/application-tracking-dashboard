@@ -4,6 +4,10 @@ import {
   CATEGORY_RULES,
   TITLE_WEIGHT,
 } from "@/lib/job-description-parser/rules/categories";
+import {
+  containsBoilerplate,
+  isBoilerplateSectionHeading,
+} from "@/lib/job-description-parser/rules/generic-headings";
 import { resolveField } from "@/lib/job-description-parser/score";
 import type {
   ExtractedField,
@@ -13,6 +17,34 @@ import type {
 
 /** Only the first portion of the body is scanned; boilerplate lives at the end. */
 const BODY_LINE_LIMIT = 60;
+
+/**
+ * Collects the body text that describes the job, skipping any line that sits
+ * inside an employer-obligation section.
+ *
+ * Section membership runs from a boilerplate heading until the next heading, so
+ * an entire accommodation or privacy block drops out rather than only the lines
+ * that happen to carry a marker phrase. Without this, a posting that mentions
+ * "Human Resources" twice in its accommodation notice classifies as an HR role
+ * regardless of what the responsibilities actually say.
+ */
+function jobContentText(document: NormalizedDocument): string {
+  const parts: string[] = [];
+  let inBoilerplateSection = false;
+
+  for (const line of document.lines.slice(0, BODY_LINE_LIMIT)) {
+    if (line.isHeadingLike) {
+      inBoilerplateSection = isBoilerplateSectionHeading(line.normalized);
+      // A heading itself is a label, not job content, so it is never scored.
+      continue;
+    }
+
+    if (inBoilerplateSection || containsBoilerplate(line.normalized)) continue;
+    parts.push(line.normalized);
+  }
+
+  return parts.join(" ");
+}
 
 function containsPhrase(haystack: string, phrase: string): boolean {
   const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -30,10 +62,7 @@ export function classifyCategory(
   title: string | null,
 ): ExtractedField<JobCategory> {
   const titleText = (title ?? "").toLowerCase();
-  const bodyText = document.lines
-    .slice(0, BODY_LINE_LIMIT)
-    .map((line) => line.normalized)
-    .join(" ");
+  const bodyText = jobContentText(document);
 
   const candidates: FieldCandidate<JobCategory>[] = [];
 

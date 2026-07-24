@@ -2,7 +2,10 @@ import {
   containsBoilerplate,
   isGenericHeading,
 } from "@/lib/job-description-parser/rules/generic-headings";
-import { matchLabel } from "@/lib/job-description-parser/rules/labels";
+import {
+  isFieldLabelLine,
+  matchLabel,
+} from "@/lib/job-description-parser/rules/labels";
 import { resolveField } from "@/lib/job-description-parser/score";
 import type {
   ExtractedField,
@@ -76,6 +79,12 @@ export function extractTitle(
 
   for (const line of document.lines) {
     const labelled = matchLabel(line.original, "title");
+
+    // A line that labels some other field — duration, range, type, location —
+    // is never the role, however much it looks like one. Checked after the
+    // title label so "Position: ..." still wins on its own line.
+    if (!labelled && isFieldLabelLine(line.original)) continue;
+
     if (labelled && labelled.length <= MAX_TITLE_LENGTH) {
       candidates.push({
         value: labelled,
@@ -109,6 +118,18 @@ export function extractTitle(
 
     const score = scoreTitleLine(line);
     if (score < 25) continue;
+
+    // A line only qualifies on shape if it reads like a role: it names one, or
+    // it sits at the very top in title case. A responsibility bullet such as
+    // "Support brand marketing campaign planning and creative reviews" clears
+    // the score floor on length and position alone, and became the title on a
+    // posting that never stated one. Abstaining is the correct answer there.
+    const words = line.original.split(/\s+/);
+    const titleCased =
+      words.filter((word) => /^[A-Z0-9]/.test(word)).length / words.length >= 0.6;
+    if (!ROLE_WORDS.test(line.original) && !(line.index <= 1 && titleCased)) {
+      continue;
+    }
 
     candidates.push({
       value: line.original.replace(/\s*[:：]\s*$/, ""),

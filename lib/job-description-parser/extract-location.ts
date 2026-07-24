@@ -14,6 +14,17 @@ import type {
 /** The form caps location at 200 characters. */
 const MAX_LOCATION_LENGTH = 200;
 
+/**
+ * Phrases marking a city as the employer's corporate address rather than the
+ * place this job is done. A posting that says "Location: Virtual" and later
+ * names its head office is not offering a job in that city.
+ */
+const HEADQUARTERS_CONTEXT =
+  /\b(?:head\s*office|headquarters|headquartered|registered\s+office|corporate\s+office|global\s+office|home\s+office)\b/i;
+
+/** Points removed from a candidate drawn from a corporate-address sentence. */
+const HEADQUARTERS_PENALTY = 55;
+
 /** Word-boundary containment, so "London" does not match inside "Londoner". */
 function containsPhrase(haystack: string, phrase: string): boolean {
   const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -91,16 +102,25 @@ export function extractLocation(
   for (const line of document.lines) {
     const labelled = matchLabel(line.original, "location");
     const haystack = labelled ?? line.original;
+    // A label states where the job is; a corporate-address sentence does not.
+    const isHeadquarters = !labelled && HEADQUARTERS_CONTEXT.test(line.original);
+    const adjust = (score: number) =>
+      isHeadquarters ? score - HEADQUARTERS_PENALTY : score;
 
     const pairs = matchCityProvince(haystack);
     if (pairs.length) {
       for (const pair of pairs) {
         candidates.push({
           value: pair.value,
-          score: labelled ? 125 : 100,
+          score: adjust(labelled ? 125 : 100),
           evidence: line.original,
-          ruleId: "location:city-province",
+          ruleId: isHeadquarters
+            ? "location:headquarters-city"
+            : "location:city-province",
           lineIndex: line.index,
+          warnings: isHeadquarters
+            ? ["This city was named as a corporate address, not as the job location."]
+            : undefined,
         });
       }
       continue;
@@ -110,20 +130,27 @@ export function extractLocation(
     if (city) {
       candidates.push({
         value: city.value,
-        score: labelled ? 105 : 60,
+        score: adjust(labelled ? 105 : 60),
         evidence: line.original,
-        ruleId: "location:city-only",
+        ruleId: isHeadquarters
+          ? "location:headquarters-city"
+          : "location:city-only",
         lineIndex: line.index,
+        warnings: isHeadquarters
+          ? ["This city was named as a corporate address, not as the job location."]
+          : undefined,
       });
       continue;
     }
 
-    // A labelled line with unrecognized content is still the stated location;
-    // trusting the label beats discarding it, but it scores below known cities.
+    // A labelled line with unrecognized content is still the stated location.
+    // "Virtual", "Remote", and site codes all land here, and an explicit label
+    // is stronger evidence than any city merely mentioned in prose — so this
+    // outranks the unlabelled city rules while staying below a labelled city.
     if (labelled && labelled.length <= MAX_LOCATION_LENGTH) {
       candidates.push({
         value: labelled,
-        score: 70,
+        score: 105,
         evidence: line.original,
         ruleId: "location:labelled-freeform",
         lineIndex: line.index,

@@ -6,6 +6,17 @@
 export const GENERIC_HEADINGS = new Set([
   "about us",
   "about the company",
+  "about the opportunity",
+  "apply now",
+  "career opportunities",
+  "current openings",
+  "job opportunities",
+  "job posting",
+  "open positions",
+  "opportunities",
+  "position details",
+  "posting details",
+  "student opportunities",
   "about the role",
   "about this role",
   "about the team",
@@ -67,8 +78,35 @@ export const BOILERPLATE_MARKERS = [
   "protected veteran",
 ];
 
+/**
+ * Headings that open a section describing the employer's legal or process
+ * obligations rather than the job. Everything under one of these is written by
+ * a legal or HR team and uses their vocabulary, which quietly poisons category
+ * classification: an accommodation notice naming "Human Resources" twice will
+ * out-score the actual marketing content of the role.
+ */
+const BOILERPLATE_SECTION_PATTERNS = [
+  /accessibilit/,
+  /accommodation/,
+  /equal opportunit/,
+  /diversity|inclusion|belonging/,
+  /privacy|personal information/,
+  /legal notice|terms and conditions/,
+  /how to apply|application process|recruitment process/,
+  /contact (?:us|information)/,
+  /our commitment/,
+  /background check|security clearance/,
+];
+
 export function isGenericHeading(normalizedLine: string): boolean {
   return GENERIC_HEADINGS.has(normalizedLine.replace(/[:：]\s*$/, "").trim());
+}
+
+/** True when a heading opens an employer-obligation section, not job content. */
+export function isBoilerplateSectionHeading(normalizedLine: string): boolean {
+  const heading = normalizedLine.replace(/[:：]\s*$/, "").trim();
+  if (!heading.length || heading.split(/\s+/).length > 7) return false;
+  return BOILERPLATE_SECTION_PATTERNS.some((pattern) => pattern.test(heading));
 }
 
 export function containsBoilerplate(normalizedLine: string): boolean {

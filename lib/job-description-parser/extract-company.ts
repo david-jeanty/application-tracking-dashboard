@@ -32,6 +32,34 @@ const INTRO_PATTERNS: Array<{ pattern: RegExp; score: number; ruleId: string }> 
     ruleId: "company:intro-phrase",
   },
   {
+    // "A career at Larkfield Rail Systems will help create a legacy."
+    // Also covers "Careers at", "Life at", and "Your career at".
+    //
+    // Deliberately case-sensitive: the capture ends at the first lowercase
+    // word, which is what stops the name from swallowing the rest of the
+    // sentence ("... Rail Systems will help create a legacy").
+    pattern:
+      /(?:[Aa]|[Yy]our|[Tt]he)?\s*(?:[Cc]areers?|[Ll]ife|[Ff]uture)\s+(?:at|with)\s+([A-Z][\w&.\-']*(?:\s+[A-Z][\w&.\-']*){0,4})\b/,
+    score: 95,
+    ruleId: "company:career-at",
+  },
+  {
+    // Appositive opener: "<Company>, a global leader in ...".
+    pattern:
+      /^([A-Z][\w&.\-']*(?:\s+[A-Z][\w&.\-']*){0,4}),\s+(?:a|an|the)\s+[a-z]/,
+    score: 100,
+    ruleId: "company:appositive",
+  },
+  {
+    // Legal name followed by its acronym: "Northgate Lottery & Gaming
+    // Corporation (NLGC)". The bracketed initials are what make this
+    // unambiguous, so the phrase before them can be trusted as the name.
+    pattern:
+      /\b([A-Z][\w.\-']*(?:\s+(?:&|[A-Z][\w.\-']*)){1,6})\s+\((?:[A-Z]{2,6})\)/,
+    score: 105,
+    ruleId: "company:legal-name-acronym",
+  },
+  {
     pattern:
       /\b([A-Z][\w&.\-']*(?:\s+[A-Z][\w&.\-']*){0,4})\s+is\s+(?:a|an|the|currently|looking|seeking|hiring)\b/,
     score: 90,

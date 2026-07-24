@@ -23,6 +23,10 @@ export const WORK_ARRANGEMENT_PHRASES: Record<
     "distributed team",
     "remote first",
     "remote-first",
+    // Job boards emit these tags verbatim on copy-paste. They are board
+    // conventions rather than any one employer's wording.
+    "#li-remote",
+    "#remote",
   ],
   Hybrid: [
     "hybrid work model",
@@ -42,6 +46,7 @@ export const WORK_ARRANGEMENT_PHRASES: Record<
     "in office 2 days",
     "in office 3 days",
     "partially remote",
+    "#li-hybrid",
   ],
   "On-site": [
     "on-site",
@@ -55,7 +60,39 @@ export const WORK_ARRANGEMENT_PHRASES: Record<
     "fully in-office",
     "presence in the office is required",
     "sur place",
+    "#li-onsite",
   ],
+};
+
+/**
+ * Values that appear in a location field but describe the arrangement instead
+ * of a place. "Location: Virtual" states no city at all — it says the work is
+ * done remotely, and that is the only way many postings say so.
+ *
+ * Matched against the whole labelled value, never as a substring, so a posting
+ * mentioning "virtual assistant" or "virtual machine" is unaffected.
+ */
+export const LOCATION_AS_ARRANGEMENT: Record<
+  string,
+  Exclude<WorkArrangement, "Unknown">
+> = {
+  virtual: "Remote",
+  virtuel: "Remote",
+  "virtual - canada": "Remote",
+  remote: "Remote",
+  "remote - canada": "Remote",
+  "fully remote": "Remote",
+  telework: "Remote",
+  "télétravail": "Remote",
+  "work from home": "Remote",
+  anywhere: "Remote",
+  hybrid: "Hybrid",
+  hybride: "Hybrid",
+  onsite: "On-site",
+  "on-site": "On-site",
+  "on site": "On-site",
+  "in office": "On-site",
+  "in-office": "On-site",
 };
 
 /**

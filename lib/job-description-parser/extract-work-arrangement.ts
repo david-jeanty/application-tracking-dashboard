@@ -2,6 +2,7 @@ import type { WorkArrangement } from "@/lib/applications/constants";
 import { matchLabel } from "@/lib/job-description-parser/rules/labels";
 import {
   ARRANGEMENT_NEGATIONS,
+  LOCATION_AS_ARRANGEMENT,
   WORK_ARRANGEMENT_PHRASES,
 } from "@/lib/job-description-parser/rules/work-arrangements";
 import { resolveField } from "@/lib/job-description-parser/score";
@@ -48,6 +49,25 @@ export function extractWorkArrangement(
 
   for (const line of document.lines) {
     const labelled = matchLabel(line.original, "workArrangement");
+
+    // A location field holding "Virtual" states the arrangement, not a place.
+    // Compared whole so only a location that is *entirely* one of these counts.
+    const locationValue = matchLabel(line.original, "location");
+    const asArrangement = locationValue
+      ? LOCATION_AS_ARRANGEMENT[
+          locationValue.trim().toLowerCase().replace(/[.()]/g, "").trim()
+        ]
+      : undefined;
+    if (asArrangement && !negated.has(asArrangement)) {
+      candidates.push({
+        value: asArrangement,
+        score: 110,
+        evidence: line.original,
+        ruleId: "arrangement:location-value",
+        lineIndex: line.index,
+      });
+    }
+
     const haystack = (labelled ?? line.original).toLowerCase();
 
     for (const arrangement of ARRANGEMENTS) {
