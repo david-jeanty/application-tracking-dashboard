@@ -5,6 +5,22 @@
 **Target timezone for the initial user:** America/Toronto  
 **Source of truth:** The supplied product specification and dashboard reference image
 
+### Approved Phase 1 clarifications
+
+The user approved these decisions before Phase 1:
+
+- Application creation records one initial history event with nullable
+  `previous_status` and the selected status in `new_status`.
+- Salary is optional plain text and is excluded from analytics.
+- Normalized category is manually selected until deterministic classification is
+  introduced in Phase 5. Classification confidence remains null when no
+  classification occurred.
+- Archiving sets `archived_at`; permanent deletion is a separate, explicitly
+  confirmed action.
+- The Phase 1 route brief explicitly requires protected Analytics and Archive
+  placeholders. They may exist as honest placeholders despite the earlier
+  recommendation to omit them.
+
 ## 1. Current repository assessment
 
 The repository is initialized with Git on the `main` branch, has no commits, and
@@ -101,8 +117,8 @@ Bracketed routes are dynamic segments.
   Redirect authenticated users to /dashboard; otherwise to /sign-in
 
 /(auth)
-  /sign-in
-  /sign-up
+  /login
+  /signup
   /forgot-password
   /reset-password
   /auth/callback                 Supabase email/OAuth callback handler
@@ -114,13 +130,14 @@ Bracketed routes are dynamic segments.
   /applications/[applicationId]  Phase 2 detail
   /applications/[applicationId]/edit
   /pipeline                      Phase 4
-  /settings/profile              Profile editing
+  /analytics                     Phase 1 placeholder; real data in Phase 3
+  /archive                       Phase 1 placeholder; workflow deferred
+  /settings                      Profile editing deferred
 ```
 
-Calendar, a separate analytics page, notifications, and archive UI should not be
-routed in Phase 1. Upcoming dates belong on the dashboard in Phase 3. Archive can
-initially be an applications filter when that behavior is implemented. This
-avoids navigation that leads to empty placeholders.
+Calendar and notifications should not be routed in Phase 1. The explicitly
+requested Analytics and Archive routes must state that their functionality is
+unavailable rather than presenting fake data or controls.
 
 Unknown or inaccessible application IDs should resolve to the same not-found
 experience. That avoids revealing whether another user's record exists.
@@ -155,7 +172,7 @@ metadata only for the initial full name. The user can complete the profile later
 | `company_name` | `text` | required, trimmed, 1–160 chars |
 | `original_job_title` | `text` | required, trimmed, 1–200 chars |
 | `normalized_job_category` | `job_category` | required |
-| `classification_confidence` | `classification_confidence` | required |
+| `classification_confidence` | `classification_confidence` | optional; null for a manually selected category |
 | `classification_matches` | `jsonb` | required default `[]`; rule IDs/weights only |
 | `location` | `text` | required, trimmed, max 200 chars |
 | `work_arrangement` | `work_arrangement` | required default `Unknown` |

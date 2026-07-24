@@ -1,0 +1,3 @@
+-- Phase 1 intentionally ships without mock application data.
+-- Create local login-capable users through Studio or the signup page so the
+-- profile trigger and authentication flow are exercised exactly as in production.
