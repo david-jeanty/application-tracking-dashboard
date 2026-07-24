@@ -5,7 +5,7 @@ regenerate with `WRITE_PARSER_REPORT=1 npm run test`.
 
 - Parser version: `1.0.0`
 - Date anchor: `2026-06-01` (fixes year inference so runs are reproducible)
-- Fixtures: 29
+- Fixtures: 33
 
 ## Outcome definitions
 
@@ -25,7 +25,7 @@ those placeholders are scored as blanks rather than as extracted values.
 
 | Verdict | Meaning | Count |
 | --- | --- | --- |
-| Fully correct | Every field is correct or a correct blank. | 29 |
+| Fully correct | Every field is correct or a correct blank. | 33 |
 | Usable with minor edits | Some fields are blank or wrong, but every wrong value stayed below the prefill threshold, so the user only ever adds information. | 0 |
 | Unusable result | At least one wrong or fabricated value was confident enough to populate the form. | 0 |
 
@@ -35,20 +35,22 @@ Wrong or fabricated values that would reach the form: **0**
 
 | Field | Precision | Recall | Exact match | Correct | Incorrect | Missing | Expected absence | Fabricated | High-conf wrong | Med-conf wrong |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Company name | 100.0% | 100.0% | 100.0% | 29 | 0 | 0 | 0 | 0 | 0 | 0 |
-| Job title | 100.0% | 100.0% | 100.0% | 28 | 0 | 0 | 1 | 0 | 0 | 0 |
-| Normalized category | 100.0% | 100.0% | 100.0% | 27 | 0 | 0 | 2 | 0 | 0 | 0 |
-| Location | 100.0% | 100.0% | 100.0% | 28 | 0 | 0 | 1 | 0 | 0 | 0 |
-| Work arrangement | 100.0% | 100.0% | 100.0% | 27 | 0 | 0 | 2 | 0 | 0 | 0 |
-| Application deadline | 100.0% | 100.0% | 100.0% | 25 | 0 | 0 | 4 | 0 | 0 | 0 |
-| Work-term season | 100.0% | 100.0% | 100.0% | 27 | 0 | 0 | 2 | 0 | 0 | 0 |
-| Work-term duration | 100.0% | 100.0% | 100.0% | 27 | 0 | 0 | 2 | 0 | 0 | 0 |
-| Salary | 100.0% | 100.0% | 100.0% | 23 | 0 | 0 | 6 | 0 | 0 | 0 |
+| Company name | 100.0% | 100.0% | 100.0% | 33 | 0 | 0 | 0 | 0 | 0 | 0 |
+| Job title | 100.0% | 100.0% | 100.0% | 31 | 0 | 0 | 2 | 0 | 0 | 0 |
+| Normalized category | 100.0% | 100.0% | 100.0% | 31 | 0 | 0 | 2 | 0 | 0 | 0 |
+| Location | 100.0% | 100.0% | 100.0% | 32 | 0 | 0 | 1 | 0 | 0 | 0 |
+| Work arrangement | 100.0% | 100.0% | 100.0% | 31 | 0 | 0 | 2 | 0 | 0 | 0 |
+| Application deadline | 100.0% | 100.0% | 100.0% | 27 | 0 | 0 | 6 | 0 | 0 | 0 |
+| Work-term season | 100.0% | 100.0% | 100.0% | 31 | 0 | 0 | 2 | 0 | 0 | 0 |
+| Work-term duration | 100.0% | 100.0% | 100.0% | 31 | 0 | 0 | 2 | 0 | 0 | 0 |
+| Salary | 100.0% | 100.0% | 100.0% | 27 | 0 | 0 | 6 | 0 | 0 | 0 |
 
 ## Outstanding defects, in fix order
 
 | Priority | Class | Fixture | Field | Expected | Extracted | Confidence |
 | --- | --- | --- | --- | --- | --- | --- |
+| 7 | Cosmetic confidence, evidence, or warning issue | cross-year-term-posting | Normalized category | Revenue Operations | Revenue Operations | Low |
+| 7 | Cosmetic confidence, evidence, or warning issue | metadata-labels-untitled | Normalized category | Marketing | Marketing | Low |
 | 7 | Cosmetic confidence, evidence, or warning issue | minimal-posting | Company name | Redcliff Bindery | Redcliff Bindery | Low |
 
 ## Per-fixture detail
@@ -359,6 +361,78 @@ Verdict: **fully correct**
 | Work-term duration | 4 months | 4 months | ok correct | High | yes | yes | Duration: 4 months | — |
 | Salary | $24.75 per hour | $24.75 per hour | ok correct | High | yes | yes | Salary: $24.75 per hour | — |
 
+### labelled-structured-pay-block
+
+Tags: format:dayforce, role:product-management, term:4-month, real-format:structured-pay-block, hazard:virtual-location, hazard:headquarters-prose, hazard:hashtag-arrangement, hazard:posted-and-expires-line
+
+Verdict: **fully correct**
+
+| Field | Expected | Extracted | Outcome | Confidence | Prefilled | Confidence OK | Evidence | Warnings |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Company name | Meridian Talent Cloud | Meridian Talent Cloud | ok correct | High | yes | yes | Meridian Talent Cloud, a global leader in human capital management so… | — |
+| Job title | Product & AI Intern | Product & AI Intern | ok correct | High | yes | yes | Job Title: Product & AI Intern | — |
+| Normalized category | Product Management | Product Management | ok correct | Medium | yes | yes | Matched "product" in the job title. | — |
+| Location | Virtual | Virtual | ok correct | High | yes | yes | Location: Virtual | The location was taken from a label but not recognized. |
+| Work arrangement | Remote | Remote | ok correct | High | yes | yes | Location: Virtual | — |
+| Application deadline | 2026-07-24 | 2026-07-24 | ok correct | Medium | yes | yes | Posted Monday, June 1, 2026 \| Expires Friday, July 24, 2026 | — |
+| Work-term season | Fall 2026 | Fall 2026 | ok correct | High | yes | yes | Duration: Fall 2026 – 4 months | — |
+| Work-term duration | 4 months | 4 months | ok correct | High | yes | yes | Duration: Fall 2026 – 4 months | — |
+| Salary | 28.20–32.30 CAD per hour | 28.20–32.30 CAD per hour | ok correct | High | yes | yes | Hiring Max Rate: 32.30 CAD | — |
+
+### careers-page-inline-location
+
+Tags: format:careers-page, role:sales, term:4-month, real-format:inline-location, hazard:no-deadline, hazard:month-range-duration
+
+Verdict: **fully correct**
+
+| Field | Expected | Extracted | Outcome | Confidence | Prefilled | Confidence OK | Evidence | Warnings |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Company name | Bellhaven Health Partners | Bellhaven Health Partners | ok correct | High | yes | yes | Bellhaven Health Partners is an impact-driven healthcare distribution… | — |
+| Job title | Sales Enablement & AI Intern - Fall 2026 | Sales Enablement & AI Intern - Fall 2026 | ok correct | High | yes | yes | Sales Enablement & AI Intern - Fall 2026 | — |
+| Normalized category | Sales | Sales | ok correct | Medium | yes | yes | Matched "sales" in the job title. | — |
+| Location | Mississauga, ON | Mississauga, ON | ok correct | High | yes | yes | Location: Mississauga, ON (Hybrid) | — |
+| Work arrangement | Hybrid | Hybrid | ok correct | Medium | yes | yes | Location: Mississauga, ON (Hybrid) | — |
+| Application deadline | — | — | ok expected absence | none | no | yes | — | — |
+| Work-term season | Fall 2026 | Fall 2026 | ok correct | High | yes | yes | Work Term: Fall 2026 - September 8th through December 31st | — |
+| Work-term duration | 4 months | 4 months | ok correct | High | yes | yes | Work Term: Fall 2026 - September 8th through December 31st | — |
+| Salary | $17.69 - $22.21 | $17.69 - $22.21 | ok correct | High | yes | yes | Compensation: $17.69 - $22.21 | — |
+
+### metadata-labels-untitled
+
+Tags: role:marketing, term:4-month, real-format:metadata-labels, hazard:no-title, hazard:metadata-label-as-title, hazard:boilerplate-category-contamination, hazard:legal-name-acronym
+
+Verdict: **fully correct**
+
+| Field | Expected | Extracted | Outcome | Confidence | Prefilled | Confidence OK | Evidence | Warnings |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Company name | Northgate Lottery & Gaming Corporation | Northgate Lottery & Gaming Corporation | ok correct | High | yes | yes | Northgate Lottery & Gaming Corporation (NLGC) operates province-wide … | — |
+| Job title | — | — | ok expected absence | none | no | yes | — | — |
+| Normalized category | Marketing | Marketing | ok correct | Low | no | no (underconfident) | Matched "brand marketing" in the description. | — |
+| Location | Toronto, ON | Toronto, ON | ok correct | High | yes | yes | Location: Toronto (Onsite) | — |
+| Work arrangement | On-site | On-site | ok correct | Medium | yes | yes | Location: Toronto (Onsite) | — |
+| Application deadline | 2026-07-03 | 2026-07-03 | ok correct | High | yes | yes | Application Deadline: July 3, 2026 | — |
+| Work-term season | Fall 2026 | Fall 2026 | ok correct | Medium | yes | yes | Duration: Fall (September - December 2026) | — |
+| Work-term duration | 4 months | 4 months | ok correct | High | yes | yes | Duration: Fall (September - December 2026) | — |
+| Salary | $18.50 - $28.50 | $18.50 - $28.50 | ok correct | High | yes | yes | Range: $18.50 - $28.50 | — |
+
+### cross-year-term-posting
+
+Tags: role:revenue-operations, term:8-or-12-month, real-format:cross-year-term, hazard:open-until-filled, hazard:cross-year-term, hazard:prefixed-location-label
+
+Verdict: **fully correct**
+
+| Field | Expected | Extracted | Outcome | Confidence | Prefilled | Confidence OK | Evidence | Warnings |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Company name | Larkfield Rail Systems | Larkfield Rail Systems | ok correct | High | yes | yes | A career at Larkfield Rail Systems will help create a legacy. | — |
+| Job title | Sales Performance Analyst Intern | Sales Performance Analyst Intern | ok correct | High | yes | yes | Job Title: Sales Performance Analyst Intern | — |
+| Normalized category | Revenue Operations | Revenue Operations | ok correct | Low | no | no (underconfident) | Matched "sales operations" in the description. | — |
+| Location | Toronto, ON | Toronto, ON | ok correct | High | yes | yes | Toronto Location: 200 Kingsway Avenue, Toronto, ON | — |
+| Work arrangement | Hybrid | Hybrid | ok correct | High | yes | yes | Work Arrangement: Hybrid | — |
+| Application deadline | — | — | ok expected absence | none | no | yes | — | — |
+| Work-term season | Fall 2026 | Fall 2026 | ok correct | Medium | yes | yes | Start and End Dates: September 2026 - August 2027 (8 or 12 months) | — |
+| Work-term duration | 8 or 12 months | 8 or 12 months | ok correct | High | yes | yes | Start and End Dates: September 2026 - August 2027 (8 or 12 months) | — |
+| Salary | $23-$30 CAD hourly | $23-$30 CAD hourly | ok correct | High | yes | yes | Pay Details: $23-$30 CAD hourly | — |
+
 ### deadline-without-year
 
 Tags: role:marketing, term:4-month, hazard:deadline-without-year
@@ -406,7 +480,7 @@ Verdict: **fully correct**
 | Company name | Quillfeather Data Works | Quillfeather Data Works | ok correct | High | yes | yes | Company: Quillfeather Data Works | — |
 | Job title | Business Intelligence Analyst (Intern) | Business Intelligence Analyst (Intern) | ok correct | High | yes | yes | Business Intelligence Analyst (Intern) | — |
 | Normalized category | Data and Analytics | Data and Analytics | ok correct | High | yes | yes | Matched "business intelligence" in the job title. | — |
-| Location | Remote (Canada) | Remote (Canada) | ok correct | Medium | yes | yes | Location: Remote (Canada) | The location was taken from a label but not recognized. |
+| Location | Remote (Canada) | Remote (Canada) | ok correct | High | yes | yes | Location: Remote (Canada) | The location was taken from a label but not recognized. |
 | Work arrangement | Remote | Remote | ok correct | High | yes | yes | Location: Remote (Canada) | — |
 | Application deadline | 2027-05-30 | 2027-05-30 | ok correct | High | yes | yes | Application Deadline: 2027-05-30 | — |
 | Work-term season | Fall 2027 | Fall 2027 | ok correct | High | yes | yes | Work Term: Fall 2027 | — |

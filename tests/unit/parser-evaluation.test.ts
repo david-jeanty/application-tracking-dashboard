@@ -1,7 +1,8 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { PARSER_VERSION } from "@/lib/job-description-parser";
+import { PARSER_VERSION, parseJobDescription } from "@/lib/job-description-parser";
+import { mapToFormValues } from "@/lib/job-description-parser/map-to-form";
 import {
   collectDefects,
   evaluateCorpus,
@@ -161,6 +162,43 @@ describe("parser accuracy gates", () => {
       expect(field?.incorrect).toBe(0);
       expect(field?.fabricated).toBe(0);
     }
+  });
+
+  /**
+   * The summary tells the user which fields were filled; the form is what
+   * actually gets saved. If those two disagree, the summary is not a review
+   * aid but a second, contradictory source of truth.
+   */
+  it("agrees between the prefill summary and the form values it produces", () => {
+    const mismatches: string[] = [];
+
+    for (const fixture of EVALUATION_FIXTURES) {
+      const parsed = parseJobDescription(fixture.text, {
+        today: EVALUATION_TODAY,
+      });
+      const prefill = mapToFormValues(parsed);
+
+      for (const decision of prefill.decisions) {
+        const value = prefill.values[decision.field];
+
+        if (decision.applied && value === undefined) {
+          mismatches.push(
+            `${fixture.name}/${decision.field}: summary says filled, form value absent`,
+          );
+        }
+        if (!decision.applied && value !== undefined) {
+          mismatches.push(
+            `${fixture.name}/${decision.field}: summary says not filled, form value "${value}"`,
+          );
+        }
+      }
+
+      // The pasted text is always carried across verbatim and is not one of the
+      // reported decisions, so it is checked separately.
+      expect(prefill.values.jobDescription).toBe(fixture.text);
+    }
+
+    expect(mismatches).toEqual([]);
   });
 
   it("holds every field at or above its calibrated recall floor", () => {

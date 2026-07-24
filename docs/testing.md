@@ -66,6 +66,19 @@ reaching the form, and holds each field to a recall floor.
 Fixture expectations are ground truth, not a snapshot. A failing gate is fixed in
 the parser; an expectation changes only when the posting text justifies it.
 
+Fixtures tagged `real-format:*` were added after manual testing against real
+pasted postings exposed failures the self-authored corpus did not contain. They
+reproduce the structural pattern that caused each failure — a structured pay
+block, an inline location, metadata labels with no title, a cross-year term —
+with invented employers and wording. No employer-specific rule was added for
+any of them, and no complete real posting is reproduced.
+
+A further gate asserts that the prefill summary and the form values agree on
+every fixture: every field the summary reports as filled has a form value, and
+every field it reports as unread has none. `tests/unit/application-form-values.test.tsx`
+covers the same contract in the rendered form, including that realistic example
+text stays a placeholder and is never submitted.
+
 ## Local database tests
 
 Prerequisites:

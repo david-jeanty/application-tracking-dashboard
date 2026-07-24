@@ -325,6 +325,119 @@ const DEFINITIONS: FixtureDefinition[] = [
       salary: "$24.75 per hour",
     },
   },
+  /*
+   * The four fixtures below reproduce failures seen on real pasted postings
+   * that the earlier self-authored corpus did not cover. The structural
+   * patterns are preserved; the wording, employers, and figures are invented.
+   */
+  {
+    name: "labelled-structured-pay-block",
+    tags: [
+      "format:dayforce",
+      "role:product-management",
+      "term:4-month",
+      "real-format:structured-pay-block",
+      "hazard:virtual-location",
+      "hazard:headquarters-prose",
+      "hazard:hashtag-arrangement",
+      "hazard:posted-and-expires-line",
+    ],
+    expected: {
+      // Stated as an appositive: "<Company>, a global leader in ...".
+      companyName: "Meridian Talent Cloud",
+      originalJobTitle: "Product & AI Intern",
+      // No product-management phrase appears verbatim; the closest valid
+      // taxonomy category for a product/AI role is Product Management.
+      normalizedJobCategory: "Product Management",
+      // The explicit label wins over the headquarters city named in prose.
+      location: "Virtual",
+      workArrangement: "Remote",
+      applicationDeadline: "2026-07-24",
+      workTermSeason: "Fall 2026",
+      workTermDuration: "4 months",
+      // Min and max sit on separate lines under their own label lines, with a
+      // currency code and a pay type but no dollar sign anywhere.
+      salary: "28.20–32.30 CAD per hour",
+    },
+  },
+  {
+    name: "careers-page-inline-location",
+    tags: [
+      "format:careers-page",
+      "role:sales",
+      "term:4-month",
+      "real-format:inline-location",
+      "hazard:no-deadline",
+      "hazard:month-range-duration",
+    ],
+    expected: {
+      companyName: "Bellhaven Health Partners",
+      originalJobTitle: "Sales Enablement & AI Intern - Fall 2026",
+      normalizedJobCategory: "Sales",
+      location: "Mississauga, ON",
+      workArrangement: "Hybrid",
+      applicationDeadline: null,
+      workTermSeason: "Fall 2026",
+      // "September 8th through December 31st" is a four-month term; the day
+      // numbers sit between the month names.
+      workTermDuration: "4 months",
+      salary: "$17.69 - $22.21",
+    },
+  },
+  {
+    name: "metadata-labels-untitled",
+    tags: [
+      "role:marketing",
+      "term:4-month",
+      "real-format:metadata-labels",
+      "hazard:no-title",
+      "hazard:metadata-label-as-title",
+      "hazard:boilerplate-category-contamination",
+      "hazard:legal-name-acronym",
+    ],
+    expected: {
+      // Stated only as a legal name followed by its acronym.
+      companyName: "Northgate Lottery & Gaming Corporation",
+      // The posting never names the role. "Type: Student Full Time" is
+      // employment metadata, not a title, and must not be promoted to one.
+      originalJobTitle: null,
+      // The role content is marketing and strategy. "Human Resources" appears
+      // only in accommodation and privacy boilerplate and must not decide it.
+      normalizedJobCategory: "Marketing",
+      location: "Toronto, ON",
+      workArrangement: "On-site",
+      applicationDeadline: "2026-07-03",
+      workTermSeason: "Fall 2026",
+      workTermDuration: "4 months",
+      salary: "$18.50 - $28.50",
+    },
+  },
+  {
+    name: "cross-year-term-posting",
+    tags: [
+      "role:revenue-operations",
+      "term:8-or-12-month",
+      "real-format:cross-year-term",
+      "hazard:open-until-filled",
+      "hazard:cross-year-term",
+      "hazard:prefixed-location-label",
+    ],
+    expected: {
+      companyName: "Larkfield Rail Systems",
+      originalJobTitle: "Sales Performance Analyst Intern",
+      normalizedJobCategory: "Revenue Operations",
+      location: "Toronto, ON",
+      workArrangement: "Hybrid",
+      // "Open until filled" states no date at all.
+      applicationDeadline: null,
+      // The placement runs September 2026 to August 2027. The recruiting term
+      // is named for its start, so this is Fall 2026 — never Summer 2027.
+      workTermSeason: "Fall 2026",
+      workTermDuration: "8 or 12 months",
+      // Currency code and pay period are part of the stated figure.
+      salary: "$23-$30 CAD hourly",
+    },
+  },
   {
     name: "deadline-without-year",
     tags: ["role:marketing", "term:4-month", "hazard:deadline-without-year"],
