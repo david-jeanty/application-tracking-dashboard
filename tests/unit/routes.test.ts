@@ -10,6 +10,7 @@ describe("route helpers", () => {
     "/dashboard",
     "/applications",
     "/applications/example-id",
+    "/applications/example-id/edit",
     "/pipeline",
     "/analytics",
     "/archive",

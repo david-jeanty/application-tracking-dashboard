@@ -1,46 +1,13 @@
 import { AlertCircle, BriefcaseBusiness } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ApplicationStatusLabel } from "@/components/applications/application-status";
 import { Card } from "@/components/ui/card";
-import {
-  UNSPECIFIED_DATABASE_VALUE,
-  type ApplicationStatus,
-} from "@/lib/applications/constants";
+import { displayOptionalText } from "@/lib/applications/mapper";
 import { listActiveApplications } from "@/lib/applications/repository";
 import type { ApplicationListItem } from "@/lib/applications/types";
 import { formatDateOnly } from "@/lib/dates/date-only";
 import { createClient } from "@/lib/supabase/server";
-import { cn } from "@/lib/utils";
-
-const statusClasses: Partial<Record<ApplicationStatus, string>> = {
-  Interested: "border-slate-200 bg-slate-100 text-slate-800",
-  Preparing: "border-amber-200 bg-amber-50 text-amber-900",
-  Applied: "border-blue-200 bg-blue-50 text-blue-800",
-  Screening: "border-violet-200 bg-violet-50 text-violet-800",
-  Assessment: "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-800",
-  Interview: "border-purple-200 bg-purple-50 text-purple-800",
-  Offer: "border-emerald-200 bg-emerald-50 text-emerald-800",
-  Accepted: "border-green-200 bg-green-50 text-green-800",
-  Rejected: "border-red-200 bg-red-50 text-red-800",
-  Withdrawn: "border-slate-300 bg-slate-100 text-slate-700",
-};
-
-function StatusLabel({ status }: { status: ApplicationStatus }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold",
-        statusClasses[status],
-      )}
-    >
-      <span className="sr-only">Status: </span>
-      {status}
-    </span>
-  );
-}
-
-function optionalLocation(value: string) {
-  return value === UNSPECIFIED_DATABASE_VALUE ? null : value;
-}
 
 function DateValue({ value }: { value: string | null }) {
   return value ? formatDateOnly(value) : <span aria-label="Not set">—</span>;
@@ -51,20 +18,25 @@ function MobileApplicationCard({
 }: {
   application: ApplicationListItem;
 }) {
-  const location = optionalLocation(application.location);
+  const location = displayOptionalText(application.location);
 
   return (
     <Card className="p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="font-semibold text-slate-950">
-            {application.company_name}
+            <Link
+              className="rounded-sm text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              href={`/applications/${application.id}`}
+            >
+              {application.company_name}
+            </Link>
           </h3>
           <p className="mt-1 text-sm text-slate-700">
             {application.original_job_title}
           </p>
         </div>
-        <StatusLabel status={application.current_status} />
+        <ApplicationStatusLabel status={application.current_status} />
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
         <div className="col-span-2">
@@ -227,7 +199,12 @@ export async function ApplicationList() {
                 <tr className="align-top hover:bg-slate-50/70" key={application.id}>
                   <td className="px-4 py-4">
                     <p className="font-semibold text-slate-950">
-                      {application.company_name}
+                      <Link
+                        className="rounded-sm text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                        href={`/applications/${application.id}`}
+                      >
+                        {application.company_name}
+                      </Link>
                     </p>
                     <p className="mt-1 text-slate-600">
                       {application.original_job_title}
@@ -237,10 +214,12 @@ export async function ApplicationList() {
                     {application.normalized_job_category}
                   </td>
                   <td className="px-4 py-4">
-                    <StatusLabel status={application.current_status} />
+                    <ApplicationStatusLabel
+                      status={application.current_status}
+                    />
                   </td>
                   <td className="px-4 py-4 text-slate-700">
-                    {optionalLocation(application.location) ?? (
+                    {displayOptionalText(application.location) ?? (
                       <span aria-label="Not set">—</span>
                     )}
                   </td>

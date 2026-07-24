@@ -37,8 +37,12 @@ export const WORK_ARRANGEMENTS = [
   "Unknown",
 ] as const;
 
+export const CLASSIFICATION_CONFIDENCES = ["High", "Medium", "Low"] as const;
+
 export const UNSPECIFIED_DATABASE_VALUE = "Not specified";
 
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number];
 export type JobCategory = (typeof JOB_CATEGORIES)[number];
 export type WorkArrangement = (typeof WORK_ARRANGEMENTS)[number];
+export type ClassificationConfidence =
+  (typeof CLASSIFICATION_CONFIDENCES)[number];

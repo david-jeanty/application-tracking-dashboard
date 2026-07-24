@@ -1,5 +1,5 @@
 export type ApplicationActionState = {
-  status: "idle" | "error" | "success";
+  status: "idle" | "error" | "conflict" | "success";
   message?: string;
   fieldErrors?: Record<string, string[]>;
 };

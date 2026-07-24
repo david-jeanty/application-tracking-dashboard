@@ -171,3 +171,80 @@ The browser test initially revealed a real rapid-click race that created two
 records before React’s pending state rendered. A synchronous submit lock now
 blocks the second event, while the pending button state remains visible for
 normal submissions.
+
+## 2026-07-24 — Phase 2, Ticket 2.2
+
+### Scope
+
+Implemented owner-only application detail and edit routes. Delete, archive
+actions, search, filters, history timelines, automatic classification, and
+other Phase 2 work remain deferred.
+
+### Implementation
+
+- Added protected `/applications/[id]` and `/applications/[id]/edit` routes.
+  Both validate the UUID, derive the owner from the authenticated session, and
+  use the same not-found response for missing and inaccessible records.
+- Added a complete detail view with safe HTTP(S)-only external links,
+  timezone-safe date-only rendering, plain-text descriptions/notes, timestamps,
+  and archived state.
+- Centralized conversion of the legacy `Not specified` location/source sentinel
+  so it is blank in forms and absent in display UI, then restored only at the
+  database boundary. A future migration should make these columns nullable.
+- Extracted shared application fields so create and edit use the same field
+  structure and validation contract.
+- Added a Zod update schema that extends the creation schema and requires the
+  record version. Ownership fields are ignored and never included in the
+  database update payload.
+- Added optimistic concurrency using `updated_at`: the update is conditional on
+  the application ID, server-derived owner ID, and expected timestamp. If no row
+  changes, an owner-scoped follow-up read returns either a clear stale-data
+  conflict or the same safe unavailable result used for missing/non-owner data.
+- Revalidated the list, detail, and edit routes after a successful update, then
+  redirected to the detail view with a success confirmation.
+- Kept the database status-transition trigger as the only status-history writer;
+  application code does not insert history rows.
+- Allowed owners to view and edit archived records, consistent with the
+  approved architecture that treats archiving as retained data rather than
+  deletion. No archive-state control was added.
+
+### Verification
+
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run test`: passed, 47 tests across 6 files.
+- `npm run build`: passed with both new dynamic routes. The sandboxed attempt
+  could not bind Turbopack's internal port; the identical build passed with
+  local process permission.
+- Credential-free `npm run test:e2e`: 10 public/protection tests passed and 8
+  authenticated tests were correctly skipped.
+- Hosted verification passed owner retrieval and conditional updates,
+  non-owner empty reads/direct-update denial, missing/non-owner equivalence,
+  forged-owner rejection (`42501`), archived owner access, and stale-write
+  rejection without overwriting the newer row.
+- Hosted history verification passed: initial creation produced one event,
+  non-status and unchanged-status updates produced none, and one multi-field
+  status update produced exactly one `Applied` to `Interview` event.
+- Authenticated Ticket 2.2 Playwright passed all 4 targeted desktop/mobile
+  journeys. It covered complete detail rendering, prefilled edit values,
+  validation feedback, immediate non-status and status updates, a visible stale
+  conflict with the newer value preserved, and identical safe not-found UI for
+  missing/non-owner detail and edit routes.
+- The serial full runnable Playwright regression passed all 18 desktop/mobile
+  tests.
+- Hosted verifier cleanup deleted both users (`2/2`), transactionally cascading
+  their 2 profiles, 2 applications, and 3 verified history events. The browser
+  runner removed all owned records, deleted both users (`2/2`), and confirmed
+  zero residual applications, history rows, or Auth users.
+- The service credential was entered through hidden terminal input, existed
+  only in the disposable-user runner process, was stripped before Playwright
+  and the app server were spawned, and was never printed or persisted.
+
+Verification exposed and corrected only harness issues: an existing server was
+initially reused on port 3000, `127.0.0.1` did not satisfy the repository's
+localhost-only site URL rule, streamed not-found pages correctly rendered safe
+UI with a 200 navigation response, and an auxiliary API client's global
+sign-out invalidated the browser session. The final runner uses isolated
+`localhost:32122`, semantic safe-not-found assertions, locally scoped helper
+sign-outs, exact stale-version evidence, serialized tests, and preflight/final
+disposable-user cleanup.

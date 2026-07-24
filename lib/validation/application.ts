@@ -43,6 +43,17 @@ const optionalUrl = z.preprocess(
     .trim()
     .max(2048, "Application URL must be 2,048 characters or fewer.")
     .url("Enter a complete URL beginning with http:// or https://.")
+    .refine(
+      (value) => {
+        try {
+          const protocol = new URL(value).protocol;
+          return protocol === "http:" || protocol === "https:";
+        } catch {
+          return false;
+        }
+      },
+      "Enter a complete URL beginning with http:// or https://.",
+    )
     .optional(),
 );
 
@@ -75,6 +86,16 @@ export const applicationCreationSchema = z.object({
   nextActionDueDate: optionalDateOnly,
 });
 
+export const applicationIdSchema = z.uuid("Invalid application identifier.");
+
+export const applicationUpdateSchema = applicationCreationSchema.extend({
+  expectedUpdatedAt: z.iso.datetime({
+    offset: true,
+    error: "The application version is missing or invalid.",
+  }),
+});
+
 export type ApplicationCreationInput = z.infer<
   typeof applicationCreationSchema
 >;
+export type ApplicationUpdateInput = z.infer<typeof applicationUpdateSchema>;

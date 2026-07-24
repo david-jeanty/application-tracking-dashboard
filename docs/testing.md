@@ -57,9 +57,9 @@ Ensure the account already exists and is confirmed, then run:
 npm run test:e2e -- --project=chromium
 ```
 
-The authenticated shell and Ticket 2.1 application tests are explicitly skipped
+The authenticated shell and Ticket 2.1/2.2 application tests are explicitly skipped
 when any required value is missing. The application test deletes only records
-whose company starts with its unique test prefix. Use a dedicated account; do
+whose company matches the Ticket E2E test prefix. Use a dedicated account; do
 not use a production account.
 
 ## Hosted Ticket 2.1 verification
@@ -85,6 +85,31 @@ credentials to Playwright in memory, and deletes the account afterward:
 ```bash
 node --env-file=.env.local scripts/run-hosted-ticket-2-1-e2e.mjs
 ```
+
+## Hosted Ticket 2.2 verification
+
+Ticket 2.2 uses the same ephemeral credential rule. The database verifier
+creates two disposable confirmed users, exercises owner/non-owner retrieval and
+updates, verifies non-status/status/unchanged-status history behavior, checks a
+forged owner and stale version, verifies retained archived data, and deletes the
+users and their cascading records:
+
+```bash
+node --env-file=.env.local scripts/verify-hosted-ticket-2-2.mjs
+```
+
+The authenticated browser runner creates two disposable confirmed users in
+memory, runs the targeted Ticket 2.2 journeys and then the full desktop/mobile
+regression serially, and removes all owned records and users afterward:
+
+```bash
+node --env-file=.env.local scripts/run-hosted-ticket-2-2-e2e.mjs
+```
+
+Neither script reads the service credential from source, a fixture, or
+`.env.local`; `SUPABASE_SERVICE_ROLE_KEY` must be injected into the process
+environment by a trusted terminal or secret manager. The runner removes that
+variable before spawning Playwright or the application server.
 
 ## Manual accessibility/responsive check
 
