@@ -1,0 +1,20 @@
+Software Developer Intern
+
+Join Brightpath Systems
+
+Brightpath Systems is a Calgary-based team building infrastructure tooling for logistics
+operators. We are looking for a Software Developer Intern for the summer 2027 term.
+
+What You Will Do
+- Contribute backend services in TypeScript and Go
+- Work with the DevOps team on deployment automation
+- Participate in code review and design discussions
+
+Requirements
+- Enrolled in a computer science or software engineering program
+- Experience with at least one backend framework
+
+Duration: 4 months
+This position is on-site at our Calgary office.
+
+Applications are reviewed on a rolling basis.

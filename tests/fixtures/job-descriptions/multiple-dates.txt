@@ -1,0 +1,19 @@
+Data Analyst Intern
+
+Company: Harbourstone Analytics
+Location: Vancouver, BC
+
+Posted: 2026-05-01
+Anticipated start date: September 8, 2026
+Application deadline: 2026-06-30
+Interviews: July 10, 2026
+Orientation begins September 2, 2026
+
+Harbourstone Analytics was founded in 1998 and has grown to over 400 employees.
+
+We are hiring a Data Analyst Intern to support business intelligence reporting. You will
+build dashboards in Power BI and write SQL against our reporting warehouse.
+
+Work term: Fall 2026
+Duration: September to December
+Fully remote within Canada.

@@ -8,13 +8,22 @@ import {
 } from "react";
 import { CheckCircle2, LoaderCircle, Plus, X } from "lucide-react";
 import { ApplicationFields } from "@/components/applications/application-fields";
+import { JobDescriptionImport } from "@/components/applications/job-description-import";
+import { PrefillSummary } from "@/components/applications/prefill-summary";
 import { createApplicationAction } from "@/lib/applications/actions";
 import { initialApplicationState } from "@/lib/applications/state";
+import type { PrefillResult } from "@/lib/job-description-parser/map-to-form";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
 export function ApplicationCreatePanel() {
   const [isOpen, setIsOpen] = useState(false);
+  const [prefill, setPrefill] = useState<PrefillResult | null>(null);
+  /**
+   * The fields are uncontrolled, so new defaults only take effect when they
+   * remount. Bumping this key on each extraction forces that remount.
+   */
+  const [prefillKey, setPrefillKey] = useState(0);
   const [state, formAction, pending] = useActionState(
     createApplicationAction,
     initialApplicationState,
@@ -26,6 +35,11 @@ export function ApplicationCreatePanel() {
     submissionLocked.current = false;
     if (state.status === "success") formRef.current?.reset();
   }, [state]);
+
+  const succeeded = state.status === "success";
+  // Discarded on success so a saved application does not leave stale defaults
+  // behind, but retained through validation errors so nothing typed is lost.
+  const activePrefill = succeeded ? null : prefill;
 
   if (!isOpen) {
     return (
@@ -94,7 +108,25 @@ export function ApplicationCreatePanel() {
           </div>
         ) : null}
 
-        <ApplicationFields errors={errors} />
+        <JobDescriptionImport
+          onExtract={(result) => {
+            setPrefill(result);
+            setPrefillKey((current) => current + 1);
+          }}
+        />
+
+        {activePrefill ? <PrefillSummary decisions={activePrefill.decisions} /> : null}
+
+        {/*
+          Keyed on the extraction count and on success only. A validation error
+          leaves the key untouched, so the user's in-progress edits survive.
+        */}
+        <ApplicationFields
+          defaultValues={activePrefill?.values}
+          errors={errors}
+          key={`${prefillKey}-${succeeded}`}
+          optionalDetailsOpen={Boolean(activePrefill)}
+        />
 
         <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
           <Button
