@@ -45,17 +45,50 @@ function Field({
   );
 }
 
+/**
+ * Shown instead of an example once an extraction has run and left a field the
+ * parser reports on empty. A realistic example in that position reads as an
+ * extracted value — "4 months" in the duration field looks identical whether
+ * the parser found it or merely suggests the format — which contradicts the
+ * summary line that just said the field could not be read.
+ */
+const NOT_FOUND_PLACEHOLDER = "Not found in the posting";
+
+/** Fields the parser reports on, so their emptiness is a stated result. */
+const PARSER_REPORTED_FIELDS = [
+  "workTermSeason",
+  "location",
+  "workTermDuration",
+  "salary",
+] as const satisfies ReadonlyArray<keyof ApplicationFormValues>;
+
 export function ApplicationFields({
   defaultValues,
   errors = {},
+  extractionRan = false,
   optionalDetailsOpen = false,
 }: {
   defaultValues?: Partial<ApplicationFormValues>;
   errors?: Record<string, string[]>;
+  /** True once the user has run an extraction against a pasted posting. */
+  extractionRan?: boolean;
   optionalDetailsOpen?: boolean;
 }) {
   const describedBy = (name: string) =>
     errors[name]?.length ? `${name}-error` : undefined;
+
+  /**
+   * Every example is prefixed so it cannot be mistaken for a value the form is
+   * about to submit. Placeholders are never submitted — only a value the user
+   * typed or the parser wrote is — but the distinction has to be visible.
+   */
+  const example = (field: keyof ApplicationFormValues, sample: string) => {
+    const reported = (PARSER_REPORTED_FIELDS as readonly string[]).includes(field);
+    if (extractionRan && reported && defaultValues?.[field] === undefined) {
+      return NOT_FOUND_PLACEHOLDER;
+    }
+    return `e.g. ${sample}`;
+  };
 
   return (
     <>
@@ -156,7 +189,7 @@ export function ApplicationFields({
             id="workTermSeason"
             maxLength={80}
             name="workTermSeason"
-            placeholder="Summer 2027"
+            placeholder={example("workTermSeason", "Summer 2027")}
             required
           />
         </Field>
@@ -178,7 +211,7 @@ export function ApplicationFields({
               id="location"
               maxLength={200}
               name="location"
-              placeholder="Toronto, ON"
+              placeholder={example("location", "Toronto, ON")}
             />
           </Field>
           <Field
@@ -214,7 +247,7 @@ export function ApplicationFields({
               id="applicationUrl"
               maxLength={2048}
               name="applicationUrl"
-              placeholder="https://company.example/jobs/role"
+              placeholder={example("applicationUrl", "https://company.example/jobs/role")}
               type="url"
             />
           </Field>
@@ -230,7 +263,7 @@ export function ApplicationFields({
               id="applicationSource"
               maxLength={100}
               name="applicationSource"
-              placeholder="Company website"
+              placeholder={example("applicationSource", "Company website")}
             />
           </Field>
           <Field
@@ -273,7 +306,7 @@ export function ApplicationFields({
               id="workTermDuration"
               maxLength={80}
               name="workTermDuration"
-              placeholder="4 months"
+              placeholder={example("workTermDuration", "4 months")}
             />
           </Field>
           <Field error={errors.salary} id="salary" label="Salary">
@@ -284,7 +317,7 @@ export function ApplicationFields({
               id="salary"
               maxLength={100}
               name="salary"
-              placeholder="$20–$25/hour"
+              placeholder={example("salary", "$20–$25/hour")}
             />
           </Field>
           <Field error={errors.nextAction} id="nextAction" label="Next action">
@@ -295,7 +328,7 @@ export function ApplicationFields({
               id="nextAction"
               maxLength={500}
               name="nextAction"
-              placeholder="Follow up with recruiter"
+              placeholder={example("nextAction", "Follow up with recruiter")}
             />
           </Field>
           <Field

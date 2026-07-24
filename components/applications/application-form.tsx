@@ -124,6 +124,7 @@ export function ApplicationCreatePanel() {
         <ApplicationFields
           defaultValues={activePrefill?.values}
           errors={errors}
+          extractionRan={Boolean(activePrefill)}
           key={`${prefillKey}-${succeeded}`}
           optionalDetailsOpen={Boolean(activePrefill)}
         />
