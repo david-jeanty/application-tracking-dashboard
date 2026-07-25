@@ -27,6 +27,11 @@ browser, and no credentials. Ground truth lives in
 `tests/fixtures/job-descriptions/corpus.ts`; the postings themselves are
 synthetic, with invented employers and figures.
 
+This corpus is a regression suite, not a real-world generalization benchmark.
+The architecture limits, private real-posting benchmark protocol, and hybrid
+prototype decision process are documented in
+`docs/parser-architecture-evaluation.md`.
+
 ```bash
 npm run test -- tests/unit/parser-evaluation.test.ts
 WRITE_PARSER_REPORT=1 npm run test   # regenerates docs/parser-evaluation.md
