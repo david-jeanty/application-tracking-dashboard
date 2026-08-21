@@ -1,7 +1,10 @@
 # JobTrack
 
-JobTrack is a student internship and co-op application tracker. The repository is
-currently at **Phase 2, Ticket 2.1: create and list applications**.
+JobTrack is a student internship and co-op application tracker, with Claude
+able to connect as an MCP client to create, read, update, and search
+applications on the user's behalf. The repository is currently at
+**Phase 2, Ticket 2.2: application detail and edit**; Phase 5 (MCP server) is
+next.
 
 ## What works now
 
@@ -12,6 +15,8 @@ currently at **Phase 2, Ticket 2.1: create and list applications**.
 - Accessible public auth forms with validation, pending, success, and error states
 - Authenticated application creation with shared server-side validation
 - Responsive own-application list that excludes archived records
+- Owner-only application detail view and edit form with optimistic-concurrency
+  conflict handling
 - Versioned PostgreSQL schema for profiles, applications, and status history
 - Row-level security policies for every user-owned table and operation
 - Database-owned initial/transition history events
@@ -26,12 +31,20 @@ save data.
 
 ## Deliberately deferred
 
-- Application detail/edit/delete and archive workflows: later Phase 2 tickets
+- Application delete and archive workflows: later Phase 2 tickets
 - Search, filters, status-change controls, and expanded workflows: later Phase 2
 - Dashboard metrics and charts: Phase 3
 - Kanban pipeline: Phase 4
-- Deterministic title classification: Phase 5
-- Production-readiness review and deployment: Phase 6
+- MCP server (`create_application`, `get_application`, `list_applications`,
+  `update_application`, `add_application_note`) so Claude can manage
+  applications on the user's behalf: Phase 5
+- Supabase-issued OAuth 2.1 for MCP ("Connect Claude" flow) replacing a manual
+  API key: Phase 6
+- Production-readiness review and deployment: Phase 7
+
+A hand-built job-title/JD classifier was dropped permanently, not deferred:
+Claude does that reasoning conversationally once connected via MCP, so this
+app does not duplicate it.
 
 See [PROJECT_SPEC.md](PROJECT_SPEC.md) and
 [docs/architecture-plan.md](docs/architecture-plan.md) for the approved scope and
