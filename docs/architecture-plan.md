@@ -5,6 +5,17 @@
 **Target timezone for the initial user:** America/Toronto  
 **Source of truth:** The supplied product specification and dashboard reference image
 
+### 2026-08-21 pivot addendum
+
+The product pivoted to add an MCP server so Claude can create, read, update,
+and search the user's own applications on their behalf, authenticated as that
+user. This supersedes the Phase 5 classifier described below: Claude reasons
+over job descriptions and titles conversationally, so this repository does not
+build a parallel rules engine. Section 19 describes the MCP architecture; the
+phase list in Section 14 and the risk list in Section 15 are updated to match.
+Everything else in this document — schema, RLS, auth, dates, testing —
+is unchanged and still the source of truth for Phases 1–4.
+
 ### Approved Phase 1 clarifications
 
 The user approved these decisions before Phase 1:
@@ -12,9 +23,11 @@ The user approved these decisions before Phase 1:
 - Application creation records one initial history event with nullable
   `previous_status` and the selected status in `new_status`.
 - Salary is optional plain text and is excluded from analytics.
-- Normalized category is manually selected until deterministic classification is
-  introduced in Phase 5. Classification confidence remains null when no
-  classification occurred.
+- Normalized category is manually selected. (Originally deferred to a Phase 5
+  deterministic classifier; the 2026-08-21 pivot addendum drops that
+  classifier permanently, so manual/Claude-assisted selection is now the
+  final answer, not an interim one. `classification_confidence` stays in the
+  schema as an unused optional column rather than a migration to remove it.)
 - Archiving sets `archived_at`; permanent deletion is a separate, explicitly
   confirmed action.
 - The Phase 1 route brief explicitly requires protected Analytics and Archive
@@ -637,19 +650,37 @@ Implement status columns, persistence, optimistic/failure behavior, filtering,
 mobile layout, and a keyboard-accessible status menu. Evaluate a drag-and-drop
 dependency only at this phase.
 
-### Phase 5 — Classification
+### Phase 5 — MCP server (superseded original: Classification)
 
-Implement deterministic rules, explanation and confidence, manual override, 50+
-fixtures, evaluation notes, and classifier integration that never blocks save.
-Although classification is part of the MVP description, deferring its complete
-rule engine until after CRUD keeps business logic independently testable.
+Add `/api/mcp` using the official MCP TypeScript SDK, exposing
+`create_application`, `get_application`, `list_applications`,
+`update_application`, and `add_application_note`. Each tool handler calls the
+same `lib/applications/repository.ts` functions the web app already uses, so
+RLS and validation are not reimplemented. V1 authenticates the MCP connection
+with a single manually issued personal API key stored hashed server-side (not
+OAuth yet); the tool handler resolves the key to a `user_id` the same way a
+session resolves to one, and every query still filters by that ID. Manually
+verify end-to-end against a real Claude connector before calling this phase
+done: paste a JD to Claude, have it call `create_application`, and confirm the
+row appears on the dashboard.
 
-### Phase 6 — Production readiness
+### Phase 6 — MCP OAuth
+
+Replace the manual API key with Supabase acting as an OAuth 2.1 provider for
+MCP (dynamic client registration, PKCE, token issuance/refresh), per
+Supabase's MCP Authentication guide. Add a Settings page "Connect Claude" /
+"Revoke" control backed by Supabase's own token records — no new token table
+in this app's schema. The same Supabase user identity powers both the website
+session and the Claude connection.
+
+### Phase 7 — Production readiness
 
 Perform accessibility, responsive, security, RLS, analytics, date, performance,
 and error-state reviews; finish documentation and deployment configuration;
 validate a clean migration; run the full automated suite; visually refine against
-the reference.
+the reference. Include an MCP-specific security pass: confirm a revoked/expired
+token cannot call any tool, and that no tool handler ever accepts a `user_id`
+argument from the MCP client.
 
 Each phase starts by checking Git status and existing checks, identifies its
 expected files, produces one logical change set, runs the complete relevant gate,
@@ -681,6 +712,12 @@ updates the implementation log, and recommends a commit message.
 10. **A greenfield dependency set may drift or conflict.** Mitigation: verify
     stable compatibility at install time, commit a lockfile, minimize packages,
     and keep framework-specific code outside the domain modules.
+11. **An MCP API key or OAuth token could become a second, weaker
+    authorization path around RLS.** Mitigation: the MCP route resolves
+    `user_id` from the key/token exactly once, passes it into the same
+    repository functions the web app uses, and RLS independently re-checks
+    ownership on every query — never trust a client-supplied ID from either
+    surface.
 
 ## 16. Requirements to simplify, change, or defer
 
@@ -769,6 +806,73 @@ That Phase 1 commit should include the reproducible project scaffold, auth and a
 shell, database migrations and RLS, foundational tests, environment example, and
 documentation. It should not include dashboard analytics, full CRUD, pipeline, or
 the classification engine.
+
+## 19. MCP architecture (added 2026-08-21)
+
+### Transport and tools
+
+A single Route Handler, `app/api/mcp/route.ts`, hosts the MCP server using the
+official MCP TypeScript SDK. It registers exactly five tools for V1:
+
+```text
+create_application(company, job_title, location?, status?, date_applied?,
+                    deadline?, job_url?, job_description?, resume_name?)
+get_application(id)
+list_applications(status?, company?, search?, limit?, cursor?)
+update_application(id, <any subset of application fields>)
+add_application_note(application_id, note)
+```
+
+Tool input schemas are Zod, reusing `lib/validation/application.ts` where the
+fields overlap with the web form. `status` accepts the full existing
+`application_status` enum (10 values), not the smaller 7-value set from early
+drafts of this pivot — Claude and the web UI must never disagree about what
+states exist. `add_application_note` appends to `applications.notes` and lets
+the status-history/event trail record it, rather than inventing a separate
+free-text notes table.
+
+### Authorization boundary
+
+The MCP route is a new *caller* of the existing repository layer
+(`lib/applications/repository.ts`), not a new authorization path:
+
+- V1 (Phase 5): the request carries a personal API key in an `Authorization`
+  header. The route hashes it, looks up the owning `user_id` in a new
+  `mcp_api_keys` table (`id`, `user_id`, `key_hash`, `created_at`,
+  `last_used_at`, `revoked_at`), and rejects the call if missing/revoked. It
+  then calls the repository exactly as a server action would, passing that
+  resolved `user_id` — never a value the client supplied.
+- Phase 6: the same resolution instead comes from validating a Supabase-issued
+  OAuth access token. `mcp_api_keys` can be dropped once OAuth ships, or kept
+  as a fallback for non-interactive/dev use (e.g. Claude Code) — decide with
+  evidence of real demand, per the project's existing bias against
+  unnecessary flexibility.
+- RLS still applies in both cases: the repository queries run through the
+  same Supabase client construction as the web app, scoped by the resolved
+  user. A bug in the MCP route's key/token lookup cannot leak another user's
+  rows, because RLS is the second, independent boundary — exactly the
+  layered-authorization posture already used for the web app (Section 6).
+
+### What does not change
+
+No new database tables are needed for `applications` or
+`application_status_history` — the MCP tools read and write the exact same
+tables the web app uses, through the exact same repository functions. This
+keeps the two surfaces (human UI, Claude) permanently consistent instead of
+risking drift between a "web" data path and an "agent" data path.
+
+### Testing
+
+- Unit-test each tool's Zod schema (valid/invalid inputs) the same way
+  existing application schemas are tested.
+- Integration-test each tool handler against a local Supabase stack with two
+  users, proving the same two-user isolation guarantees as Section 6's RLS
+  tests — a stolen/guessed key for User A must never return or mutate User
+  B's rows.
+- One manual end-to-end check against a real Claude connector is the actual
+  acceptance criterion for Phase 5 (Milestone 3 in the product plan): paste a
+  job description, have Claude call `create_application`, refresh the
+  dashboard, see the row.
 
 ---
 

@@ -1,5 +1,69 @@
 # Implementation log
 
+## 2026-08-21 — MCP vertical slice: `save_job`
+
+### Scope
+
+Added the MCP endpoint, its OAuth 2.1 authentication, and one tool. The other
+tools (`list_jobs`, `get_job`, `update_job`) are deliberately deferred until
+this slice is proven end to end against a real Claude connector.
+
+### Authorization decision
+
+An earlier plan called for a `mcp_api_keys` table. It was dropped: Supabase's
+OAuth 2.1 server issues ordinary Supabase JWTs (`sub`, `role: authenticated`),
+so a token-scoped publishable-key client keeps `auth.uid()` correct and leaves
+row-level security as the enforcing boundary on the MCP path. Neither a
+service-role key nor a JWT signing secret is used. Rationale and the rejected
+alternatives are recorded in [`mcp.md`](mcp.md).
+
+### Implemented
+
+- `[auth.oauth_server]` local configuration and a consent screen at
+  `/oauth/consent`, with approve/deny as a Server Action so Next.js origin
+  checks apply to the decision.
+- RFC 9728 protected-resource metadata, served through a `next.config.ts`
+  rewrite because a `.well-known` directory inside `app/` is not reliably
+  routed. The resource identifier is derived from configuration rather than
+  forwarding headers.
+- `/api/mcp` with bearer-token verification and a `save_job` tool that calls
+  the existing `createApplication` repository function unchanged.
+- A permissive MCP wire schema that is re-validated by the existing
+  `applicationCreationSchema`, so MCP and web writes share one contract.
+- `safePostAuthPath` now preserves a query string on allowlisted paths, and the
+  proxy carries it through login, so consent survives a sign-in round trip.
+
+### Verification
+
+- `npm run lint`, `npm run typecheck`: passed.
+- `npm run test`: passed, 62 tests across 7 files (15 new).
+- `npm run build`: passed; `/api/mcp`, `/api/oauth-protected-resource`, and
+  `/oauth/consent` all register.
+- Live HTTP checks against a production server:
+  - unauthenticated `tools/list` returned `401` with
+    `WWW-Authenticate: Bearer … resource_metadata="…"`;
+  - a forged bearer token returned `401`, not `500` — verification fails
+    closed even when the auth server is unreachable;
+  - both RFC 9728 discovery forms returned the `/api/mcp` resource identifier
+    and the Supabase authorization server.
+- Playwright: 10 credential-free tests passed, including the unauthenticated
+  redirect case covering the modified proxy; 8 credential-dependent cases
+  skipped.
+
+An initial run reported the resource identifier as the bare origin. That was a
+stale server process holding the port, not a code fault; the corrected build
+reports `/api/mcp`. The sandbox's Chromium (r1194) does not match the pinned
+Playwright 1.61.1 (r1228), so the suite was run against the preinstalled
+binary through a throwaway config that was not committed.
+
+### Not verified here
+
+The end-to-end flow through a real Claude connector has **not** been run: it
+needs the OAuth server enabled in the hosted Supabase project and a public
+HTTPS origin. `npm audit` reports 4 pre-existing high-severity advisories in
+`next`'s transitive `postcss`/`sharp`; no new advisory comes from the MCP
+dependencies.
+
 ## 2026-07-24 — Phase 1 foundation
 
 ### Scope
