@@ -17,6 +17,10 @@ next.
 - Responsive own-application list that excludes archived records
 - Owner-only application detail view and edit form with optimistic-concurrency
   conflict handling
+- An MCP endpoint at `/api/mcp` with a `save_job` tool, authenticated with
+  Supabase-issued OAuth 2.1 access tokens so Claude acts as the signed-in
+  student and every query stays under the same RLS policies
+- An OAuth consent screen at `/oauth/consent` and RFC 9728 discovery metadata
 - Versioned PostgreSQL schema for profiles, applications, and status history
 - Row-level security policies for every user-owned table and operation
 - Database-owned initial/transition history events
@@ -35,12 +39,12 @@ save data.
 - Search, filters, status-change controls, and expanded workflows: later Phase 2
 - Dashboard metrics and charts: Phase 3
 - Kanban pipeline: Phase 4
-- MCP server (`create_application`, `get_application`, `list_applications`,
-  `update_application`, `add_application_note`) so Claude can manage
-  applications on the user's behalf: Phase 5
-- Supabase-issued OAuth 2.1 for MCP ("Connect Claude" flow) replacing a manual
-  API key: Phase 6
-- Production-readiness review and deployment: Phase 7
+- Remaining MCP tools (`list_jobs`, `get_job`, `update_job`) so Claude can read
+  and update, not only create
+- Production-readiness review and deployment
+
+`delete_job` is deliberately not planned: archiving suits job-search history
+better, and Claude does not need a destructive tool.
 
 A hand-built job-title/JD classifier was dropped permanently, not deferred:
 Claude does that reasoning conversationally once connected via MCP, so this
@@ -221,8 +225,20 @@ will add and verify deployment configuration. Before any production deployment:
 - Settings editing and every application-data workflow are deferred.
 - `@supabase/ssr` is beta and may require careful upgrade changes.
 
+## Connecting Claude
+
+The MCP endpoint is `https://<your-domain>/api/mcp`. Claude discovers Supabase
+as its authorization server, the student approves access on the consent screen,
+and Claude then acts as that user. No API key is issued and no service-role key
+exists in this application.
+
+Claude cannot reach `localhost`, so a remote connector needs a deployment or a
+tunnel. See [docs/mcp.md](docs/mcp.md) for setup, the request flow, and the
+security properties that make this safe.
+
 ## Further documentation
 
+- [MCP integration](docs/mcp.md)
 - [Architecture plan](docs/architecture-plan.md)
 - [Database and RLS](docs/database.md)
 - [Authentication](docs/authentication.md)

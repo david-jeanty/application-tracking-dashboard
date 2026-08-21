@@ -41,8 +41,13 @@ export async function updateSession(request: NextRequest) {
 
   if (!user && isProtectedPath(request.nextUrl.pathname)) {
     const url = request.nextUrl.clone();
+    // Keep the query string: the OAuth consent screen cannot resume without
+    // its `authorization_id`. `safePostAuthPath` revalidates this on the way
+    // back, so only an allowlisted internal path can be returned to.
+    const destination = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     url.pathname = "/login";
-    url.searchParams.set("next", request.nextUrl.pathname);
+    url.search = "";
+    url.searchParams.set("next", destination);
     return NextResponse.redirect(url);
   }
 

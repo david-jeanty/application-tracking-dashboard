@@ -52,6 +52,17 @@ enable_signup = true
 enable_anonymous_sign_ins = false
 minimum_password_length = 8
 
+# OAuth 2.1 server. Supabase issues access tokens for our own users so an MCP
+# client (Claude) can act as that user. Tokens are ordinary Supabase JWTs, so
+# `auth.uid()` and every existing RLS policy keep working on the MCP path.
+# `authorization_url_path` is the consent screen this application renders.
+[auth.oauth_server]
+enabled = true
+authorization_url_path = "/oauth/consent"
+# Lets an MCP client register itself instead of being pre-registered by hand.
+# Registration alone grants no access: a signed-in user must still approve.
+allow_dynamic_registration = true
+
 [auth.email]
 enable_signup = true
 double_confirm_changes = true
