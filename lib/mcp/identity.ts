@@ -1,21 +1,8 @@
 import "server-only";
 
 import type { AuthInfo } from "@modelcontextprotocol/server";
+import type { McpUserExtra } from "@/lib/mcp/user";
 import { createBearerClient } from "@/lib/supabase/bearer";
-
-/**
- * The authenticated user id carried on a verified MCP request.
- *
- * It is read from the access token by Supabase Auth, never from tool
- * arguments. No MCP tool accepts a `user_id` parameter, so a caller cannot
- * ask to act as somebody else.
- */
-export type McpUserExtra = { userId: string };
-
-export function readUserId(authInfo: AuthInfo | undefined): string | null {
-  const extra = authInfo?.extra as McpUserExtra | undefined;
-  return extra?.userId ?? null;
-}
 
 /**
  * Validates the bearer token presented by an MCP client.

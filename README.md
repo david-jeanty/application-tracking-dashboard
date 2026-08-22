@@ -17,9 +17,12 @@ next.
 - Responsive own-application list that excludes archived records
 - Owner-only application detail view and edit form with optimistic-concurrency
   conflict handling
-- An MCP endpoint at `/api/mcp` with a `save_job` tool, authenticated with
-  Supabase-issued OAuth 2.1 access tokens so Claude acts as the signed-in
-  student and every query stays under the same RLS policies
+- An MCP endpoint at `/api/mcp` with `save_job`, `list_jobs`, `get_job`, and
+  `update_job` tools, authenticated with Supabase-issued OAuth 2.1 access
+  tokens so Claude acts as the signed-in student and every query stays under
+  the same RLS policies. No tool takes a `user_id`; `list_jobs` lets Claude
+  find an application by status, employer, work term, or archive state instead
+  of asking the student for an identifier
 - An OAuth consent screen at `/oauth/consent` and RFC 9728 discovery metadata
 - Versioned PostgreSQL schema for profiles, applications, and status history
 - Row-level security policies for every user-owned table and operation
@@ -39,8 +42,6 @@ save data.
 - Search, filters, status-change controls, and expanded workflows: later Phase 2
 - Dashboard metrics and charts: Phase 3
 - Kanban pipeline: Phase 4
-- Remaining MCP tools (`list_jobs`, `get_job`, `update_job`) so Claude can read
-  and update, not only create
 - Production-readiness review and deployment
 
 `delete_job` is deliberately not planned: archiving suits job-search history

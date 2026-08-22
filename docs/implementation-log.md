@@ -1,5 +1,89 @@
 # Implementation log
 
+## 2026-08-22 — MCP `list_jobs` and `get_job`
+
+### Scope
+
+Added the two read tools, so Claude no longer needs a student to know a UUID:
+it lists, reads the short records, and picks the application itself. No UI,
+schema, migration, service-role key, or authentication change.
+
+### Audit of the existing read paths, before any change
+
+- `getApplicationById` was already exactly what `get_job` needs: owner-scoped,
+  full detail projection, `maybeSingle`, and a null result for both missing and
+  not-owned. No change was required for it.
+- `listActiveApplications` was **not** what `list_jobs` needs. It hard-coded
+  `archived_at is null`, took no filters, applied no limit, and did not select
+  `work_term_season`, which is one of the fields a student uses to tell two
+  applications apart. Serving the tool from it would have meant either a second
+  parallel query or shipping every application on every call.
+- The tool registration lived inline in `app/api/mcp/route.ts`, and the
+  registration test re-declared its own copies of the tools. That test could
+  stay green while the route was broken, and "all four tools register" could
+  not honestly be asserted of the thing actually served.
+
+### Resolved
+
+- Generalized the list read into `listApplications(supabase, userId, filters)`
+  with optional status, company, work-term, archive-state, and limit filters.
+  `listActiveApplications` is now a thin wrapper over it, so the page and the
+  tool share one query and one projection. The filters land on the existing
+  indexes — `(user_id, created_at desc)` orders, and
+  `(user_id, current_status) where archived_at is null` covers the common
+  case — so no migration, index, or SQL function was added.
+- Moved the projection into `APPLICATION_SUMMARY_COLUMNS`, which excludes
+  `job_description` and `notes` by construction. A list response cannot carry a
+  50,000-character description because the query never selects one.
+- Extracted `registerJobTrackTools(server, repositoryFor)` into
+  `lib/mcp/tools.ts`. The route supplies the real RLS-bound repository; tests
+  supply a two-user stand-in. What the tests exercise is now what the route
+  serves. `readUserId` moved to `lib/mcp/user.ts` so the registration stays
+  free of `server-only` imports.
+
+### Implemented
+
+- `list_jobs`: optional `status`, `company`, `work_term`, `archive_state`, and
+  `limit` (default 25, ceiling 50, enforced by the advertised schema rather
+  than by silent trimming). Records carry only `application_id`, `company`,
+  `job_title`, `status`, `work_term`, `location`, `deadline`, `date_applied`,
+  and `archived`. One row past the limit is fetched and dropped to report
+  `has_more` without a second counting query.
+- `get_job`: `application_id` and nothing else. Returns the full record —
+  description, notes, next action, dates, work-term details, links, salary —
+  with the `Not specified` sentinel presented as empty and no `user_id`, no
+  classifier column, and no version token.
+- Company and work-term filters are literal case-insensitive substring
+  matches. The `LIKE` pattern is built by `toContainsPattern`, a pure helper
+  with its own tests, so the claim that `100%_Inc` searches for that text
+  rather than matching most of the table is verified rather than asserted. No
+  fuzzy or natural-language matching lives in the tools: choosing which
+  application the student meant is Claude's reasoning, and a tracker that
+  guesses is worse than one that returns the candidates.
+
+### Verification
+
+- `npm run lint`, `npm run typecheck`: passed, no warnings.
+- `npm run test`: passed, 177 tests across 12 files (54 new). Covers
+  owner-only listing, a second student seeing only their own rows, a
+  non-owned record answering identically to a nonexistent one, each filter,
+  empty lists, limits and `has_more`, summary conciseness, the complete
+  `get_job` record, absence of `user_id` on all four tools, and the unchanged
+  `save_job` and `update_job` suites.
+- The registration suite now drives a real `McpServer` over an in-memory
+  transport: it initializes, lists tools, and calls all four with a verified
+  identity. Schema conversion, argument validation, output-schema validation,
+  and the unauthenticated path are all exercised through the real dispatch.
+- `npm run build`: passed.
+
+### Not verified here
+
+The filter and limit SQL is exercised against a stand-in store, not Postgres;
+the escaping and index assumptions are argued in code, not measured. A hosted
+verification script in the style of `scripts/verify-hosted-ticket-2-2.mjs`
+would close that gap and needs a live project. No live Claude connector run
+was performed for these two tools.
+
 ## 2026-08-22 — MCP `update_job`
 
 ### Scope

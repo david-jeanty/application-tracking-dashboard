@@ -100,20 +100,21 @@ user/Claude-set field with manual selection in the UI; no classifier ships.
 ## MCP automation
 
 Claude connects to this app as a remote MCP client, authenticated as the same
-Supabase user as the web session (see Authentication below). V1 ships five
+Supabase user as the web session (see Authentication below). V1 ships four
 tools, all operating only on the caller's own rows through the existing
 RLS-protected repository layer — the MCP transport is a new caller of the
 same data-access boundary, not a new authorization path:
 
-- `create_application`
-- `get_application`
-- `list_applications`
-- `update_application`
-- `add_application_note`
+- `save_job`
+- `update_job`
+- `list_jobs`
+- `get_job`
+
+Notes are a field on `save_job` and `update_job` rather than a separate tool.
 
 Claude decides what data goes where (company, title, status, etc.) after
 reasoning over a pasted job description or a user's instruction; this app
-never parses free text itself. `delete_application` may follow later.
+never parses free text itself. `delete_job` may follow later.
 
 ## MVP phases
 
@@ -126,7 +127,7 @@ never parses free text itself. `delete_application` may follow later.
    accessible charts.
 4. **Pipeline:** persistent status columns, failure recovery, keyboard alternative,
    responsive behavior.
-5. **MCP integration:** `/api/mcp` route, the five tools above, tool-input
+5. **MCP integration:** `/api/mcp` route, the four tools above, tool-input
    validation, and a manual API-key-authenticated MCP client test against the
    user's own account.
 6. **MCP OAuth:** Supabase as OAuth 2.1 provider for MCP (dynamic client

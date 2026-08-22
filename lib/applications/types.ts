@@ -30,6 +30,13 @@ export type ApplicationRecord = {
   archived_at: string | null;
 };
 
+/**
+ * The bounded projection every list read returns.
+ *
+ * Deliberately excludes `job_description` and `notes`: both are long free text
+ * that no list surface renders, and the MCP `list_jobs` tool must stay concise
+ * enough for Claude to scan many applications at once.
+ */
 export type ApplicationListItem = {
   id: string;
   company_name: string;
@@ -38,11 +45,13 @@ export type ApplicationListItem = {
   current_status: ApplicationStatus;
   location: string;
   work_arrangement: WorkArrangement;
+  work_term_season: string;
   date_applied: string | null;
   application_deadline: string | null;
   next_action: string | null;
   next_action_due_date: string | null;
   created_at: string;
+  archived_at: string | null;
 };
 
 export type ApplicationFormValues = {

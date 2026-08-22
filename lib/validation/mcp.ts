@@ -252,3 +252,163 @@ export function mergeUpdateValues(
 
   return merged;
 }
+
+/** The tool-facing archive vocabulary, mapped to the repository's own. */
+export const ARCHIVE_STATES = ["active", "archived", "all"] as const;
+
+export const LIST_JOBS_DEFAULT_LIMIT = 25;
+export const LIST_JOBS_MAXIMUM_LIMIT = 50;
+
+/**
+ * The wire contract for `list_jobs`.
+ *
+ * This is the tool that removes the need for a student to know an identifier:
+ * Claude lists, reads the short records, and picks the one the student meant.
+ * Every filter is therefore a plain, literal predicate — there is no fuzzy or
+ * natural-language matching here, because the reasoning belongs to Claude and
+ * a tracker that silently guesses which employer was meant is worse than one
+ * that returns the candidates.
+ *
+ * Deliberately absent: `user_id`. The list is always the caller's own.
+ */
+export const listJobsInputSchema = z.object({
+  status: z
+    .enum(APPLICATION_STATUSES)
+    .optional()
+    .describe("Only applications currently at this stage."),
+  company: z
+    .string()
+    .min(1)
+    .max(160)
+    .optional()
+    .describe(
+      "Only applications whose employer name contains this text, ignoring case. Literal text, not a fuzzy search.",
+    ),
+  work_term: z
+    .string()
+    .min(1)
+    .max(80)
+    .optional()
+    .describe(
+      "Only applications whose work term contains this text, for example 'Summer 2027' or '2027'.",
+    ),
+  archive_state: z
+    .enum(ARCHIVE_STATES)
+    .optional()
+    .describe(
+      "Which applications to include. Defaults to 'active', which leaves archived ones out.",
+    ),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(LIST_JOBS_MAXIMUM_LIMIT)
+    .optional()
+    .describe(
+      `Most applications to return, newest first. Defaults to ${LIST_JOBS_DEFAULT_LIMIT} and cannot exceed ${LIST_JOBS_MAXIMUM_LIMIT}.`,
+    ),
+});
+
+export type ListJobsInput = z.infer<typeof listJobsInputSchema>;
+
+/** One short record, holding only what is needed to choose between jobs. */
+const jobSummarySchema = z.object({
+  application_id: z.string(),
+  company: z.string(),
+  job_title: z.string(),
+  status: z.enum(APPLICATION_STATUSES),
+  work_term: z.string().nullable(),
+  location: z.string().nullable(),
+  deadline: z.string().nullable(),
+  date_applied: z.string().nullable(),
+  archived: z.boolean(),
+});
+
+export type JobSummary = z.infer<typeof jobSummarySchema>;
+
+export const listJobsOutputSchema = z.object({
+  applications: z.array(jobSummarySchema),
+  returned: z.number().int(),
+  has_more: z
+    .boolean()
+    .describe(
+      "True when more applications matched than were returned. Narrow the filters or raise the limit.",
+    ),
+});
+
+/** Maps tool arguments onto the repository's filter contract. */
+export function toApplicationListFilters(input: ListJobsInput) {
+  return {
+    status: input.status,
+    company: input.company?.trim() || undefined,
+    workTermSeason: input.work_term?.trim() || undefined,
+    archiveState: input.archive_state ?? ("active" as const),
+    limit: input.limit ?? LIST_JOBS_DEFAULT_LIMIT,
+  };
+}
+
+/**
+ * The wire contract for `get_job`.
+ *
+ * One argument, and it is the application's own identifier. Ownership is not
+ * an argument: the record is read under the access token's identity, so an
+ * application belonging to somebody else reads exactly like one that does not
+ * exist.
+ */
+export const getJobInputSchema = z.object({
+  application_id: z
+    .uuid()
+    .describe(
+      "Identifier of the application to read, as returned by list_jobs.",
+    ),
+});
+
+export type GetJobInput = z.infer<typeof getJobInputSchema>;
+
+/**
+ * The full application as the tools describe it.
+ *
+ * Named with the tool vocabulary rather than column names, and carrying no
+ * ownership, versioning, or classification columns: Claude never needs them,
+ * and `update_job` reads the record's version itself when it writes.
+ */
+export const jobDetailSchema = z.object({
+  application_id: z.string(),
+  company: z.string(),
+  job_title: z.string(),
+  status: z.enum(APPLICATION_STATUSES),
+  category: z.enum(JOB_CATEGORIES),
+  work_arrangement: z.enum(WORK_ARRANGEMENTS),
+  location: z.string().nullable(),
+  work_term: z.string().nullable(),
+  duration: z.string().nullable(),
+  job_url: z.string().nullable(),
+  source: z.string().nullable(),
+  job_description: z.string().nullable(),
+  deadline: z.string().nullable(),
+  date_applied: z.string().nullable(),
+  salary: z.string().nullable(),
+  notes: z.string().nullable(),
+  next_action: z.string().nullable(),
+  next_action_due_date: z.string().nullable(),
+  archived: z.boolean(),
+  created_at: z.string().describe("When the application was first saved."),
+  updated_at: z.string().describe("When it was last changed."),
+});
+
+export type JobDetail = z.infer<typeof jobDetailSchema>;
+
+/** What changed, so Claude can confirm an edit without re-reading the record. */
+export const updateJobOutputSchema = z.object({
+  application_id: z.string(),
+  changed_fields: z.array(
+    z.object({
+      field: z.string(),
+      from: z.string().nullable(),
+      to: z.string().nullable(),
+    }),
+  ),
+  status_history_recorded: z
+    .boolean()
+    .describe("True when the status moved, which records a history event."),
+});
