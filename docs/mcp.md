@@ -1,8 +1,8 @@
 # MCP integration
 
 Claude connects to this application as a remote MCP client and acts as the
-signed-in student: it can save job applications into the same tables the web
-dashboard reads.
+signed-in student: it can save, list, read, and update job applications in the
+same tables the web dashboard reads.
 
 ## Why there is no separate API-key system
 
@@ -44,10 +44,16 @@ Claude ──1── POST /api/mcp  (no token)
 
 | File | Role |
 |---|---|
-| `app/api/mcp/route.ts` | MCP endpoint and tool registration |
+| `app/api/mcp/route.ts` | MCP endpoint; picks the data access the tools get |
+| `lib/mcp/tools.ts` | The four tool registrations, over an injected repository |
+| `lib/mcp/repository.ts` | Binds the RLS repository to one verified request |
+| `lib/mcp/list-jobs.ts` | `list_jobs` orchestration and summary shaping |
+| `lib/mcp/get-job.ts` | `get_job` orchestration and record shaping |
+| `lib/mcp/update-job.ts` | `update_job` read-merge-write orchestration |
 | `lib/mcp/identity.ts` | Validates the bearer token, resolves the user |
+| `lib/mcp/user.ts` | Reads the verified user id off a request |
 | `lib/supabase/bearer.ts` | Token-scoped Supabase client (no cookies) |
-| `lib/validation/mcp.ts` | `save_job` wire contract and field mapping |
+| `lib/validation/mcp.ts` | Every tool's wire contract and field mapping |
 | `app/api/oauth-protected-resource/route.ts` | RFC 9728 discovery document |
 | `app/oauth/consent/page.tsx` | Consent screen Supabase redirects users to |
 | `lib/oauth/actions.ts` | Approve / deny decision |
@@ -55,8 +61,13 @@ Claude ──1── POST /api/mcp  (no token)
 ## Security properties
 
 - **No tool accepts a `user_id`.** Ownership comes from the access token only.
-  `applications.user_id` defaults to `auth.uid()`, resolved from that token.
-  A test asserts the argument is absent from the schema and the mapped values.
+  `applications.user_id` defaults to `auth.uid()`, resolved from that token,
+  and every read is additionally scoped to that id before row-level security
+  checks it again. A test asserts the argument is absent from all four
+  advertised schemas and from the mapped values.
+- **A record you do not own is indistinguishable from one that does not
+  exist.** `get_job` and `update_job` return the identical message for both,
+  and `list_jobs` returns an empty list rather than an error.
 - **Tool input is validated twice.** The MCP schema is permissive so Claude can
   fill it easily; the result is then re-parsed by the same
   `applicationCreationSchema` the web form uses, so both surfaces enforce
@@ -115,7 +126,9 @@ RFC 8414 metadata is deliberately **not** served at our origin. See
 
 ## Tools
 
-`save_job` and `update_job` exist so far.
+All four tools exist: `save_job`, `list_jobs`, `get_job`, and `update_job`.
+
+### `save_job`
 
 | Argument | Required | Notes |
 |---|---|---|
@@ -129,6 +142,52 @@ RFC 8414 metadata is deliberately **not** served at our origin. See
 
 `work_term_season` is a required column that a posting rarely states, so it
 falls back to the same `Not specified` sentinel the web form uses.
+
+### `list_jobs`
+
+The tool that removes the need for a student to know an identifier. Claude
+lists, reads the short records, and picks the application the student meant.
+
+| Argument | Required | Notes |
+|---|---|---|
+| `status` | no | One of the ten application statuses |
+| `company` | no | Case-insensitive substring of the employer name |
+| `work_term` | no | Case-insensitive substring, e.g. `Summer 2027` or `2027` |
+| `archive_state` | no | `active` (default), `archived`, or `all` |
+| `limit` | no | Defaults to 25, ceiling 50 |
+
+Each record carries `application_id`, `company`, `job_title`, `status`,
+`work_term`, `location`, `deadline`, `date_applied`, and `archived` — and
+nothing else. `job_description` and `notes` are absent from the query's
+projection, not filtered out afterwards, so a list response cannot carry a
+50,000-character posting however many applications match.
+
+The result also reports `returned` and `has_more`. `has_more` comes from
+fetching one row past the limit and dropping it, so Claude knows to narrow the
+filters without paying for a second counting query.
+
+Filters are literal, not fuzzy. `company: "RBC"` matches stored text
+containing `RBC`, with `%` and `_` escaped so a name matches itself; it does
+not match "Royal Bank of Canada" by meaning. Deciding which application a
+student meant is Claude's reasoning over the returned candidates — a tracker
+that silently guesses is worse than one that shows the options. An oversized
+`limit` is refused by the advertised schema rather than quietly trimmed.
+
+### `get_job`
+
+Takes `application_id` and nothing else. Returns the whole stored application:
+`company`, `job_title`, `status`, `category`, `work_arrangement`, `location`,
+`work_term`, `duration`, `job_url`, `source`, `job_description`, `deadline`,
+`date_applied`, `salary`, `notes`, `next_action`, `next_action_due_date`,
+`archived`, `created_at`, and `updated_at`.
+
+What it does not return: `user_id` (never selected), `classification_confidence`
+and `classification_matches` (a classifier this product dropped), and any
+version token — `update_job` reads the record's own `updated_at` when it
+writes, so Claude never has to carry one.
+
+An application belonging to another student returns exactly what a nonexistent
+id returns, because the read is owner-scoped and RLS applies again underneath.
 
 ### `update_job`
 
@@ -154,10 +213,24 @@ updateApplication(userId, id, …)   existing conditional write
    ↓ diff before/after             structured result
 ```
 
-Nothing was added to the repository layer. The read supplies the real
-`updated_at`, so the conditional write keeps its optimistic-concurrency
-protection instead of dropping it; on a conflict the tool re-reads and retries
-once, then reports the conflict rather than looping.
+The read supplies the real `updated_at`, so the conditional write keeps its
+optimistic-concurrency protection instead of dropping it; on a conflict the
+tool re-reads and retries once, then reports the conflict rather than looping.
+
+## How a request reaches the database
+
+```text
+tools/call ─► registerJobTrackTools handler   lib/mcp/tools.ts
+   ↓ readUserId(authInfo)                     the verified token's user, or 401
+   ↓ repositoryFor({ token, userId })         lib/mcp/repository.ts
+   ↓ existing repository function             owner-scoped query
+Postgres                                      RLS decides, as it does for the web
+```
+
+The route chooses only which repository the tools get. Tests register the same
+`registerJobTrackTools` against a two-user stand-in store and drive it over a
+real `McpServer`, so the registration, argument validation, output validation,
+and ownership behaviour under test are the ones the route serves.
 
 Status history is never written by this tool. Changing `current_status` fires
 the existing database trigger, and resending the same status writes no event
@@ -205,7 +278,7 @@ curl https://<domain>/.well-known/oauth-protected-resource
 
 ## Not built yet
 
-`list_jobs` and `get_job` come next; they are what will let Claude resolve
-"the RBC job" into the id `update_job` currently requires. `delete_job` is
-deliberately omitted: archiving is the safer default for job-search history,
-and Claude does not need a destructive tool.
+`delete_job` is deliberately omitted rather than deferred: archiving is the
+safer default for job-search history, and Claude does not need a destructive
+tool. Archiving itself is still a later Phase 2 ticket, so `archive_state` can
+currently only read a distinction the web UI cannot yet create.
