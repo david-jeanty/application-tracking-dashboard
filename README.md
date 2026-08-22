@@ -1,248 +1,177 @@
 # JobTrack
 
-JobTrack is a student internship and co-op application tracker, with Claude
-able to connect as an MCP client to create, read, update, and search
-applications on the user's behalf. The repository is currently at
-**Phase 2, Ticket 2.2: application detail and edit**; Phase 5 (MCP server) is
-next.
+A job tracker your AI assistant can actually use.
 
-## What works now
+## What is JobTrack?
 
-- Email/password signup, login, logout, recovery request, and reset completion
-  using Supabase Auth
-- Cookie-based server-rendered sessions and protected route redirects
-- Responsive desktop sidebar and mobile navigation drawer
-- Accessible public auth forms with validation, pending, success, and error states
-- Authenticated application creation with shared server-side validation
-- Responsive own-application list that excludes archived records
-- Owner-only application detail view and edit form with optimistic-concurrency
-  conflict handling
-- An MCP endpoint at `/api/mcp` with `save_job`, `list_jobs`, `get_job`, and
-  `update_job` tools, authenticated with Supabase-issued OAuth 2.1 access
-  tokens so Claude acts as the signed-in student and every query stays under
-  the same RLS policies. No tool takes a `user_id`; `list_jobs` lets Claude
-  find an application by status, employer, work term, or archive state instead
-  of asking the student for an identifier
-- An OAuth consent screen at `/oauth/consent` and RFC 9728 discovery metadata
-- Versioned PostgreSQL schema for profiles, applications, and status history
-- Row-level security policies for every user-owned table and operation
-- Database-owned initial/transition history events
-- Date-only utilities that avoid UTC calendar shifts
-- Unit, Playwright, and pgTAP database-test configuration
+JobTrack is an application tracker for students applying to internships and
+co-ops. It holds everything about a job search in one place: the company, the
+role, the deadline, where you are in the process, what you need to do next, and
+the notes you made along the way.
 
-## What is only scaffolded
+What makes it different is that you don't have to fill it in yourself. JobTrack
+connects to an AI assistant like Claude, so you can say "save this job" or "I
+applied to the RBC one today," and the tracker updates itself.
 
-`/pipeline`, `/analytics`, `/archive`, and `/settings` remain protected, polished
-placeholders. They show no mock records and expose no controls that pretend to
-save data.
+## Why I built it
 
-## Deliberately deferred
+Students already use AI for most of a job search. We paste postings into Claude
+to understand what a role actually involves, research companies, tailor
+applications, and prepare for interviews.
 
-- Application delete and archive workflows: later Phase 2 tickets
-- Search, filters, status-change controls, and expanded workflows: later Phase 2
-- Dashboard metrics and charts: Phase 3
-- Kanban pipeline: Phase 4
-- Production-readiness review and deployment
+Then we close the chat, open a spreadsheet, and type the same information in
+again by hand.
 
-`delete_job` is deliberately not planned: archiving suits job-search history
-better, and Claude does not need a destructive tool.
+That copying is the part nobody keeps up with. A few weeks into a search the
+tracker is out of date, half the applications were never added, and the details
+that mattered are buried somewhere in a chat history you can't search properly.
 
-A hand-built job-title/JD classifier was dropped permanently, not deferred:
-Claude does that reasoning conversationally once connected via MCP, so this
-app does not duplicate it.
+JobTrack removes that duplicate work. The assistant that just read the posting
+with you is the one that files it.
 
-See [PROJECT_SPEC.md](PROJECT_SPEC.md) and
-[docs/architecture-plan.md](docs/architecture-plan.md) for the approved scope and
-architecture.
+## The philosophy
 
-## Architecture
+**AI does the reasoning. JobTrack stores the truth.**
 
-Next.js App Router renders pages and handles validated server actions. Supabase
-provides authentication and PostgreSQL. RLS is the final authorization boundary:
-frontend filtering is never treated as security. Pure TypeScript modules hold
-date, route, environment, and validation logic.
+AI assistants are already good at reading a job description, judging whether a
+role fits, and helping you prepare. JobTrack doesn't try to rebuild any of that.
+There is no chatbot in the app, no resume generator, and no posting parser.
 
-The project uses:
+Instead, JobTrack does the part a conversation is bad at: keeping a reliable
+record over time. A job search runs for months and needs deadlines that don't
+move, statuses that stay accurate, and notes you can find again when you need
+them.
 
-- Next.js 16, React 19, strict TypeScript
-- Tailwind CSS 4 and editable shadcn/ui-compatible components
-- `@supabase/ssr` and `@supabase/supabase-js`
-- Zod
-- Vitest, Testing Library, Playwright, and Supabase pgTAP tests
+So the work is split. The assistant handles the thinking and the conversation.
+JobTrack handles the organization, history, deadlines, statuses, notes, and
+application data.
 
-The Supabase SSR package is currently documented by Supabase as beta. It is their
-recommended cookie-based Next.js integration, but upgrades should review its
-release notes carefully.
+## What you can do
 
-## Prerequisites
+Once JobTrack is connected, the whole thing is just conversation:
 
-- Node.js 22 or newer (the local development machine uses Node 24)
-- npm 11 or newer
-- A Supabase project for real authentication
-- Docker Desktop or another Docker-compatible runtime for the local Supabase stack
+- "Save this job to JobTrack."
+- "What RBC jobs am I tracking?"
+- "Show me the details for that Business Analyst role."
+- "I applied to it today."
+- "Set my next action to follow up next Friday."
 
-## Local setup
+You never have to look up an ID or remember exactly what you called something.
+You describe the job the way you'd describe it to a friend, and the assistant
+figures out which one you mean.
 
-1. Install the pinned dependency graph:
+Today the assistant can save jobs, list your applications, pull up the full
+details of one, and update its tracked information.
 
-   ```bash
-   npm ci
-   ```
+## How it works
 
-2. Create a local environment file:
-
-   ```bash
-   cp .env.example .env.local
-   ```
-
-3. Fill in the project URL and publishable key from Supabase Dashboard's
-   **Connect** dialog. Set `NEXT_PUBLIC_SITE_URL=http://localhost:3000`.
-
-4. In Supabase Auth URL configuration, use
-   `http://localhost:3000/auth/callback` as an allowed redirect URL.
-
-5. Apply the migration to a linked development project:
-
-   ```bash
-   npx supabase login
-   npx supabase link --project-ref YOUR_PROJECT_REF
-   npx supabase db push --dry-run
-   npx supabase db push
-   ```
-
-6. Start the application:
-
-   ```bash
-   npm run dev
-   ```
-
-7. Open [http://localhost:3000](http://localhost:3000).
-
-Never run destructive reset commands against production. Never add a service-role
-key to this application.
-
-## Local Supabase
-
-The local stack is the reproducible way to validate migrations and RLS:
-
-```bash
-npm run db:start
-npm run db:reset
-npm run test:db
+```text
+Student → AI assistant → JobTrack → application tracker
 ```
 
-`db:reset` destroys and recreates only the selected local database by default.
-Confirm the target before adding any `--linked` flag. The local stack requires a
-running Docker-compatible runtime.
+JobTrack connects to AI assistants through MCP, an open standard that lets an
+assistant use an outside tool. In practice you add JobTrack to Claude once and
+sign in to your own account; after that, Claude can work with your applications
+whenever you ask.
 
-Run `npx supabase status` after startup and place its API URL and publishable/anon
-key in `.env.local`. Local auth confirmation is disabled in `supabase/config.toml`
-for deterministic development; production confirmation settings are configured
-in the Supabase Dashboard.
+Each user can only access their own applications, and the AI connection uses the
+same authenticated JobTrack account.
 
-See [docs/database.md](docs/database.md) for schema and migration details.
+## The web app
 
-## Environment variables
+Conversation is the fastest way to put something in. A screen is still the best
+way to look at everything at once.
 
-| Variable | Exposure | Purpose |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Browser-safe | Project Data API/Auth URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Browser-safe | Public project key; RLS still applies |
-| `NEXT_PUBLIC_SITE_URL` | Browser-safe | Trusted origin for recovery callback links |
-| `E2E_USER_EMAIL` | Test runner only | Optional isolated test account |
-| `E2E_USER_PASSWORD` | Test runner only | Optional isolated test password |
+The website is where you see your applications laid out, check what's due,
+review the details of a role before an interview, and edit anything directly. It
+covers your application list, statuses, deadlines, next actions, and notes
+today, with a pipeline board and analytics coming.
 
-The application validates its public configuration before creating a Supabase
-client and provides a clear setup error. Do not commit `.env.local`.
+Both sides work on the same data. Anything the assistant saves shows up on the
+site, and anything you edit on the site is what the assistant sees next time.
 
-## Commands
+## Current status
+
+JobTrack is deployed and the Claude connection works today.
+
+**Working now**
+
+- Accounts: sign up, log in, password reset
+- Adding, viewing, and editing applications
+- Your application list, with statuses, deadlines, next actions, and notes
+- The AI connection: saving jobs, listing applications, getting full details,
+  and updating applications
+- Status history recorded automatically as an application moves
+
+**Not built yet** — the pipeline, analytics, archive, and settings pages exist
+but are placeholders. They don't show fake data or pretend to save anything.
+
+## What's next
+
+1. Testing the AI connection carefully with two separate accounts, to confirm
+   nobody can reach anyone else's applications
+2. Production email setup, so confirmation and password-reset messages send
+   properly
+3. Cleaning up the hosting setup
+4. Testing saved jobs against messier, longer, and stranger postings
+5. Search and filtering on the website
+6. A dashboard with real numbers
+7. The pipeline board
+8. Archiving finished applications
+9. Analytics on how a search is actually going
+
+## Tech stack
+
+- **Next.js** — the web application
+- **TypeScript** — throughout, in strict mode
+- **Supabase** — accounts and authentication
+- **PostgreSQL** — where the applications live
+- **Vercel** — hosting
+- **MCP** — how AI assistants connect
+
+## Running locally
+
+You'll need Node.js 22+, npm 11+, and a Supabase project. Docker is only needed
+if you want to run the database tests.
 
 ```bash
-npm run dev        # local Next.js development
-npm run lint       # ESLint
-npm run typecheck  # strict TypeScript
-npm run test       # credential-free unit tests
-npm run test:e2e   # Playwright public tests; auth test is conditional
-npm run test:db    # pgTAP migration/RLS tests; requires local Supabase
-npm run build      # production Next.js build
-npm run check      # lint, types, unit tests, and build
+npm ci
+cp .env.example .env.local   # then fill in your Supabase values
+npm run dev
 ```
 
-Read [docs/testing.md](docs/testing.md) before running credentialed or database
-tests.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Authentication behavior
+`.env.example` explains each variable. Set `NEXT_PUBLIC_SITE_URL` to
+`http://localhost:3000`, and add `http://localhost:3000/auth/callback` as an
+allowed redirect URL in your Supabase project's auth settings.
 
-- Anonymous visits to protected routes redirect to `/login`.
-- Successful login returns only to an allowlisted protected internal path.
-- Signup stores the submitted full name as auth metadata; a database trigger
-  creates the matching profile.
-- Recovery requests return the same success message whether an account exists,
-  reducing account enumeration.
-- Recovery callbacks exchange the one-time code and open `/reset-password`.
-- Server actions derive identity from the authenticated Supabase session.
+Useful commands:
 
-See [docs/authentication.md](docs/authentication.md).
+```bash
+npm run dev        # development server
+npm run test       # unit tests
+npm run check      # lint, types, tests, and a production build
+npm run test:e2e   # browser tests
+npm run test:db    # database tests (needs Docker)
+```
 
-## Security notes
+Connecting an AI assistant needs a public HTTPS address, since Claude can't
+reach `localhost`. [docs/mcp.md](docs/mcp.md) covers that setup.
 
-- RLS is enabled on profiles, applications, and status history.
-- Application ownership defaults to `auth.uid()` and cannot be reassigned to
-  another user through an authenticated request.
-- The status-history composite foreign key enforces the same application owner.
-- Browser clients can read only their own history and have no mutation privileges
-  on history.
-- Security-definer trigger functions use a fixed empty `search_path`.
-- Notes are plain text; no raw HTML rendering is used.
+Never add a service-role key to this application, and never run a database reset
+against production.
 
-Security behavior must be retested after every policy or trigger change.
+## Documentation
 
-## Dates
+The `/docs` folder has the detail behind all of this:
 
-Deadline, applied, and next-action dates are PostgreSQL `date` values represented
-as `YYYY-MM-DD` strings. They are not parsed as UTC instants. Creation, update,
-archive, and status-change values are `timestamptz`. Date tests cover invalid
-dates, month/year boundaries, timezone midnight, and daylight-saving transitions.
-
-## Deployment direction
-
-The intended deployment is Vercel plus a production Supabase project. Phase 6
-will add and verify deployment configuration. Before any production deployment:
-
-- apply and inspect migrations in staging;
-- configure exact site/recovery URLs;
-- rerun two-user RLS tests;
-- enable the intended email-confirmation policy;
-- complete accessibility and responsive smoke tests;
-- store environment values in Vercel, never Git.
-
-## Known Phase 1 limitations
-
-- A configured Supabase project is required for real auth.
-- Docker is required to execute local migration and pgTAP tests.
-- Authenticated Playwright coverage requires an isolated account through the
-  optional E2E variables.
-- The responsive app shell cannot be reached without authentication by design.
-- Settings editing and every application-data workflow are deferred.
-- `@supabase/ssr` is beta and may require careful upgrade changes.
-
-## Connecting Claude
-
-The MCP endpoint is `https://<your-domain>/api/mcp`. Claude discovers Supabase
-as its authorization server, the student approves access on the consent screen,
-and Claude then acts as that user. No API key is issued and no service-role key
-exists in this application.
-
-Claude cannot reach `localhost`, so a remote connector needs a deployment or a
-tunnel. See [docs/mcp.md](docs/mcp.md) for setup, the request flow, and the
-security properties that make this safe.
-
-## Further documentation
-
-- [MCP integration](docs/mcp.md)
-- [Architecture plan](docs/architecture-plan.md)
-- [Database and RLS](docs/database.md)
+- [How the AI integration works](docs/mcp.md)
+- [Architecture](docs/architecture-plan.md)
+- [Database and security](docs/database.md)
 - [Authentication](docs/authentication.md)
 - [Testing](docs/testing.md)
 - [Implementation log](docs/implementation-log.md)
 - [Backlog](docs/backlog.md)
+
+[PROJECT_SPEC.md](PROJECT_SPEC.md) has the full product scope.
