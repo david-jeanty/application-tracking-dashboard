@@ -1,5 +1,70 @@
 # Implementation log
 
+## 2026-08-22 — OAuth compatibility aliases for Claude
+
+### Problem
+
+The real Claude custom-connector flow reached `/api/mcp` correctly, but on
+authorization Claude ignored the `authorization_servers` value in our RFC 9728
+metadata and sent the browser to `https://<our-domain>/authorize?…`, which
+returned our 404 page. The correct endpoint is
+`${NEXT_PUBLIC_SUPABASE_URL}/auth/v1/oauth/authorize`.
+
+### Implemented
+
+- `GET /authorize` — 302 to Supabase's authorize endpoint, query string copied
+  verbatim. No parameter is parsed, rewritten, or invented.
+- `POST /token` — server-side proxy to Supabase's token endpoint, forwarding
+  `content-type`, `authorization`, and `accept` through an allowlist so cookies
+  are never relayed. Returns the upstream status, body, and content type with
+  `Cache-Control: no-store` and `Pragma: no-cache`. Nothing is logged, and the
+  unreachable-upstream path returns an opaque 502 because the caught error can
+  quote the request body.
+- Both destinations are built from the **origin** of the configured
+  `NEXT_PUBLIC_SUPABASE_URL`, so no request value can retarget them.
+
+Authentication design, RLS, and the MCP tool surface are unchanged. No
+service-role key or JWT secret was introduced.
+
+### `/token` was added without being able to confirm it is needed
+
+Whether Claude also synthesizes `/token` on the resource origin could not be
+determined from this environment — it needs a live connector. It was added
+anyway: it is small, it cannot weaken anything if unused, and the failure it
+prevents would strand the flow at the final step and cost another deploy
+cycle to diagnose.
+
+### RFC 8414 metadata deliberately not served
+
+Serving `/.well-known/oauth-authorization-server` at our origin was considered
+and rejected for now. Every variant has a failure mode: advertising Supabase's
+`issuer` contradicts the document's own location, while advertising our origin
+as the issuer contradicts the `iss` claim in the tokens Supabase actually
+mints. Since Claude is already known to ignore metadata here, introducing a
+document it might partially honour could divert it away from the synthesized
+paths these aliases now serve — turning a fixable failure into a new one on
+the very retry meant to confirm the fix.
+
+If the deployment logs show Claude requesting that path, adding it becomes
+worthwhile and would *improve* the security posture, because Claude would then
+talk to Supabase directly and our server would stop handling authorization
+codes and tokens at all.
+
+### Verification
+
+- `npm run lint`, `npm run typecheck`: passed.
+- `npm run test`: passed, 84 tests across 8 files (22 new).
+- `npm run build`: passed; `/authorize` and `/token` both register.
+- Live checks against a production server:
+  - `/authorize` returned `302` with `Cache-Control: no-store` and a `location`
+    whose query was byte-identical to the request, including the percent-encoded
+    `redirect_uri` and the `+` in `scope`;
+  - the auth proxy did not intercept `/authorize`, so it is not redirected to
+    `/login`;
+  - `/token` returned `502` against an unreachable upstream — proving it
+    attempted the proxy rather than 404ing — with an opaque body containing
+    neither the code nor the verifier, and no secret appeared in the server log.
+
 ## 2026-08-21 — MCP vertical slice: `save_job`
 
 ### Scope

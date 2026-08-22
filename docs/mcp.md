@@ -79,6 +79,40 @@ screen therefore describes access truthfully but does not enforce it. To
 genuinely restrict what an MCP client may do relative to the website, add
 policies keyed on `auth.jwt() ->> 'client_id'`.
 
+## Client compatibility aliases (`/authorize`, `/token`)
+
+Supabase is the real authorization server and our RFC 9728 metadata names it
+correctly. Claude's custom connector currently **ignores** that
+`authorization_servers` value and synthesizes OAuth endpoints on the MCP
+resource origin instead, producing a 404:
+
+```text
+observed:  https://<our-domain>/authorize?response_type=code&client_id=…   → 404
+correct:   https://<ref>.supabase.co/auth/v1/oauth/authorize?…
+```
+
+Two aliases exist purely to absorb that:
+
+- `GET /authorize` — 302 redirect to Supabase's authorize endpoint with the
+  query string copied **verbatim**. Parameters are never parsed, rewritten, or
+  invented, because `state` and `code_challenge` must arrive byte-identical or
+  PKCE fails.
+- `POST /token` — server-side proxy to Supabase's token endpoint. A redirect
+  will not do: the body carries the authorization code and PKCE verifier, and
+  clients need not replay a body across a cross-origin redirect.
+
+The destination is always built from the configured `NEXT_PUBLIC_SUPABASE_URL`,
+using only its **origin**. Nothing from the request can move it to another
+host — `redirect_uri` is forwarded unexamined precisely because validating it
+is Supabase's job, against the registered client.
+
+Neither alias changes the authorization model. Supabase still issues every
+token, RLS is still the enforcing boundary, and no service-role key or JWT
+secret is introduced. Delete both once the client honours the metadata.
+
+RFC 8414 metadata is deliberately **not** served at our origin. See
+`docs/implementation-log.md` for why, and what would change that.
+
 ## Tools
 
 Only `save_job` exists so far.
