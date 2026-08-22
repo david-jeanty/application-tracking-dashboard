@@ -115,7 +115,7 @@ RFC 8414 metadata is deliberately **not** served at our origin. See
 
 ## Tools
 
-Only `save_job` exists so far.
+`save_job` and `update_job` exist so far.
 
 | Argument | Required | Notes |
 |---|---|---|
@@ -129,6 +129,43 @@ Only `save_job` exists so far.
 
 `work_term_season` is a required column that a posting rarely states, so it
 falls back to the same `Not specified` sentinel the web form uses.
+
+### `update_job`
+
+Takes `application_id` plus any subset of the fields the web edit form owns:
+`company`, `job_title`, `location`, `status`, `category`, `work_arrangement`,
+`job_description`, `job_url`, `source`, `deadline`, `date_applied`,
+`work_term`, `duration`, `salary`, `notes`, `next_action`,
+`next_action_due_date`.
+
+An omitted field keeps its stored value. An empty string clears a field that
+is allowed to be empty; a required field cannot be emptied. There is no
+dedicated interview-date column, so a phrase like "the interview is
+September 4" is expressed as `next_action` plus `next_action_due_date`.
+
+It works by read-merge-write rather than a partial SQL update:
+
+```text
+getApplicationById(userId, id)     owner-scoped; null ⇒ not_found, nothing written
+   ↓ toApplicationFormValues()     existing mapper, handles the sentinel
+   ↓ apply only supplied keys      explicit allowlist in UPDATE_FIELD_MAP
+   ↓ applicationUpdateSchema       the same gate the web edit form passes
+updateApplication(userId, id, …)   existing conditional write
+   ↓ diff before/after             structured result
+```
+
+Nothing was added to the repository layer. The read supplies the real
+`updated_at`, so the conditional write keeps its optimistic-concurrency
+protection instead of dropping it; on a conflict the tool re-reads and retries
+once, then reports the conflict rather than looping.
+
+Status history is never written by this tool. Changing `current_status` fires
+the existing database trigger, and resending the same status writes no event
+because of the trigger's `WHEN` clause. The result's
+`status_history_recorded` reports which happened.
+
+Missing and not-owned applications return the identical result, because the
+read is scoped to the authenticated user and RLS applies again underneath.
 
 ## Setup
 
@@ -168,6 +205,7 @@ curl https://<domain>/.well-known/oauth-protected-resource
 
 ## Not built yet
 
-`list_jobs`, `get_job`, and `update_job` come next. `delete_job` is
+`list_jobs` and `get_job` come next; they are what will let Claude resolve
+"the RBC job" into the id `update_job` currently requires. `delete_job` is
 deliberately omitted: archiving is the safer default for job-search history,
 and Claude does not need a destructive tool.
