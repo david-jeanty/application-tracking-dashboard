@@ -1,14 +1,36 @@
 import { createMcpHandler, withMcpAuth } from "mcp-handler";
+import { z } from "zod";
 import { readUserId, verifySupabaseAccessToken } from "@/lib/mcp/identity";
-import { createApplication } from "@/lib/applications/repository";
+import { runUpdateJob } from "@/lib/mcp/update-job";
+import {
+  createApplication,
+  getApplicationById,
+  updateApplication,
+} from "@/lib/applications/repository";
 import { createBearerClient, getResourceOrigin } from "@/lib/supabase/bearer";
 import { applicationCreationSchema } from "@/lib/validation/application";
 import {
   saveJobInputSchema,
   toApplicationCreationValues,
+  updateJobInputSchema,
 } from "@/lib/validation/mcp";
 
 export const RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
+
+/** What changed, so Claude can confirm the edit without re-reading the record. */
+const updateJobOutputSchema = z.object({
+  application_id: z.string(),
+  changed_fields: z.array(
+    z.object({
+      field: z.string(),
+      from: z.string().nullable(),
+      to: z.string().nullable(),
+    }),
+  ),
+  status_history_recorded: z
+    .boolean()
+    .describe("True when the status moved, which records a history event."),
+});
 
 function toolError(message: string) {
   return {
@@ -68,6 +90,70 @@ const handler = createMcpHandler(
               text: `Saved ${parsed.data.originalJobTitle} at ${parsed.data.companyName} with status ${parsed.data.currentStatus}.`,
             },
           ],
+        };
+      },
+    );
+
+    server.registerTool(
+      "update_job",
+      {
+        title: "Update job application",
+        description:
+          "Updates an existing job application in the student's tracker. Send only the fields that changed, such as moving the status to Applied or Interview, recording a date, or setting the next action. Fields you omit keep their current value. Requires the application's id.",
+        inputSchema: updateJobInputSchema,
+        outputSchema: updateJobOutputSchema,
+      },
+      async (args, ctx) => {
+        const authInfo = ctx.http?.authInfo;
+        const userId = readUserId(authInfo);
+
+        if (!authInfo || !userId) {
+          return toolError("Not signed in to the application tracker.");
+        }
+
+        // Both calls are bound to the token's user here, so the tool body has
+        // no way to name a different owner. Row-level security checks again.
+        const supabase = createBearerClient(authInfo.token);
+        const result = await runUpdateJob(args, {
+          readApplication: (applicationId) =>
+            getApplicationById(supabase, userId, applicationId),
+          writeApplication: (applicationId, input) =>
+            updateApplication(supabase, userId, applicationId, input),
+        });
+
+        if (result.outcome === "not_found") {
+          return toolError(
+            "No application with that id is in this student's tracker.",
+          );
+        }
+        if (result.outcome === "invalid") {
+          return toolError(`That update could not be applied. ${result.message}`);
+        }
+        if (result.outcome === "conflict") {
+          return toolError(
+            "That application was changed elsewhere while updating. Read it again and retry.",
+          );
+        }
+        if (result.outcome === "error") {
+          return toolError(
+            `That application could not be updated. Database error ${result.code ?? "unknown"}.`,
+          );
+        }
+
+        const structured = {
+          application_id: result.applicationId,
+          changed_fields: result.changed,
+          status_history_recorded: result.statusChanged,
+        };
+        const summary = result.changed.length
+          ? result.changed
+              .map((change) => `${change.field} → ${change.to ?? "cleared"}`)
+              .join(", ")
+          : "no fields changed";
+
+        return {
+          content: [{ type: "text" as const, text: `Updated: ${summary}.` }],
+          structuredContent: structured,
         };
       },
     );

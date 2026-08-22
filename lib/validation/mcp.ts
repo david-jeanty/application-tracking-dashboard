@@ -3,11 +3,16 @@ import {
   APPLICATION_STATUSES,
   JOB_CATEGORIES,
   UNSPECIFIED_DATABASE_VALUE,
+  WORK_ARRANGEMENTS,
   type ApplicationStatus,
   type JobCategory,
 } from "@/lib/applications/constants";
+import type { ApplicationFormValues } from "@/lib/applications/types";
 
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** A date being changed may also be cleared, which an empty string expresses. */
+const CLEARABLE_DATE_PATTERN = /^(\d{4}-\d{2}-\d{2})?$/;
 
 /**
  * The wire contract for `save_job`.
@@ -137,4 +142,113 @@ export function toApplicationCreationValues(input: SaveJobInput) {
     nextAction: undefined,
     nextActionDueDate: undefined,
   };
+}
+
+/**
+ * The wire contract for `update_job`.
+ *
+ * Every field is optional except the application identifier, so Claude sends
+ * only what the student actually said changed. An omitted field keeps its
+ * stored value; an empty string clears a field that is allowed to be empty.
+ *
+ * Deliberately absent: `user_id`. Ownership comes from the access token, and
+ * the application is looked up under that identity before anything is written.
+ */
+export const updateJobInputSchema = z.object({
+  application_id: z
+    .uuid()
+    .describe("Identifier of the application to update, from the tracker."),
+  company: z.string().min(1).max(160).optional(),
+  job_title: z.string().min(1).max(200).optional(),
+  location: z.string().max(200).optional(),
+  status: z
+    .enum(APPLICATION_STATUSES)
+    .optional()
+    .describe(
+      "New stage, for example 'Applied' once submitted or 'Interview' after an invitation.",
+    ),
+  category: z.enum(JOB_CATEGORIES).optional(),
+  work_arrangement: z.enum(WORK_ARRANGEMENTS).optional(),
+  job_description: z.string().max(50000).optional(),
+  job_url: z.string().max(2048).optional(),
+  source: z.string().max(100).optional(),
+  deadline: z
+    .string()
+    .regex(CLEARABLE_DATE_PATTERN)
+    .optional()
+    .describe("Application deadline as YYYY-MM-DD, or empty to clear it."),
+  date_applied: z
+    .string()
+    .regex(CLEARABLE_DATE_PATTERN)
+    .optional()
+    .describe("Date the student applied, as YYYY-MM-DD."),
+  work_term: z.string().min(1).max(80).optional(),
+  duration: z.string().max(80).optional(),
+  salary: z.string().max(100).optional(),
+  notes: z.string().max(20000).optional(),
+  next_action: z
+    .string()
+    .max(500)
+    .optional()
+    .describe(
+      "What the student needs to do next, for example 'Follow up with the recruiter' or 'Interview'.",
+    ),
+  next_action_due_date: z
+    .string()
+    .regex(CLEARABLE_DATE_PATTERN)
+    .optional()
+    .describe("When that next action is due, as YYYY-MM-DD."),
+});
+
+export type UpdateJobInput = z.infer<typeof updateJobInputSchema>;
+
+/**
+ * The complete set of fields `update_job` may write, mapping each tool
+ * argument to its form field. Anything absent from this map cannot be reached
+ * by the tool, so ownership, timestamps, archive state, and classification
+ * columns are all unreachable regardless of what a caller sends.
+ */
+export const UPDATE_FIELD_MAP = {
+  company: "companyName",
+  job_title: "originalJobTitle",
+  location: "location",
+  status: "currentStatus",
+  category: "normalizedJobCategory",
+  work_arrangement: "workArrangement",
+  job_description: "jobDescription",
+  job_url: "applicationUrl",
+  source: "applicationSource",
+  deadline: "applicationDeadline",
+  date_applied: "dateApplied",
+  work_term: "workTermSeason",
+  duration: "workTermDuration",
+  salary: "salary",
+  notes: "notes",
+  next_action: "nextAction",
+  next_action_due_date: "nextActionDueDate",
+} as const satisfies Record<string, keyof ApplicationFormValues>;
+
+/**
+ * Applies a partial patch onto the application's current values.
+ *
+ * The stored record is the base, so a field Claude did not mention keeps its
+ * value instead of being erased. The merged result is then validated by the
+ * same `applicationUpdateSchema` the web edit form uses.
+ */
+export function mergeUpdateValues(
+  current: ApplicationFormValues,
+  patch: UpdateJobInput,
+): ApplicationFormValues {
+  const merged: ApplicationFormValues = { ...current };
+
+  for (const argument of Object.keys(UPDATE_FIELD_MAP) as (keyof typeof UPDATE_FIELD_MAP)[]) {
+    const value = patch[argument];
+    if (value === undefined) continue;
+
+    // Each mapped argument is validated to the same value set as its form
+    // field, and every form field holds a string, so this write is in range.
+    (merged as Record<string, string>)[UPDATE_FIELD_MAP[argument]] = value;
+  }
+
+  return merged;
 }

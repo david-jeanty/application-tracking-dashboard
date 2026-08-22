@@ -1,5 +1,68 @@
 # Implementation log
 
+## 2026-08-22 — MCP `update_job`
+
+### Scope
+
+Added the `update_job` tool. `list_jobs` and `get_job` remain deferred, so the
+tool requires an explicit `application_id`; resolving "the RBC job" is their
+job, not this one. No UI, schema, migration, or authentication change.
+
+### Architectural mismatch found and resolved
+
+The existing update path is a full-record replace: `toApplicationUpdate` is
+literally `toApplicationInsert`, which maps every absent optional to `null`,
+and `applicationUpdateSchema` requires every core field plus
+`expectedUpdatedAt`. Correct for a web form that posts the whole record back,
+but passing a partial patch through it would erase every field Claude did not
+mention.
+
+Resolved with read-merge-write instead of a new partial-update repository
+function: read the record under the authenticated identity, merge the supplied
+keys onto `toApplicationFormValues(record)`, validate with the same
+`applicationUpdateSchema`, then call the existing `updateApplication`. No
+repository, schema, or SQL change was needed, and the read supplies a real
+`updated_at`, so optimistic concurrency is genuinely preserved rather than
+dropped. A conflict re-reads and retries once, then reports.
+
+### Implemented
+
+- `updateJobInputSchema` with `application_id` required and every other field
+  optional, plus `UPDATE_FIELD_MAP` as the explicit writable allowlist —
+  ownership, timestamp, archive, and classification columns are unreachable.
+- `lib/mcp/update-job.ts` with injected repository calls, so ownership,
+  conflict, not-found, and read-error paths are testable without a database.
+- A structured result naming the changed fields, with the internal
+  `Not specified` sentinel hidden and long values truncated so a 50,000
+  character description is never echoed back.
+
+### Verification
+
+- `npm run lint`, `npm run typecheck`: passed.
+- `npm run test`: passed, 123 tests across 10 files (61 new). Covers owner
+  update, partial update, field clearing, invalid status, malformed dates,
+  another user's application, absence of `user_id`, conflict retry, status
+  history flagging, and the existing `save_job` suite unchanged.
+- `npm run build`: passed.
+- New registration tests instantiate a real `McpServer`, register both tools,
+  and assert the generated JSON Schema — a schema that cannot convert now
+  fails in CI rather than silently stopping a live connector from listing
+  tools.
+
+A test initially failed on `2026-08-32`: the wire schema checks date *shape*
+only, and the shared creation schema is what rejects a day the calendar does
+not have. The assertion was moved to the layer that actually owns the
+guarantee, and an end-to-end case was added proving such a date is rejected
+before any write.
+
+### Not verified here
+
+Database-level status-history behaviour is covered by the existing pgTAP suite,
+which needs Docker and cannot run in this environment. The unit tests prove
+this tool never writes history itself and correctly reports whether the status
+moved; they do not re-prove the trigger. No live Claude connector run was
+performed for `update_job`.
+
 ## 2026-08-22 — OAuth compatibility aliases for Claude
 
 ### Problem
