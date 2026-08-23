@@ -349,3 +349,109 @@ export async function updateApplication(
   if (current.error) return { outcome: "error", code: current.error.code };
   return { outcome: classifyMissingConditionalUpdate(Boolean(current.data)) };
 }
+
+export type QuickUpdateResult =
+  | { outcome: "updated" }
+  | { outcome: "not_found" }
+  | { outcome: "error"; code?: string };
+
+/**
+ * One small, owner-scoped write against an active application.
+ *
+ * Every quick update shares these three predicates, and all three live in the
+ * statement rather than in the page that called it:
+ *
+ * - `id` selects the record,
+ * - `user_id` restricts it to the caller, and
+ * - `archived_at is null` restricts it to an active one.
+ *
+ * That last predicate is what makes "quick update is for active applications"
+ * a property of the write. A crafted post naming an archived record matches no
+ * row and changes nothing, whether or not the page rendered the controls.
+ *
+ * Optimistic concurrency is deliberately absent, and this is the reason it can
+ * be: the caller supplies a patch of one or two named columns, so the write
+ * cannot carry a stale copy of anything the student did not just edit. The
+ * full edit form still requires an `expectedUpdatedAt` because it replaces the
+ * entire record and genuinely could overwrite somebody's in-flight change.
+ *
+ * Only `id` comes back. The detail page re-reads the record after redirecting,
+ * so returning the full row here would be a second projection to keep in step
+ * for no benefit.
+ *
+ * Missing, owned by another student, and archived are the same `not_found`, so
+ * a response never confirms that somebody else's application exists.
+ */
+async function quickUpdate(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+  applicationId: string,
+  patch: Record<string, string | null>,
+): Promise<QuickUpdateResult> {
+  const { data, error } = await supabase
+    .from("applications")
+    .update(patch)
+    .eq("id", applicationId)
+    .eq("user_id", authenticatedUserId)
+    .is("archived_at", null)
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  if (error) return { outcome: "error", code: error.code };
+  if (!data) return { outcome: "not_found" };
+  return { outcome: "updated" };
+}
+
+/**
+ * Sets the current status of one active application the caller owns.
+ *
+ * The patch is a single column, which is what guarantees the rest of the
+ * record survives untouched: no `date_applied` is inferred, no next action is
+ * cleared, no archive state changes. Nothing here enforces an order on the
+ * statuses either — a student may move backward from Interview to Applied, or
+ * skip straight to Offer, because a real search does both.
+ *
+ * Status history is the database's job, not this function's. The trigger is
+ * declared `after update of current_status ... when (old.current_status is
+ * distinct from new.current_status)`, so a genuine change records exactly one
+ * event and re-saving the status already stored records none. No application
+ * code writes to the history table, and authenticated clients could not: it
+ * grants `select` only.
+ */
+export async function setApplicationStatus(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+  applicationId: string,
+  status: ApplicationStatus,
+): Promise<QuickUpdateResult> {
+  return quickUpdate(supabase, authenticatedUserId, applicationId, {
+    current_status: status,
+  });
+}
+
+/**
+ * Sets, or clears, the next action of one active application the caller owns.
+ *
+ * The patch is exactly the two next-action columns, so saving a follow-up
+ * never disturbs the status — and therefore never produces a status-history
+ * event, because the trigger only watches `current_status`.
+ *
+ * The pairing rule is enforced here rather than in a schema: a due date is
+ * written only alongside an action, and an empty action clears both columns.
+ * Keeping it in the write means the database can never end up holding a due
+ * date for an action that does not exist, whatever path the values arrived by.
+ * Clearing is the same statement with empty input, not a separate one.
+ */
+export async function setApplicationNextAction(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+  applicationId: string,
+  nextAction: { action?: string; dueDate?: string } = {},
+): Promise<QuickUpdateResult> {
+  const action = nextAction.action?.trim() || null;
+
+  return quickUpdate(supabase, authenticatedUserId, applicationId, {
+    next_action: action,
+    next_action_due_date: action ? nextAction.dueDate ?? null : null,
+  });
+}

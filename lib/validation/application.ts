@@ -99,3 +99,40 @@ export type ApplicationCreationInput = z.infer<
   typeof applicationCreationSchema
 >;
 export type ApplicationUpdateInput = z.infer<typeof applicationUpdateSchema>;
+
+/**
+ * The status half of the detail page's quick update.
+ *
+ * Deliberately one field. Reusing `applicationCreationSchema` here would let a
+ * crafted post carry company, dates, or a job description into what a student
+ * understands as a status change; this schema cannot describe those fields at
+ * all, so they never reach a mutation.
+ *
+ * The enum is the shared `APPLICATION_STATUSES` constant, so the quick control
+ * and the full form can never drift apart or disagree about which statuses
+ * exist.
+ */
+export const quickStatusSchema = z.object({
+  currentStatus: z.enum(APPLICATION_STATUSES, {
+    error: "Select a current status.",
+  }),
+});
+
+/**
+ * The next-action half of the detail page's quick update.
+ *
+ * Both fields reuse the same helpers the full form uses — `optionalText(500)`
+ * and `optionalDateOnly` — so the length limit and the "valid YYYY-MM-DD"
+ * rule are defined once and apply identically wherever a next action is saved.
+ *
+ * The pairing rule (a due date is only kept alongside an action) is not here.
+ * It belongs to the write, so it holds for every caller rather than only for
+ * input that happened to come through this schema.
+ */
+export const quickNextActionSchema = z.object({
+  nextAction: optionalText(500),
+  nextActionDueDate: optionalDateOnly,
+});
+
+export type QuickStatusInput = z.infer<typeof quickStatusSchema>;
+export type QuickNextActionInput = z.infer<typeof quickNextActionSchema>;
