@@ -18,6 +18,7 @@ import {
 import type {
   ApplicationListItem,
   ApplicationRecord,
+  ApplicationStatusEvent,
 } from "@/lib/applications/types";
 import type {
   ApplicationCreationInput,
@@ -181,6 +182,30 @@ export async function listActiveWorkTermSeasons(
     data: [...seasons].sort((first, second) => first.localeCompare(second)),
     error: null,
   };
+}
+
+/**
+ * Every status event belonging to the authenticated user.
+ *
+ * The projection is deliberately two columns: "has this application ever been
+ * at this status" is all the conversion metrics need, and `changed_at` would
+ * only invite a duration metric that mixes a `timestamptz` with the date-only
+ * `date_applied`. Ordering is irrelevant to a set membership question, so none
+ * is requested.
+ *
+ * History is readable but never writable by a client: the table grants
+ * `select` only, and its policies deny every mutation. The owner predicate here
+ * sits on top of that, and row-level security applies again underneath.
+ */
+export async function listStatusHistory(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+) {
+  return supabase
+    .from("application_status_history")
+    .select("application_id,new_status")
+    .eq("user_id", authenticatedUserId)
+    .returns<ApplicationStatusEvent[]>();
 }
 
 export async function getApplicationById(

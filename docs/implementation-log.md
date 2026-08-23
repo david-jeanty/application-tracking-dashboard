@@ -1,5 +1,74 @@
 # Implementation log
 
+## 2026-08-23 — Analytics
+
+### Scope
+
+A server-rendered `/analytics` page replacing the placeholder. No dashboard,
+pipeline, archive, or MCP change, and no new dependency.
+
+### Audit findings
+
+The data model already supported this and **no migration was needed**. The
+initial history event a trigger writes on creation is what makes an application
+saved directly as `Applied` — what `save_job` does when a student says they
+already applied — count correctly; a unique partial index guarantees exactly one
+such event per application. `authenticated` already holds `select` on
+`application_status_history` with an owner-scoped policy.
+
+One real correctness hazard: the architecture plan defines "Total" from
+*current* status while the response metrics are defined from *history*. An
+application moved back to `Interested` after a rejection would leave the
+denominator while its rejection stayed in a numerator, letting a rate exceed
+100%. Approved resolution: **ever-submitted** — taken from history — is the
+shared denominator for every rate, which makes each numerator a subset of the
+denominator by construction. Current-status counts stay separate, as headline
+figures rather than ratio inputs.
+
+Also decided: archived applications are **included**, because a role a student
+tidied away still happened and excluding it would inflate every rate. The
+applications list deliberately does the opposite, being a worklist.
+
+Deferred: time-to-response, which would mix `changed_at` (`timestamptz`) with
+`date_applied` (`date`) against this project's date-only discipline.
+
+### Implemented
+
+- `lib/analytics/definitions.ts` — the status sets and one rounding policy, so
+  no page or component can restate a formula. A zero denominator is zero.
+- `lib/analytics/calculate.ts` — a pure `summarizeApplications`, given every
+  input: no clock, no database, no request.
+- One new repository read, `listStatusHistory`, projecting only
+  `application_id,new_status`. `changed_at` is deliberately absent so a duration
+  metric cannot be built on it by accident. The applications side reuses the
+  existing `listApplications` with `archiveState: "all"` — no second read.
+- Ten statuses is well past the point where colour can carry identity, so the
+  breakdowns are tables with single-hue magnitude bars, values present as text
+  in their own cells rather than only on hover. Recharts stays uninstalled.
+
+Note: the architecture plan proposed `lib/repositories/analytics-repository.ts`;
+this repository settled on `lib/applications/repository.ts`, and the existing
+convention was followed instead.
+
+### Verification
+
+- `npm run lint`, `npm run typecheck`: passed, no warnings.
+- `npm run test`: passed, 244 tests across 16 files (22 new). The metric tests
+  use explicit status paths and cover the boundary cases the audit raised:
+  created-directly-as-Applied, a stage skipped over, an interview that became a
+  rejection, a submitted application moved back to Interested, an archived
+  application, a zero denominator, and history referencing a row that is gone.
+- `npm run test:e2e`: 10 passed, 8 skipped (the authenticated journeys need an
+  isolated account).
+- `npm run build`: passed; `/analytics` builds as a dynamic route.
+
+### Not verified here
+
+No pgTAP was added for analytics: the metrics are pure functions over rows, and
+the trigger behaviour they assume is already covered by
+`001_foundation_rls.test.sql`. The page has no browser-test coverage, for the
+same credential reason as the rest of the authenticated interface.
+
 ## 2026-08-23 — Applications search and filtering
 
 ### Scope

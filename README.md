@@ -84,8 +84,8 @@ way to look at everything at once.
 
 The website is where you see your applications laid out, check what's due,
 review the details of a role before an interview, and edit anything directly. It
-covers your application list, statuses, deadlines, next actions, and notes
-today, with a pipeline board and analytics coming.
+covers your application list, statuses, deadlines, next actions, notes, and
+analytics today, with a pipeline board coming.
 
 Both sides work on the same data. Anything the assistant saves shows up on the
 site, and anything you edit on the site is what the assistant sees next time.
@@ -103,9 +103,10 @@ JobTrack is deployed and the Claude connection works today.
 - The AI connection: saving jobs, listing applications, getting full details,
   and updating applications
 - Status history recorded automatically as an application moves
+- Analytics: where your applications stand, and how far they got
 
-**Not built yet** — the pipeline, analytics, archive, and settings pages exist
-but are placeholders. They don't show fake data or pretend to save anything.
+**Not built yet** — the pipeline, archive, and settings pages exist but are
+placeholders. They don't show fake data or pretend to save anything.
 
 ## What's next
 
@@ -118,7 +119,6 @@ but are placeholders. They don't show fake data or pretend to save anything.
 5. A dashboard with real numbers
 6. The pipeline board
 7. Archiving finished applications
-8. Analytics on how a search is actually going
 
 ## Tech stack
 

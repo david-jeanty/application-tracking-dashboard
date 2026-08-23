@@ -4,6 +4,7 @@ import {
   listActiveApplications,
   listActiveWorkTermSeasons,
   listApplications,
+  listStatusHistory,
 } from "@/lib/applications/repository";
 
 const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -245,5 +246,36 @@ describe("work-term options", () => {
       data: [],
       error: null,
     });
+  });
+});
+
+describe("status history read", () => {
+  it("is scoped to the authenticated user", async () => {
+    const recorder = recordingClient();
+
+    await listStatusHistory(recorder.client, USER);
+
+    expect(recorder.find("from")[0].args[0]).toBe("application_status_history");
+    expect(recorder.argsFor("eq", "user_id")).toEqual(["user_id", USER]);
+  });
+
+  it("projects only what the conversion metrics need", async () => {
+    const recorder = recordingClient();
+
+    await listStatusHistory(recorder.client, USER);
+
+    // No changed_at: a duration metric would mix a timestamptz with the
+    // date-only date_applied, which this ticket deliberately defers.
+    expect(String(recorder.find("select")[0].args[0])).toBe(
+      "application_id,new_status",
+    );
+  });
+
+  it("includes archived applications' history by not filtering it out", async () => {
+    const recorder = recordingClient();
+
+    await listStatusHistory(recorder.client, USER);
+
+    expect(recorder.argsFor("is", "archived_at")).toBeUndefined();
   });
 });
