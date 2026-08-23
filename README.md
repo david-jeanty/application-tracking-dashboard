@@ -74,6 +74,12 @@ assistant use an outside tool. In practice you add JobTrack to Claude once and
 sign in to your own account; after that, Claude can work with your applications
 whenever you ask.
 
+Everything you need to set that up — the connection address, the steps, and a
+list of what an assistant can and cannot do — is on the **Settings** page once
+you sign in. The same page lists anything you have connected and lets you
+disconnect it. JobTrack never provides or charges for AI; you bring an
+assistant you already have.
+
 Each user can only access their own applications, and the AI connection uses the
 same authenticated JobTrack account.
 

@@ -240,7 +240,28 @@ because of the trigger's `WHEN` clause. The result's
 Missing and not-owned applications return the identical result, because the
 read is scoped to the authenticated user and RLS applies again underneath.
 
-## Setup
+## How a student connects
+
+Everything a student needs is on **Settings** in the app; nothing in this
+repository is required reading for them.
+
+`/settings` shows the connection address (`getMcpResourceUrl()`, derived from
+the one configured origin), numbered Claude steps, example things to say, and
+what a connected assistant can and cannot do. The dashboard links to it, so the
+feature is reachable without knowing it exists.
+
+**Disconnecting** is on the same page. `revokeGrantAction` calls
+`supabase.auth.oauth.revokeGrant({ clientId })`, which marks the consent
+revoked, drops that client's sessions, and invalidates its refresh tokens.
+Supabase is the only source of truth for who has access — nothing about a
+connection is stored in this application, so the list cannot drift from
+reality.
+
+The capability wording on the consent screen and on Settings comes from one
+place, `lib/mcp/capabilities.ts`, so the promise made while granting access and
+the description read afterwards cannot disagree.
+
+## Setup (deployment)
 
 1. **Enable the OAuth server.** Dashboard → Authentication → OAuth Server.
    `supabase/config.toml` already carries the matching local configuration:
@@ -275,6 +296,48 @@ curl -i -X POST https://<domain>/api/mcp \
 # Expect the resource identifier and Supabase as the authorization server
 curl https://<domain>/.well-known/oauth-protected-resource
 ```
+
+## Verification
+
+`scripts/verify-hosted-mcp.mjs` drives the deployed endpoint over HTTP with two
+disposable users and real access tokens:
+
+```bash
+node --env-file=.env.local scripts/verify-hosted-mcp.mjs
+```
+
+It covers the unauthenticated 401, session initialization, `tools/list`, all
+four tools, that the database and its history trigger agree with what MCP did,
+and that a second user can neither list, read by direct id, nor update the
+first user's application. It exercises HTTP → token verification → repository →
+Supabase → RLS, with no stand-in anywhere. `SUPABASE_SERVICE_ROLE_KEY` is read
+only from the process environment, and nothing is printed that could carry a
+token.
+
+**It deliberately does not test OAuth revocation.** Its tokens come from a
+password sign-in, not from the authorization-code + PKCE flow an MCP client
+uses, so revoking an OAuth client's grant would say nothing about them — such a
+test would pass for the wrong reason. Revocation is covered by unit tests
+around `revokeGrantAction` and by the manual test below.
+
+### Manual acceptance test
+
+This is the only way to verify the real fresh-user experience, and it must
+actually be performed before claiming it works:
+
+1. Open JobTrack as a normal user.
+2. Find the AI connection settings **without** reading this repository.
+3. Copy the connection address from Settings.
+4. Add JobTrack to a real MCP client.
+5. Sign in and approve access on the consent screen.
+6. Ask the client to list your applications.
+7. Ask it to save a new application.
+8. Ask it to change that application's status.
+9. Confirm the website shows both changes.
+10. Return to Settings.
+11. Confirm the connected client is listed.
+12. Disconnect it.
+13. Confirm it must be re-authorized before it can reach the account again.
 
 ## Not built yet
 
