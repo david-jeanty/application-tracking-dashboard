@@ -1,13 +1,22 @@
 import type { Metadata } from "next";
-import { Archive, ArrowLeft, CheckCircle2, Pencil, RotateCcw } from "lucide-react";
+import {
+  AlertCircle,
+  Archive,
+  ArrowLeft,
+  CheckCircle2,
+  Pencil,
+  RotateCcw,
+} from "lucide-react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ApplicationDetail } from "@/components/applications/application-detail";
+import { QuickUpdate } from "@/components/applications/quick-update";
 import { Button, ButtonLink } from "@/components/ui/button";
 import {
   archiveApplicationAction,
   restoreApplicationAction,
 } from "@/lib/applications/actions";
+import { toQuickUpdateNotice } from "@/lib/applications/quick-update-notice";
 import { getApplicationById } from "@/lib/applications/repository";
 import { createClient } from "@/lib/supabase/server";
 import { applicationIdSchema } from "@/lib/validation/application";
@@ -19,7 +28,7 @@ export default async function ApplicationDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ updated?: string }>;
+  searchParams: Promise<{ quick?: string | string[]; updated?: string }>;
 }) {
   const { id } = await params;
   const parsedId = applicationIdSchema.safeParse(id);
@@ -39,7 +48,8 @@ export default async function ApplicationDetailPage({
   if (error) throw new Error(`Application query failed (${error.code}).`);
   if (!application) notFound();
 
-  const { updated } = await searchParams;
+  const { quick, updated } = await searchParams;
+  const quickNotice = toQuickUpdateNotice(quick);
 
   return (
     <div className="space-y-6">
@@ -126,6 +136,27 @@ export default async function ApplicationDetailPage({
           Application updated successfully.
         </div>
       ) : null}
+
+      {quickNotice ? (
+        <div
+          className={
+            quickNotice.tone === "success"
+              ? "flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
+              : "flex gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+          }
+          role="status"
+        >
+          {quickNotice.tone === "success" ? (
+            <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          ) : (
+            <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          )}
+          {quickNotice.message}
+        </div>
+      ) : null}
+
+      {/* Renders nothing for an archived application; the rule lives inside. */}
+      <QuickUpdate application={application} />
 
       <ApplicationDetail application={application} />
     </div>

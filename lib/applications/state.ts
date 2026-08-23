@@ -23,3 +23,15 @@ export type ArchiveOutcome = "archived" | "restored" | "error";
  * may only export async functions.
  */
 export type DeleteOutcome = "deleted" | "error";
+
+/**
+ * What the detail page reports after a quick status or next-action update.
+ *
+ * Lives here for the same reason as `ArchiveOutcome`: a `"use server"` module
+ * may only export async functions.
+ */
+export type QuickUpdateOutcome =
+  | "status"
+  | "next-action"
+  | "next-action-cleared"
+  | "error";

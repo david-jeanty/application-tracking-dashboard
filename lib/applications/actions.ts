@@ -1,22 +1,29 @@
 "use server";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   createApplication,
   deleteArchivedApplication,
   setApplicationArchiveState,
+  setApplicationNextAction,
+  setApplicationStatus,
   updateApplication,
 } from "@/lib/applications/repository";
+import type { QuickUpdateResult } from "@/lib/applications/repository";
 import type {
   ApplicationActionState,
   ArchiveOutcome,
+  QuickUpdateOutcome,
 } from "@/lib/applications/state";
 import { createClient } from "@/lib/supabase/server";
 import {
   applicationCreationSchema,
   applicationIdSchema,
   applicationUpdateSchema,
+  quickNextActionSchema,
+  quickStatusSchema,
 } from "@/lib/validation/application";
 
 function values(formData: FormData) {
@@ -256,4 +263,132 @@ export async function deleteApplicationAction(
   revalidatePath(`/applications/${parsedId.data}`);
 
   redirect(`${ARCHIVE_PATH}?delete=deleted`);
+}
+
+/**
+ * The tail every quick update shares: authenticate, write, revalidate, return.
+ *
+ * Identity comes from the authenticated server session and is handed to an
+ * owner-scoped mutation, so no `user_id` is accepted from the form and a
+ * crafted post cannot reach another student's row. Row-level security applies
+ * again underneath.
+ *
+ * Every rejected case — missing, owned by somebody else, archived, or a
+ * database error — redirects with the same `quick=error`, so the response
+ * never reveals which it was. Both redirect targets are built from the
+ * already-validated identifier, never from a value in the request.
+ */
+async function applyQuickUpdate(
+  applicationId: string,
+  outcome: QuickUpdateOutcome,
+  write: (
+    supabase: SupabaseClient,
+    authenticatedUserId: string,
+  ) => Promise<QuickUpdateResult>,
+): Promise<never> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authenticationError,
+  } = await supabase.auth.getUser();
+
+  if (authenticationError || !user) {
+    redirect(`/login?next=/applications/${applicationId}`);
+  }
+
+  const result = await write(supabase, user.id);
+  if (result.outcome !== "updated") {
+    redirect(`/applications/${applicationId}?quick=error`);
+  }
+
+  // Status and next action both show on the list and drive the dashboard's
+  // follow-up view, and the edit form must not open with a stale copy of a
+  // field the student just changed here.
+  revalidatePath(APPLICATIONS_PATH);
+  revalidatePath("/dashboard");
+  revalidatePath(`/applications/${applicationId}`);
+  revalidatePath(`/applications/${applicationId}/edit`);
+
+  redirect(`/applications/${applicationId}?quick=${outcome}`);
+}
+
+/** The application this post names, or a redirect if it named nothing valid. */
+function quickUpdateTarget(formData: FormData): string {
+  const parsedId = applicationIdSchema.safeParse(
+    String(formData.get("applicationId") ?? "").trim(),
+  );
+
+  // Without a usable identifier there is no detail page to report back on, so
+  // this falls back to the list's own failure notice.
+  if (!parsedId.success) redirect(`${APPLICATIONS_PATH}?archive=error`);
+  return parsedId.data;
+}
+
+/**
+ * Sets the status of one of the caller's own active applications.
+ *
+ * Only `current_status` is written. Nothing infers `date_applied`, touches the
+ * next action, archives anything, or enforces an order on the statuses — a
+ * student may move backward or skip ahead, because real searches do.
+ */
+export async function updateApplicationStatusAction(
+  formData: FormData,
+): Promise<void> {
+  const applicationId = quickUpdateTarget(formData);
+
+  const parsed = quickStatusSchema.safeParse(values(formData));
+  if (!parsed.success) redirect(`/applications/${applicationId}?quick=error`);
+
+  await applyQuickUpdate(applicationId, "status", (supabase, userId) =>
+    setApplicationStatus(
+      supabase,
+      userId,
+      applicationId,
+      parsed.data.currentStatus,
+    ),
+  );
+}
+
+/**
+ * Saves the next action of one of the caller's own active applications.
+ *
+ * Submitting an empty action clears the follow-up, and the mutation drops any
+ * due date that came with it, so the two fields cannot disagree. The reported
+ * outcome distinguishes the two results rather than calling both "updated".
+ */
+export async function updateNextActionAction(
+  formData: FormData,
+): Promise<void> {
+  const applicationId = quickUpdateTarget(formData);
+
+  const parsed = quickNextActionSchema.safeParse(values(formData));
+  if (!parsed.success) redirect(`/applications/${applicationId}?quick=error`);
+
+  const outcome: QuickUpdateOutcome = parsed.data.nextAction
+    ? "next-action"
+    : "next-action-cleared";
+
+  await applyQuickUpdate(applicationId, outcome, (supabase, userId) =>
+    setApplicationNextAction(supabase, userId, applicationId, {
+      action: parsed.data.nextAction,
+      dueDate: parsed.data.nextActionDueDate,
+    }),
+  );
+}
+
+/**
+ * Clears the next action of one of the caller's own active applications.
+ *
+ * Deliberately ignores whatever the fields currently hold: this is the button
+ * a student presses to be rid of the follow-up, so it clears both columns
+ * through the same mutation rather than round-tripping the form values.
+ */
+export async function clearNextActionAction(
+  formData: FormData,
+): Promise<void> {
+  const applicationId = quickUpdateTarget(formData);
+
+  await applyQuickUpdate(applicationId, "next-action-cleared", (supabase, userId) =>
+    setApplicationNextAction(supabase, userId, applicationId),
+  );
 }

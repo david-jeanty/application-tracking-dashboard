@@ -1,5 +1,112 @@
 # Implementation log
 
+## 2026-08-23 — Phase 2: quick status and next-action updates
+
+### Scope
+
+A compact Quick update section on the application detail page, for active
+applications only. No inline editing in the applications table, no MCP change,
+no schema change, and no new dependency. The full edit form is untouched.
+
+### Audit findings
+
+No architectural or schema mismatch, and **no migration was needed**.
+
+`APPLICATION_STATUSES` already holds all ten statuses and is already the single
+source both the full form and the MCP tools use. `next_action` and
+`next_action_due_date` already have validation helpers in
+`lib/validation/application.ts` — `optionalText(500)` and `optionalDateOnly` —
+which the quick schemas reuse rather than restate, so the limits and the
+calendar-date rule cannot drift between the two forms.
+
+The status-history trigger already does exactly what this ticket needs. It is
+declared `after update of current_status ... when (old.current_status is
+distinct from new.current_status)`, so a genuine change records one event and
+re-saving the status already stored records none. No application code writes to
+that table, and could not: `authenticated` holds `select` on it only.
+
+One finding worth recording. `applications_update_own` permits an owner to
+update any of their own rows, archived ones included — as it must, because
+archive and restore are themselves updates. "Quick update is for active
+applications" therefore cannot come from row-level security; it comes solely
+from the `archived_at is null` predicate in the quick mutations. That predicate
+is not redundant with RLS and must not be removed. A pgTAP assertion pins it.
+
+### Mutation design
+
+Two narrow repository mutations over one shared owner-scoped helper, following
+the philosophy of `setApplicationArchiveState` rather than routing through
+`updateApplication`. The full-record path would read, merge, and rewrite every
+column to change one, which is both wasteful and a way to overwrite fields the
+student never touched.
+
+- `setApplicationStatus` writes only `current_status`.
+- `setApplicationNextAction` writes only `next_action` and
+  `next_action_due_date`.
+
+Both constrain on `id`, `user_id`, and `archived_at is null`, all in the
+statement. Identity is derived from the authenticated server session; no
+`user_id` is ever accepted from a request. Missing, not-owned, and archived all
+return the same `not_found`, so no response confirms another student's record
+exists. RLS applies again underneath. No service-role client is involved.
+
+Optimistic concurrency is deliberately omitted, and the reason it can be is
+structural: each mutation carries a patch of one or two named columns, so it
+cannot write back a stale copy of anything the student did not just edit. The
+full edit form still requires `expectedUpdatedAt`, because it replaces the
+whole record and genuinely can clobber a concurrent change.
+
+The pairing rule — a due date is kept only alongside an action, and an empty
+action clears both columns — lives in the mutation rather than in a schema, so
+the database cannot hold an orphaned due date whatever path the values took.
+Clearing is the same statement with empty input, not a second one.
+
+### Implemented
+
+- `lib/validation/application.ts`: `quickStatusSchema` and
+  `quickNextActionSchema`, reusing the existing helpers and the shared status
+  enum. Neither can describe any other application field, so a crafted post
+  cannot smuggle a company name or archive state into a status change.
+- `lib/applications/repository.ts`: `quickUpdate`, `setApplicationStatus`,
+  `setApplicationNextAction`, and `QuickUpdateResult`.
+- `lib/applications/actions.ts`: `updateApplicationStatusAction`,
+  `updateNextActionAction`, `clearNextActionAction`, over a shared
+  `applyQuickUpdate` tail. Redirect targets are built from the validated
+  identifier, never from request input.
+- `lib/applications/state.ts` and `lib/applications/quick-update-notice.ts`:
+  `QuickUpdateOutcome` and the pure `toQuickUpdateNotice` mapper, following the
+  existing query-parameter notice convention. No toast library.
+- `components/applications/quick-update.tsx`: two independent server-rendered
+  forms. It returns null for an archived application, so the rule travels with
+  the component instead of living in one caller.
+- `app/(app)/applications/[id]/page.tsx`: renders the section and the notice.
+
+### Verification
+
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run test`: passed, 359 tests across 24 files (39 new).
+- `npm run build`: passed.
+- Playwright: 10 credential-free tests passed, 8 authenticated tests correctly
+  skipped.
+
+### Not verified here
+
+`supabase/tests/005_application_quick_update.test.sql` is **written but not
+executed**: the Docker daemon is unreachable in this environment and the ticket
+excluded troubleshooting it. It is the only coverage for the trigger firing
+exactly once on a real change and not at all on a repeat, for a next-action
+update producing no history event, for RLS rejecting a cross-user quick update,
+and for the archived predicate. It must not be described as passing.
+
+`supabase/tests/003` and `004` remain queued for the same reason.
+
+No live browser run of the quick-update flow: the authenticated Playwright
+specs need credentials and stayed skipped.
+
+Phase 2 is **not** marked complete here. That was made conditional on review
+and a production smoke test, neither of which has happened yet.
+
 ## 2026-08-23 — Analytics
 
 ### Scope
