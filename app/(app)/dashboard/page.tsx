@@ -1,11 +1,31 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { ArrowRight, ClipboardCheck, Sparkles } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { summarizeTrackedApplications } from "@/lib/applications/dashboard";
+import { listActiveApplications } from "@/lib/applications/repository";
+import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect("/login");
+
+  // Owner-scoped by the server-derived user id, with row-level security
+  // applying again underneath — the same read the applications list performs.
+  const { data, error } = await listActiveApplications(supabase, user.id);
+
+  // A failed read falls back to the first-application card, which is what this
+  // page showed unconditionally before. It never claims a count it could not
+  // confirm, and the button below still reaches the real list.
+  const summary = summarizeTrackedApplications(error ? 0 : (data?.length ?? 0));
+
   return (
     <div className="space-y-6">
       <header>
@@ -26,11 +46,14 @@ export default function DashboardPage() {
               <ClipboardCheck aria-hidden="true" className="size-6" />
             </span>
             <h2 className="mt-5 text-xl font-semibold text-slate-950">
-              Ready for your first application
+              {summary.kind === "tracking"
+                ? "Your applications"
+                : "Ready for your first application"}
             </h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
-              Add applications, track their status and deadlines, and see how
-              your search is going. Everything here works on its own.
+              {summary.kind === "tracking"
+                ? summary.description
+                : "Add applications, track their status and deadlines, and see how your search is going. Everything here works on its own."}
             </p>
           </div>
           <ButtonLink href="/applications" variant="secondary">
