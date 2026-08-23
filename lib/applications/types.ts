@@ -54,6 +54,18 @@ export type ApplicationListItem = {
   archived_at: string | null;
 };
 
+/**
+ * One immutable status event, projected to what analytics reads.
+ *
+ * The initial event a database trigger writes on creation carries the status
+ * the application was created with, so an application saved directly as
+ * `Applied` is correctly counted as having reached it.
+ */
+export type ApplicationStatusEvent = {
+  application_id: string;
+  new_status: ApplicationStatus;
+};
+
 export type ApplicationFormValues = {
   companyName: string;
   originalJobTitle: string;

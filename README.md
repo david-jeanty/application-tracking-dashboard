@@ -74,6 +74,12 @@ assistant use an outside tool. In practice you add JobTrack to Claude once and
 sign in to your own account; after that, Claude can work with your applications
 whenever you ask.
 
+Everything you need to set that up — the connection address, the steps, and a
+list of what an assistant can and cannot do — is on the **Settings** page once
+you sign in. The same page lists anything you have connected and lets you
+disconnect it. JobTrack never provides or charges for AI; you bring an
+assistant you already have.
+
 Each user can only access their own applications, and the AI connection uses the
 same authenticated JobTrack account.
 
@@ -84,8 +90,8 @@ way to look at everything at once.
 
 The website is where you see your applications laid out, check what's due,
 review the details of a role before an interview, and edit anything directly. It
-covers your application list, statuses, deadlines, next actions, and notes
-today, with a pipeline board and analytics coming.
+covers your application list, statuses, deadlines, next actions, notes, and
+analytics today, with a pipeline board coming.
 
 Both sides work on the same data. Anything the assistant saves shows up on the
 site, and anything you edit on the site is what the assistant sees next time.
@@ -98,13 +104,16 @@ JobTrack is deployed and the Claude connection works today.
 
 - Accounts: sign up, log in, password reset
 - Adding, viewing, and editing applications
-- Your application list, with statuses, deadlines, next actions, and notes
+- Your application list, with search and filters for status, work term, and
+  category
 - The AI connection: saving jobs, listing applications, getting full details,
   and updating applications
 - Status history recorded automatically as an application moves
+- Analytics: where your applications stand, and how far they got
+- Settings: connect an AI assistant, see what's connected, and disconnect it
 
-**Not built yet** — the pipeline, analytics, archive, and settings pages exist
-but are placeholders. They don't show fake data or pretend to save anything.
+**Not built yet** — the pipeline and archive pages exist but are placeholders.
+They don't show fake data or pretend to save anything.
 
 ## What's next
 
@@ -114,11 +123,9 @@ but are placeholders. They don't show fake data or pretend to save anything.
    properly
 3. Cleaning up the hosting setup
 4. Testing saved jobs against messier, longer, and stranger postings
-5. Search and filtering on the website
-6. A dashboard with real numbers
-7. The pipeline board
-8. Archiving finished applications
-9. Analytics on how a search is actually going
+5. A dashboard with real numbers
+6. The pipeline board
+7. Archiving finished applications
 
 ## Tech stack
 

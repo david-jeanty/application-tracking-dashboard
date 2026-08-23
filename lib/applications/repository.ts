@@ -2,15 +2,23 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { classifyMissingConditionalUpdate } from "@/lib/applications/concurrency";
-import type { ApplicationStatus } from "@/lib/applications/constants";
+import { UNSPECIFIED_DATABASE_VALUE } from "@/lib/applications/constants";
+import type {
+  ApplicationStatus,
+  JobCategory,
+} from "@/lib/applications/constants";
 import {
   toApplicationInsert,
   toApplicationUpdate,
 } from "@/lib/applications/mapper";
-import { toContainsPattern } from "@/lib/applications/search";
+import {
+  toContainsPattern,
+  toSearchFilter,
+} from "@/lib/applications/search";
 import type {
   ApplicationListItem,
   ApplicationRecord,
+  ApplicationStatusEvent,
 } from "@/lib/applications/types";
 import type {
   ApplicationCreationInput,
@@ -44,6 +52,14 @@ export type ArchiveState = "active" | "archived" | "all";
 
 export type ApplicationListFilters = {
   status?: ApplicationStatus;
+  category?: JobCategory;
+  /**
+   * Case-insensitive substring matched against any searchable column —
+   * employer, job title, or location. This is what the website's search box
+   * sends; `company` stays a single-column filter for callers that mean only
+   * the employer.
+   */
+  search?: string;
   /** Case-insensitive substring of the employer name. */
   company?: string;
   /** Case-insensitive substring of the work-term season. */
@@ -53,6 +69,18 @@ export type ApplicationListFilters = {
   /** Omitted means unlimited, which only the first-party list page uses. */
   limit?: number;
 };
+
+/**
+ * The filters a caller may apply to the active list.
+ *
+ * `archiveState` is absent by construction rather than by convention: the
+ * applications page builds its filters from URL parameters, and this type is
+ * what stops a crafted query string from ever asking for archived rows.
+ */
+export type ActiveApplicationFilters = Omit<
+  ApplicationListFilters,
+  "archiveState"
+>;
 
 /**
  * Lists the authenticated user's applications, newest first.
@@ -78,6 +106,10 @@ export async function listApplications(
   if (archiveState === "archived") query = query.not("archived_at", "is", null);
 
   if (filters.status) query = query.eq("current_status", filters.status);
+  if (filters.category) {
+    query = query.eq("normalized_job_category", filters.category);
+  }
+  if (filters.search) query = query.or(toSearchFilter(filters.search));
   if (filters.company) {
     query = query.ilike("company_name", toContainsPattern(filters.company));
   }
@@ -94,13 +126,86 @@ export async function listApplications(
   return query.returns<ApplicationListItem[]>();
 }
 
+/**
+ * Lists the authenticated user's active applications.
+ *
+ * `archiveState` is applied here and cannot be supplied by the caller, so the
+ * applications page cannot be talked into showing archived records by a URL
+ * parameter however its filters were built.
+ */
 export async function listActiveApplications(
   supabase: SupabaseClient,
   authenticatedUserId: string,
+  filters: ActiveApplicationFilters = {},
 ) {
   return listApplications(supabase, authenticatedUserId, {
+    ...filters,
     archiveState: "active",
   });
+}
+
+/**
+ * The distinct work terms the user's own active applications actually use.
+ *
+ * `work_term_season` is free text by design — a student's terms are theirs to
+ * name — so the filter's options come from their own data rather than from a
+ * global enum. The internal `Not specified` sentinel is left out: it is a
+ * database requirement, not a term anyone would choose to filter by.
+ *
+ * Deduplication and sorting happen here rather than in SQL. PostgREST has no
+ * `distinct`, and adding a view or function for a per-student list of a few
+ * dozen short strings would be more machinery than the problem deserves.
+ */
+export async function listActiveWorkTermSeasons(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+): Promise<{ data: string[] | null; error: { code?: string } | null }> {
+  const { data, error } = await supabase
+    .from("applications")
+    .select("work_term_season")
+    .eq("user_id", authenticatedUserId)
+    .is("archived_at", null)
+    .returns<{ work_term_season: string }[]>();
+
+  if (error) return { data: null, error };
+
+  const seasons = new Set(
+    (data ?? [])
+      .map((row) => row.work_term_season?.trim())
+      .filter(
+        (season): season is string =>
+          Boolean(season) && season !== UNSPECIFIED_DATABASE_VALUE,
+      ),
+  );
+
+  return {
+    data: [...seasons].sort((first, second) => first.localeCompare(second)),
+    error: null,
+  };
+}
+
+/**
+ * Every status event belonging to the authenticated user.
+ *
+ * The projection is deliberately two columns: "has this application ever been
+ * at this status" is all the conversion metrics need, and `changed_at` would
+ * only invite a duration metric that mixes a `timestamptz` with the date-only
+ * `date_applied`. Ordering is irrelevant to a set membership question, so none
+ * is requested.
+ *
+ * History is readable but never writable by a client: the table grants
+ * `select` only, and its policies deny every mutation. The owner predicate here
+ * sits on top of that, and row-level security applies again underneath.
+ */
+export async function listStatusHistory(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+) {
+  return supabase
+    .from("application_status_history")
+    .select("application_id,new_status")
+    .eq("user_id", authenticatedUserId)
+    .returns<ApplicationStatusEvent[]>();
 }
 
 export async function getApplicationById(

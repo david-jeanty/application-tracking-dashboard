@@ -125,3 +125,20 @@ variable before spawning Playwright or the application server.
 
 Automated tests reduce regressions but do not replace this keyboard and visual
 review.
+
+## Hosted MCP verification
+
+```bash
+node --env-file=.env.local scripts/verify-hosted-mcp.mjs
+```
+
+Creates two disposable users, drives the deployed `/api/mcp` over HTTP with
+real access tokens, and asserts protocol, all four tools, database agreement,
+and two-user isolation before deleting both users. Reads
+`SUPABASE_SERVICE_ROLE_KEY` only from the process environment, and prints no
+token or key.
+
+OAuth grant revocation is not covered here: these tokens come from a password
+sign-in rather than the authorization-code flow an MCP client uses, so revoking
+a client grant would not be expected to affect them. See `docs/mcp.md` for the
+manual acceptance test that does cover it.

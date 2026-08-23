@@ -2,6 +2,11 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { ConsentForm } from "@/components/oauth/consent-form";
+import {
+  ASSISTANT_CAN,
+  ASSISTANT_CANNOT,
+  ASSISTANT_OWNERSHIP_NOTE,
+} from "@/lib/mcp/capabilities";
 import { Card } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 
@@ -73,12 +78,21 @@ export default async function ConsentPage({
             {data.client.name} will be able to
           </h2>
           <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
-            <li>Read the job applications in your tracker</li>
-            <li>Add and update job applications on your behalf</li>
+            {ASSISTANT_CAN.map((capability) => (
+              <li key={capability}>{capability}</li>
+            ))}
+          </ul>
+          <h2 className="mt-4 text-sm font-semibold text-slate-900">
+            It will not be able to
+          </h2>
+          <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
+            {ASSISTANT_CANNOT.map((limit) => (
+              <li key={limit}>{limit}</li>
+            ))}
           </ul>
           <p className="mt-3 text-xs leading-5 text-slate-500">
-            It can only ever see your own applications, never another
-            student&apos;s. You can revoke this access at any time.
+            {ASSISTANT_OWNERSHIP_NOTE} You can disconnect it at any time from
+            JobTrack settings.
           </p>
         </div>
 

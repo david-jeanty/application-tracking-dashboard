@@ -1,6 +1,8 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 
 export type ConsentDecisionState = { status: "idle" | "error"; message?: string };
@@ -53,4 +55,53 @@ export async function decideConsentAction(
   if (error || !data?.redirect_url) return FAILED;
 
   redirect(data.redirect_url);
+}
+
+/** Where a disconnect always returns to. Never taken from the request. */
+const SETTINGS_PATH = "/settings";
+
+/** Outcome codes the settings page turns into a message. */
+export type DisconnectOutcome = "done" | "error" | "invalid";
+
+/**
+ * Revokes one AI client's access to the signed-in student's tracker.
+ *
+ * Supabase owns revocation: `revokeGrant` marks the consent revoked, drops that
+ * client's sessions, and invalidates its refresh tokens. Nothing here stores or
+ * invalidates a token itself, so there is no second, drifting source of truth
+ * about who still has access.
+ *
+ * Like `decideConsentAction` this is a Server Action, so Next.js applies its
+ * origin checks and a cross-site form post cannot disconnect somebody's
+ * assistant. It re-establishes the user rather than trusting the page that
+ * rendered the form, takes only the client id Supabase needs, and always
+ * returns to a fixed internal path — no redirect destination is accepted from
+ * the caller.
+ */
+export async function revokeGrantAction(formData: FormData): Promise<void> {
+  const clientId = String(formData.get("clientId") ?? "").trim();
+
+  // Supabase identifies an OAuth client by UUID; anything else is not a
+  // request worth sending upstream.
+  if (!z.uuid().safeParse(clientId).success) {
+    redirect(`${SETTINGS_PATH}?disconnect=invalid`);
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect(`/login?next=${SETTINGS_PATH}`);
+
+  // Scoped to the caller's own grants by the authenticated session: this
+  // cannot revoke a grant belonging to another student.
+  const { error } = await supabase.auth.oauth.revokeGrant({ clientId });
+
+  if (error) redirect(`${SETTINGS_PATH}?disconnect=error`);
+
+  // The grant list is rendered from Supabase on each request, so the page must
+  // be re-fetched rather than served from the router cache.
+  revalidatePath(SETTINGS_PATH);
+  redirect(`${SETTINGS_PATH}?disconnect=done`);
 }

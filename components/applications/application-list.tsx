@@ -1,10 +1,15 @@
-import { AlertCircle, BriefcaseBusiness } from "lucide-react";
+import { AlertCircle, BriefcaseBusiness, SearchX } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ApplicationStatusLabel } from "@/components/applications/application-status";
+import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { displayOptionalText } from "@/lib/applications/mapper";
-import { listActiveApplications } from "@/lib/applications/repository";
+import {
+  listActiveApplications,
+  type ActiveApplicationFilters,
+} from "@/lib/applications/repository";
+import { hasActiveFilters } from "@/lib/applications/search-params";
 import type { ApplicationListItem } from "@/lib/applications/types";
 import { formatDateOnly } from "@/lib/dates/date-only";
 import { createClient } from "@/lib/supabase/server";
@@ -110,7 +115,11 @@ export function ApplicationsListLoading() {
   );
 }
 
-export async function ApplicationList() {
+export async function ApplicationList({
+  filters = {},
+}: {
+  filters?: ActiveApplicationFilters;
+}) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -118,7 +127,13 @@ export async function ApplicationList() {
 
   if (!user) redirect("/login");
 
-  const { data, error } = await listActiveApplications(supabase, user.id);
+  // Archive state is applied inside this read, not passed in, so a filter
+  // built from the URL cannot reach archived records.
+  const { data, error } = await listActiveApplications(
+    supabase,
+    user.id,
+    filters,
+  );
 
   if (error) {
     return (
@@ -136,7 +151,26 @@ export async function ApplicationList() {
   }
 
   if (!data?.length) {
-    return (
+    // A student with no matches has a different problem from a student with no
+    // applications, so they get different words and a way out.
+    return hasActiveFilters(filters) ? (
+      <Card className="px-6 py-12 text-center">
+        <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-slate-600">
+          <SearchX aria-hidden="true" className="size-6" />
+        </span>
+        <h2 className="mt-4 text-lg font-semibold text-slate-950">
+          No applications match these filters
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+          Try changing or clearing your search.
+        </p>
+        <div className="mt-5">
+          <ButtonLink href="/applications" variant="secondary">
+            Clear filters
+          </ButtonLink>
+        </div>
+      </Card>
+    ) : (
       <Card className="px-6 py-12 text-center">
         <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-blue-50 text-blue-700">
           <BriefcaseBusiness aria-hidden="true" className="size-6" />
