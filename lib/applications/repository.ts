@@ -221,6 +221,52 @@ export async function getApplicationById(
     .maybeSingle<ApplicationRecord>();
 }
 
+export type ArchiveStateResult =
+  | { outcome: "updated"; application: ApplicationRecord }
+  | { outcome: "not_found" }
+  | { outcome: "error"; code?: string };
+
+/**
+ * Moves one application across the archive line, and changes nothing else.
+ *
+ * Archiving is a state transition, not a field edit, so this deliberately does
+ * not go through `updateApplication`: that path writes the whole record from a
+ * validated form and requires an `expectedUpdatedAt`. Here the update payload
+ * is a single column, which is what guarantees the rest of the record — status
+ * above all — survives untouched.
+ *
+ * No status-history event is produced, and that is structural rather than a
+ * convention this function follows: the history trigger is declared
+ * `after update of current_status ... when (old.current_status is distinct
+ * from new.current_status)`, and this statement never mentions that column.
+ *
+ * Optimistic concurrency is intentionally absent. Setting one column cannot
+ * clobber somebody's in-flight field edit, and requiring a version would force
+ * a read first for no protection gained.
+ *
+ * A row that does not exist and a row owned by another student are the same
+ * `not_found` here: the owner predicate is applied before the write, and
+ * row-level security applies again underneath.
+ */
+export async function setApplicationArchiveState(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+  applicationId: string,
+  archivedAt: string | null,
+): Promise<ArchiveStateResult> {
+  const { data, error } = await supabase
+    .from("applications")
+    .update({ archived_at: archivedAt })
+    .eq("id", applicationId)
+    .eq("user_id", authenticatedUserId)
+    .select(APPLICATION_DETAIL_COLUMNS)
+    .maybeSingle<ApplicationRecord>();
+
+  if (error) return { outcome: "error", code: error.code };
+  if (!data) return { outcome: "not_found" };
+  return { outcome: "updated", application: data };
+}
+
 export type ApplicationUpdateResult =
   | { outcome: "updated"; application: ApplicationRecord }
   | { outcome: "conflict" }
