@@ -1,17 +1,24 @@
 import type { Metadata } from "next";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { redirect } from "next/navigation";
 import {
   ArchivedApplicationsEmptyState,
   ArchivedApplicationsList,
 } from "@/components/applications/archived-list";
 import { Card } from "@/components/ui/card";
+import { toDeleteNotice } from "@/lib/applications/archive-notice";
 import { listApplications } from "@/lib/applications/repository";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Archive" };
 
-export default async function ArchivePage() {
+export default async function ArchivePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ delete?: string | string[] }>;
+}) {
+  const deleteNotice = toDeleteNotice((await searchParams).delete);
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -37,6 +44,24 @@ export default async function ArchivePage() {
           history, and restoring one puts it back in your list.
         </p>
       </header>
+
+      {deleteNotice ? (
+        <div
+          className={
+            deleteNotice.tone === "success"
+              ? "flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
+              : "flex gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+          }
+          role="status"
+        >
+          {deleteNotice.tone === "success" ? (
+            <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          ) : (
+            <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          )}
+          {deleteNotice.message}
+        </div>
+      ) : null}
 
       {error ? (
         <Card className="flex gap-3 border-red-200 bg-red-50 p-5 text-red-900">

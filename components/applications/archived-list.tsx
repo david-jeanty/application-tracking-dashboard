@@ -7,15 +7,35 @@ import { restoreApplicationAction } from "@/lib/applications/actions";
 import type { ApplicationListItem } from "@/lib/applications/types";
 import { formatDateTime } from "@/lib/dates/date-time";
 
-function RestoreButton({ applicationId }: { applicationId: string }) {
+/**
+ * Restore and Delete permanently, in that order.
+ *
+ * Restore is the primary, reversible action and keeps the filled button.
+ * Deletion is a quieter link into a confirmation page rather than a second
+ * button of equal weight, so the destructive path takes a deliberate step and
+ * cannot be hit by aiming badly.
+ */
+function ArchivedRowActions({
+  applicationId,
+}: {
+  applicationId: string;
+}) {
   return (
-    <form action={restoreApplicationAction}>
-      <input name="applicationId" type="hidden" value={applicationId} />
-      <Button className="min-h-10 px-3" type="submit" variant="secondary">
-        <RotateCcw aria-hidden="true" className="size-4" />
-        Restore
-      </Button>
-    </form>
+    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+      <form action={restoreApplicationAction}>
+        <input name="applicationId" type="hidden" value={applicationId} />
+        <Button className="min-h-10 px-3" type="submit" variant="secondary">
+          <RotateCcw aria-hidden="true" className="size-4" />
+          Restore
+        </Button>
+      </form>
+      <Link
+        className="rounded-sm text-sm font-semibold text-red-700 underline decoration-red-200 underline-offset-4 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+        href={`/applications/${applicationId}/delete`}
+      >
+        Delete permanently
+      </Link>
+    </div>
   );
 }
 
@@ -77,7 +97,7 @@ export function ArchivedApplicationsList({
                 : "—"}
             </p>
             <div className="mt-4">
-              <RestoreButton applicationId={application.id} />
+              <ArchivedRowActions applicationId={application.id} />
             </div>
           </Card>
         ))}
@@ -128,7 +148,7 @@ export function ArchivedApplicationsList({
                       : "—"}
                   </td>
                   <td className="px-4 py-4 text-right">
-                    <RestoreButton applicationId={application.id} />
+                    <ArchivedRowActions applicationId={application.id} />
                   </td>
                 </tr>
               ))}
