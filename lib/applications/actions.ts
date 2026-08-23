@@ -4,9 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   createApplication,
+  setApplicationArchiveState,
   updateApplication,
 } from "@/lib/applications/repository";
-import type { ApplicationActionState } from "@/lib/applications/state";
+import type {
+  ApplicationActionState,
+  ArchiveOutcome,
+} from "@/lib/applications/state";
 import { createClient } from "@/lib/supabase/server";
 import {
   applicationCreationSchema,
@@ -127,4 +131,74 @@ export async function updateApplicationAction(
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/applications/${applicationId}/edit`);
   redirect(`/applications/${applicationId}?updated=1`);
+}
+
+/** Where an archive or restore always returns to. Never taken from the request. */
+const APPLICATIONS_PATH = "/applications";
+
+/**
+ * Moves one application across the archive line.
+ *
+ * Both directions share this: the only difference is the timestamp written.
+ * Identity comes from the authenticated server session and is passed to an
+ * owner-scoped update, so no `user_id` is accepted from the form and a crafted
+ * post cannot reach another student's row. A missing application and one owned
+ * by somebody else produce the same result, which is what keeps the response
+ * from confirming that another user's record exists.
+ *
+ * The redirect target is a fixed internal path, never a value from the caller.
+ */
+async function setArchiveState(
+  formData: FormData,
+  archivedAt: string | null,
+): Promise<never> {
+  const outcome: ArchiveOutcome = archivedAt === null ? "restored" : "archived";
+  const parsedId = applicationIdSchema.safeParse(
+    String(formData.get("applicationId") ?? "").trim(),
+  );
+
+  if (!parsedId.success) redirect(`${APPLICATIONS_PATH}?archive=error`);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authenticationError,
+  } = await supabase.auth.getUser();
+
+  if (authenticationError || !user) redirect("/login?next=/applications");
+
+  const result = await setApplicationArchiveState(
+    supabase,
+    user.id,
+    parsedId.data,
+    archivedAt,
+  );
+
+  if (result.outcome !== "updated") {
+    redirect(`${APPLICATIONS_PATH}?archive=error`);
+  }
+
+  // Every surface that counts or lists applications is affected: the list and
+  // dashboard lose or regain the row, the archive page gains or loses it, and
+  // the detail page's archived banner flips.
+  revalidatePath(APPLICATIONS_PATH);
+  revalidatePath("/archive");
+  revalidatePath("/dashboard");
+  revalidatePath(`/applications/${parsedId.data}`);
+
+  redirect(`${APPLICATIONS_PATH}?archive=${outcome}`);
+}
+
+/** Archives one of the caller's own applications. Status is left untouched. */
+export async function archiveApplicationAction(
+  formData: FormData,
+): Promise<void> {
+  await setArchiveState(formData, new Date().toISOString());
+}
+
+/** Restores one of the caller's own applications. Status is left untouched. */
+export async function restoreApplicationAction(
+  formData: FormData,
+): Promise<void> {
+  await setArchiveState(formData, null);
 }

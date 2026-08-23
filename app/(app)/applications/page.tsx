@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { redirect } from "next/navigation";
+import { toArchiveNotice } from "@/lib/applications/archive-notice";
 import { ApplicationCreatePanel } from "@/components/applications/application-form";
 import { ApplicationFilters } from "@/components/applications/application-filters";
 import {
@@ -21,9 +23,11 @@ export default async function ApplicationsPage({
 }: {
   searchParams: Promise<RawSearchParams>;
 }) {
+  const rawSearchParams = await searchParams;
   // Unrecognized parameters are dropped rather than rejected, so an edited URL
   // falls back to the ordinary list instead of an error.
-  const filters = parseApplicationFilters(await searchParams);
+  const filters = parseApplicationFilters(rawSearchParams);
+  const archiveNotice = toArchiveNotice(rawSearchParams.archive);
 
   const supabase = await createClient();
   const {
@@ -58,6 +62,24 @@ export default async function ApplicationsPage({
         </div>
         <ApplicationCreatePanel />
       </div>
+
+      {archiveNotice ? (
+        <div
+          className={
+            archiveNotice.tone === "success"
+              ? "flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
+              : "flex gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+          }
+          role="status"
+        >
+          {archiveNotice.tone === "success" ? (
+            <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          ) : (
+            <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+          )}
+          {archiveNotice.message}
+        </div>
+      ) : null}
 
       <ApplicationFilters
         filters={filters}

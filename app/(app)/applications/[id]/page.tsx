@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
-import { ArrowLeft, CheckCircle2, Pencil } from "lucide-react";
+import { Archive, ArrowLeft, CheckCircle2, Pencil, RotateCcw } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { ApplicationDetail } from "@/components/applications/application-detail";
-import { ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
+import {
+  archiveApplicationAction,
+  restoreApplicationAction,
+} from "@/lib/applications/actions";
 import { getApplicationById } from "@/lib/applications/repository";
 import { createClient } from "@/lib/supabase/server";
 import { applicationIdSchema } from "@/lib/validation/application";
@@ -57,10 +61,41 @@ export default async function ApplicationDetailPage({
             {application.original_job_title}
           </p>
         </div>
-        <ButtonLink href={`/applications/${application.id}/edit`}>
-          <Pencil aria-hidden="true" className="size-4" />
-          Edit application
-        </ButtonLink>
+        <div className="flex flex-wrap items-center gap-3">
+          <ButtonLink href={`/applications/${application.id}/edit`}>
+            <Pencil aria-hidden="true" className="size-4" />
+            Edit application
+          </ButtonLink>
+
+          {/*
+            Only the action that applies is offered. An archived application
+            gets Restore and never Archive again, so the two states cannot be
+            confused for one another. Archiving is reversible and keeps the
+            record, so it needs no destructive confirmation step.
+          */}
+          <form
+            action={
+              application.archived_at
+                ? restoreApplicationAction
+                : archiveApplicationAction
+            }
+          >
+            <input name="applicationId" type="hidden" value={application.id} />
+            <Button type="submit" variant="secondary">
+              {application.archived_at ? (
+                <>
+                  <RotateCcw aria-hidden="true" className="size-4" />
+                  Restore application
+                </>
+              ) : (
+                <>
+                  <Archive aria-hidden="true" className="size-4" />
+                  Archive application
+                </>
+              )}
+            </Button>
+          </form>
+        </div>
       </div>
 
       {updated === "1" ? (

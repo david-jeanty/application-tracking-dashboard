@@ -7,3 +7,11 @@ export type ApplicationActionState = {
 export const initialApplicationState: ApplicationActionState = {
   status: "idle",
 };
+
+/**
+ * What the applications list reports after an archive or restore.
+ *
+ * This lives here rather than beside the actions because a `"use server"`
+ * module may only export async functions.
+ */
+export type ArchiveOutcome = "archived" | "restored" | "error";
