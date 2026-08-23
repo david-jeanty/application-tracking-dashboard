@@ -1,13 +1,49 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { ArrowRight, ClipboardCheck, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowRight, ClipboardCheck, Sparkles } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { summarizeTrackedApplications } from "@/lib/applications/dashboard";
+import {
+  summarizeTrackedApplications,
+  type DashboardApplicationSummary,
+} from "@/lib/applications/dashboard";
 import { listActiveApplications } from "@/lib/applications/repository";
 import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Dashboard" };
+
+/**
+ * The headline card's content for each state.
+ *
+ * The unavailable case says only that the read failed and that nothing was
+ * lost — no database code, message, or query detail reaches the student.
+ */
+function headlineCard(summary: DashboardApplicationSummary) {
+  switch (summary.kind) {
+    case "tracking":
+      return {
+        Icon: ClipboardCheck,
+        tone: "bg-blue-50 text-blue-700",
+        heading: "Your applications",
+        body: summary.description,
+      };
+    case "unavailable":
+      return {
+        Icon: AlertCircle,
+        tone: "bg-amber-50 text-amber-700",
+        heading: "Couldn't load your applications",
+        body: "Your applications are still safe. Try refreshing the page.",
+      };
+    case "first-application":
+      return {
+        Icon: ClipboardCheck,
+        tone: "bg-blue-50 text-blue-700",
+        heading: "Ready for your first application",
+        body: "Add applications, track their status and deadlines, and see how your search is going. Everything here works on its own.",
+      };
+  }
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -19,12 +55,12 @@ export default async function DashboardPage() {
 
   // Owner-scoped by the server-derived user id, with row-level security
   // applying again underneath — the same read the applications list performs.
-  const { data, error } = await listActiveApplications(supabase, user.id);
-
-  // A failed read falls back to the first-application card, which is what this
-  // page showed unconditionally before. It never claims a count it could not
-  // confirm, and the button below still reaches the real list.
-  const summary = summarizeTrackedApplications(error ? 0 : (data?.length ?? 0));
+  // The whole result is handed over so a failure cannot arrive as a count of
+  // zero; the database error itself is never rendered.
+  const summary = summarizeTrackedApplications(
+    await listActiveApplications(supabase, user.id),
+  );
+  const headline = headlineCard(summary);
 
   return (
     <div className="space-y-6">
@@ -42,18 +78,19 @@ export default async function DashboardPage() {
       <Card className="overflow-hidden">
         <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center">
           <div>
-            <span className="grid size-12 place-items-center rounded-xl bg-blue-50 text-blue-700">
-              <ClipboardCheck aria-hidden="true" className="size-6" />
+            <span
+              className={cn(
+                "grid size-12 place-items-center rounded-xl",
+                headline.tone,
+              )}
+            >
+              <headline.Icon aria-hidden="true" className="size-6" />
             </span>
             <h2 className="mt-5 text-xl font-semibold text-slate-950">
-              {summary.kind === "tracking"
-                ? "Your applications"
-                : "Ready for your first application"}
+              {headline.heading}
             </h2>
             <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
-              {summary.kind === "tracking"
-                ? summary.description
-                : "Add applications, track their status and deadlines, and see how your search is going. Everything here works on its own."}
+              {headline.body}
             </p>
           </div>
           <ButtonLink href="/applications" variant="secondary">
