@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Archive, ArrowLeft, CheckCircle2, Pencil, RotateCcw } from "lucide-react";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ApplicationDetail } from "@/components/applications/application-detail";
 import { Button, ButtonLink } from "@/components/ui/button";
@@ -95,6 +96,21 @@ export default async function ApplicationDetailPage({
               )}
             </Button>
           </form>
+
+          {/*
+            Permanent deletion belongs to the archive workflow, so it appears
+            only once an application is archived. It is a link into a
+            confirmation page rather than a button, which keeps the
+            irreversible path a deliberate step away.
+          */}
+          {application.archived_at ? (
+            <Link
+              className="rounded-sm text-sm font-semibold text-red-700 underline decoration-red-200 underline-offset-4 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+              href={`/applications/${application.id}/delete`}
+            >
+              Delete permanently
+            </Link>
+          ) : null}
         </div>
       </div>
 

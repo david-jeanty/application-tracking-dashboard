@@ -1,4 +1,7 @@
-import type { ArchiveOutcome } from "@/lib/applications/state";
+import type {
+  ArchiveOutcome,
+  DeleteOutcome,
+} from "@/lib/applications/state";
 
 export type ArchiveNotice = {
   tone: "success" | "error";
@@ -31,6 +34,33 @@ export function toArchiveNotice(value: unknown): ArchiveNotice | null {
     return {
       tone: "error",
       message: "That application could not be updated. Try again.",
+    };
+  }
+
+  return null;
+}
+
+/**
+ * The message the archive page shows after a permanent deletion.
+ *
+ * The failure text is fixed and identical whether the application was missing,
+ * owned by another student, still active, or the delete itself failed. Naming
+ * the reason would confirm that somebody else's record exists, and no database
+ * detail belongs in front of a student either way.
+ */
+export function toDeleteNotice(value: unknown): ArchiveNotice | null {
+  const outcome = value as DeleteOutcome;
+
+  if (outcome === "deleted") {
+    return {
+      tone: "success",
+      message: "Application permanently deleted.",
+    };
+  }
+  if (outcome === "error") {
+    return {
+      tone: "error",
+      message: "That application could not be deleted. Try again.",
     };
   }
 

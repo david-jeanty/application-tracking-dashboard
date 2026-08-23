@@ -15,3 +15,11 @@ export const initialApplicationState: ApplicationActionState = {
  * module may only export async functions.
  */
 export type ArchiveOutcome = "archived" | "restored" | "error";
+
+/**
+ * What the archive page reports after a permanent deletion.
+ *
+ * Lives here for the same reason as `ArchiveOutcome`: a `"use server"` module
+ * may only export async functions.
+ */
+export type DeleteOutcome = "deleted" | "error";

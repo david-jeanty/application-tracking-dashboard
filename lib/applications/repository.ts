@@ -267,6 +267,56 @@ export async function setApplicationArchiveState(
   return { outcome: "updated", application: data };
 }
 
+export type ApplicationDeleteResult =
+  | { outcome: "deleted" }
+  | { outcome: "not_found" }
+  | { outcome: "error"; code?: string };
+
+/**
+ * Permanently removes one archived application the caller owns.
+ *
+ * Three predicates have to hold, and all three live in the statement rather
+ * than in the page that called it:
+ *
+ * - `id` selects the record,
+ * - `user_id` restricts it to the caller, and
+ * - `archived_at is not null` restricts it to something already archived.
+ *
+ * That last one is what makes "only an archived application may be deleted" a
+ * property of the write rather than of the UI. A crafted request naming an
+ * active application matches no row, so it deletes nothing — there is no code
+ * path that reaches an active record.
+ *
+ * Status history is not deleted here. The history table's foreign key is
+ * `(application_id, user_id) references applications (id, user_id) on delete
+ * cascade`, so Postgres removes those rows as part of this statement. Doing it
+ * by hand would be a second, drifting implementation of a rule the schema
+ * already enforces — and authenticated clients are granted `select` only on
+ * that table, so they could not do it anyway.
+ *
+ * Every rejected case returns the same `not_found`: missing, owned by another
+ * student, and not archived are indistinguishable to the caller, so a response
+ * never confirms that somebody else's application exists.
+ */
+export async function deleteArchivedApplication(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+  applicationId: string,
+): Promise<ApplicationDeleteResult> {
+  const { data, error } = await supabase
+    .from("applications")
+    .delete()
+    .eq("id", applicationId)
+    .eq("user_id", authenticatedUserId)
+    .not("archived_at", "is", null)
+    .select("id")
+    .maybeSingle<{ id: string }>();
+
+  if (error) return { outcome: "error", code: error.code };
+  if (!data) return { outcome: "not_found" };
+  return { outcome: "deleted" };
+}
+
 export type ApplicationUpdateResult =
   | { outcome: "updated"; application: ApplicationRecord }
   | { outcome: "conflict" }

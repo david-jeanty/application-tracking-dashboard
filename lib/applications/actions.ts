@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   createApplication,
+  deleteArchivedApplication,
   setApplicationArchiveState,
   updateApplication,
 } from "@/lib/applications/repository";
@@ -201,4 +202,58 @@ export async function restoreApplicationAction(
   formData: FormData,
 ): Promise<void> {
   await setArchiveState(formData, null);
+}
+
+/** Where a permanent deletion always returns to. Never taken from the request. */
+const ARCHIVE_PATH = "/archive";
+
+/**
+ * Permanently deletes one archived application the caller owns.
+ *
+ * Identity comes from the authenticated server session, so no `user_id` is
+ * accepted from the form. The repository additionally requires the record to
+ * be archived already, which is what stops a crafted post from deleting an
+ * active application — the rule is enforced by the statement, not by which
+ * buttons the page happened to render.
+ *
+ * Status history is removed by the schema's `on delete cascade`, not here.
+ *
+ * Every failure — missing, owned by somebody else, still active, or a database
+ * error — redirects with the same code, so the response never reveals which
+ * of those it was.
+ */
+export async function deleteApplicationAction(
+  formData: FormData,
+): Promise<void> {
+  const parsedId = applicationIdSchema.safeParse(
+    String(formData.get("applicationId") ?? "").trim(),
+  );
+
+  if (!parsedId.success) redirect(`${ARCHIVE_PATH}?delete=error`);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authenticationError,
+  } = await supabase.auth.getUser();
+
+  if (authenticationError || !user) redirect("/login?next=/archive");
+
+  const result = await deleteArchivedApplication(
+    supabase,
+    user.id,
+    parsedId.data,
+  );
+
+  if (result.outcome !== "deleted") redirect(`${ARCHIVE_PATH}?delete=error`);
+
+  // The record is gone from every surface that counted it: the archive loses
+  // the row, analytics loses the application and its history, and the detail
+  // route no longer resolves. The active list and dashboard are unaffected,
+  // because only an archived application can reach this point.
+  revalidatePath(ARCHIVE_PATH);
+  revalidatePath("/analytics");
+  revalidatePath(`/applications/${parsedId.data}`);
+
+  redirect(`${ARCHIVE_PATH}?delete=deleted`);
 }
