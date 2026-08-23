@@ -87,15 +87,7 @@ export function AppShell({
           >
             <Menu aria-hidden="true" className="size-5" />
           </button>
-          <div>
-            <p className="text-sm font-semibold text-slate-950">{pageTitle}</p>
-            <p className="hidden text-xs text-slate-500 sm:block">
-              Secure foundation · Phase 1
-            </p>
-          </div>
-          <span className="ml-auto rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
-            Personal workspace
-          </span>
+          <p className="text-sm font-semibold text-slate-950">{pageTitle}</p>
         </header>
 
         <main className="mx-auto max-w-[1440px] p-4 sm:p-6 lg:p-8" id="main-content">

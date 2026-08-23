@@ -110,9 +110,10 @@ JobTrack is deployed and the Claude connection works today.
   and updating applications
 - Status history recorded automatically as an application moves
 - Analytics: where your applications stand, and how far they got
+- Settings: connect an AI assistant, see what's connected, and disconnect it
 
-**Not built yet** — the pipeline, archive, and settings pages exist but are
-placeholders. They don't show fake data or pretend to save anything.
+**Not built yet** — the pipeline and archive pages exist but are placeholders.
+They don't show fake data or pretend to save anything.
 
 ## What's next
 
