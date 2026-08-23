@@ -6,6 +6,12 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": new URL("./", import.meta.url).pathname,
+      // Lets tests import server-only modules, such as the repository, to
+      // assert the database queries they build.
+      "server-only": new URL(
+        "./tests/stubs/server-only.ts",
+        import.meta.url,
+      ).pathname,
     },
   },
   test: {

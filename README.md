@@ -98,7 +98,8 @@ JobTrack is deployed and the Claude connection works today.
 
 - Accounts: sign up, log in, password reset
 - Adding, viewing, and editing applications
-- Your application list, with statuses, deadlines, next actions, and notes
+- Your application list, with search and filters for status, work term, and
+  category
 - The AI connection: saving jobs, listing applications, getting full details,
   and updating applications
 - Status history recorded automatically as an application moves
@@ -114,11 +115,10 @@ but are placeholders. They don't show fake data or pretend to save anything.
    properly
 3. Cleaning up the hosting setup
 4. Testing saved jobs against messier, longer, and stranger postings
-5. Search and filtering on the website
-6. A dashboard with real numbers
-7. The pipeline board
-8. Archiving finished applications
-9. Analytics on how a search is actually going
+5. A dashboard with real numbers
+6. The pipeline board
+7. Archiving finished applications
+8. Analytics on how a search is actually going
 
 ## Tech stack
 

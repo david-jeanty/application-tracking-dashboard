@@ -121,8 +121,8 @@ never parses free text itself. `delete_job` may follow later.
 1. **Foundation:** framework, auth, protected shell, schema, RLS, tests, docs.
    *(complete)*
 2. **Application management:** CRUD, list/detail, search, filters, status, actions,
-   deadlines, complete UI states. *(create/detail/edit complete; search/filters/
-   delete/archive actions remain)*
+   deadlines, complete UI states. *(create/detail/edit and list search/filters
+   complete; delete/archive actions remain)*
 3. **Dashboard:** shared accurate metrics, actions, deadlines, recent activity,
    accessible charts.
 4. **Pipeline:** persistent status columns, failure recovery, keyboard alternative,
