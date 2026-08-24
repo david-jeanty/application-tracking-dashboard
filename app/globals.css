@@ -82,6 +82,15 @@
   --border: #e5e7eb;
   --border-strong: #cbd0d8;
 
+  /*
+    The unreached part of the lifecycle rail. A dedicated token because it has
+    to stay perceivable on its own — `--border` and `--border-strong` are tuned
+    to separate surfaces, which is a quieter job than telling a student that a
+    stage exists and has not been reached.
+  */
+  --rail-track: #828b9c;
+
+
   --accent: var(--accent-light);
   --accent-hover: var(--accent-hover-light);
   --accent-soft: var(--accent-soft-light);
@@ -142,6 +151,9 @@
   --border: #282b34;
   --border-strong: #3d414d;
 
+  --rail-track: #6a7181;
+
+
   --accent: var(--accent-dark);
   --accent-hover: var(--accent-hover-dark);
   --accent-soft: var(--accent-soft-dark);
@@ -196,6 +208,9 @@
 
     --border: #282b34;
     --border-strong: #3d414d;
+
+    --rail-track: #6a7181;
+
 
     --accent: var(--accent-dark);
     --accent-hover: var(--accent-hover-dark);
@@ -252,6 +267,7 @@
 
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
+  --color-rail-track: var(--rail-track);
 
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);

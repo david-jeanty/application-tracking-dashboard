@@ -1,5 +1,4 @@
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   clearNextActionAction,
@@ -10,8 +9,8 @@ import { APPLICATION_STATUSES } from "@/lib/applications/constants";
 import type { ApplicationRecord } from "@/lib/applications/types";
 
 const selectClassName =
-  "min-h-11 w-full rounded-control border border-border-strong bg-surface px-3.5 text-base text-foreground hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
-const labelClassName = "text-sm font-medium text-foreground";
+  "min-h-10 w-full rounded-control border border-border-strong bg-surface px-3 text-base text-foreground hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
+const labelClassName = "text-[13px] font-medium text-foreground";
 
 /**
  * The two fields a student changes over and over, on the page they are already
@@ -47,14 +46,12 @@ export function QuickUpdate({
   if (application.archived_at) return null;
 
   return (
-    <Card className="p-5 sm:p-6">
-      <h2 className="font-semibold text-foreground">Quick update</h2>
-      <p className="mt-1 text-sm leading-6 text-foreground-secondary">
-        Change the two things that move most often. Everything else lives in
-        Edit application.
-      </p>
+    <section className="pt-6">
+      <h2 className="border-b border-border pb-2 text-base font-semibold text-foreground">
+        Quick update
+      </h2>
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 pt-4 lg:grid-cols-2">
         <form
           action={updateApplicationStatusAction}
           className="flex flex-col gap-1.5"
@@ -118,7 +115,7 @@ export function QuickUpdate({
               and is not left wondering where their date went.
             */}
             <p
-              className="text-sm leading-6 text-foreground-secondary"
+              className="text-[13px] leading-5 text-foreground-secondary"
               id="quickNextActionDueDateHint"
             >
               A due date is kept only alongside a next action.
@@ -143,6 +140,6 @@ export function QuickUpdate({
           </div>
         </form>
       </div>
-    </Card>
+    </section>
   );
 }

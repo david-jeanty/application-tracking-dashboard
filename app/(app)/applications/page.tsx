@@ -48,18 +48,16 @@ export default async function ApplicationsPage({
   const listKey = JSON.stringify(filters);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-sm font-semibold text-accent">Applications</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-            Your applications
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
-            Add applications and keep their current status, important dates, and
-            next action in one place.
-          </p>
-        </div>
+    <div className="space-y-5">
+      {/*
+        One page title. The sidebar already says where you are, and the count
+        belongs with the records it counts rather than up here, where showing
+        it would mean either a second query or waiting on the streamed list.
+      */}
+      <div className="flex items-start justify-between gap-4">
+        <h1 className="text-[26px] font-semibold tracking-tight text-foreground">
+          Applications
+        </h1>
         <ApplicationCreatePanel />
       </div>
 

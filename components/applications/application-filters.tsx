@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   APPLICATION_STATUSES,
@@ -15,9 +14,12 @@ import {
   WORK_TERM_PARAM,
 } from "@/lib/applications/search-params";
 
-/** Matches the select styling the application form already uses. */
+/**
+ * Sized to sit in a row beside the search field rather than to fill a form
+ * column, which is what keeps the controls next to the records they narrow.
+ */
 const selectClassName =
-  "min-h-11 w-full rounded-control border border-border-strong bg-surface px-3.5 text-base text-foreground hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
+  "min-h-10 w-full rounded-control border border-border-strong bg-surface px-3 text-base text-foreground hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
 
 /**
  * Search and filter controls for the applications list.
@@ -49,96 +51,103 @@ export function ApplicationFilters({
       : workTermOptions;
 
   return (
-    <Card className="p-4">
-      <form action="/applications" className="contents" method="get">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))_auto]">
-          <div>
-            <label className="sr-only" htmlFor="applications-search">
-              Search applications
-            </label>
-            <Input
-              defaultValue={filters.search ?? ""}
-              id="applications-search"
-              maxLength={160}
-              name={SEARCH_PARAM}
-              placeholder="Search applications..."
-              type="search"
-            />
-          </div>
+    <form
+      action="/applications"
+      className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+      method="get"
+    >
+      <div className="sm:min-w-48 sm:flex-1">
+        <label className="sr-only" htmlFor="applications-search">
+          Search applications
+        </label>
+        <Input
+          defaultValue={filters.search ?? ""}
+          id="applications-search"
+          maxLength={160}
+          name={SEARCH_PARAM}
+          placeholder="Search applications..."
+          type="search"
+        />
+      </div>
 
-          <div>
-            <label className="sr-only" htmlFor="applications-status">
-              Filter by status
-            </label>
-            <select
-              className={selectClassName}
-              defaultValue={filters.status ?? ""}
-              id="applications-status"
-              name={STATUS_PARAM}
-            >
-              <option value="">All statuses</option>
-              {APPLICATION_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="sr-only" htmlFor="applications-work-term">
-              Filter by work term
-            </label>
-            <select
-              className={selectClassName}
-              defaultValue={filters.workTermSeason ?? ""}
-              disabled={workTerms.length === 0}
-              id="applications-work-term"
-              name={WORK_TERM_PARAM}
-            >
-              <option value="">All work terms</option>
-              {workTerms.map((season) => (
-                <option key={season} value={season}>
-                  {season}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="sr-only" htmlFor="applications-category">
-              Filter by category
-            </label>
-            <select
-              className={selectClassName}
-              defaultValue={filters.category ?? ""}
-              id="applications-category"
-              name={CATEGORY_PARAM}
-            >
-              <option value="">All categories</option>
-              {JOB_CATEGORIES.map((category) => (
-                <option key={category} value={category}>
-                  {category}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex gap-2">
-            <Button className="flex-1 lg:flex-none" type="submit">
-              Apply filters
-            </Button>
-            {filtered ? (
-              <Link
-                className="inline-flex min-h-11 items-center justify-center rounded-control px-4 text-sm font-semibold text-foreground-secondary transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                href="/applications"
-              >
-                Clear
-              </Link>
-            ) : null}
-          </div>
+      {/*
+        The three narrow controls share a row of their own on a phone, then
+        dissolve into the same flex row as the search field once there is
+        width for it.
+      */}
+      <div className="grid grid-cols-3 gap-2 sm:contents">
+        <div className="sm:w-36">
+          <label className="sr-only" htmlFor="applications-status">
+            Filter by status
+          </label>
+          <select
+            className={selectClassName}
+            defaultValue={filters.status ?? ""}
+            id="applications-status"
+            name={STATUS_PARAM}
+          >
+            <option value="">All statuses</option>
+            {APPLICATION_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {status}
+              </option>
+            ))}
+          </select>
         </div>
-      </form>
-    </Card>
+
+        <div className="sm:w-36">
+          <label className="sr-only" htmlFor="applications-work-term">
+            Filter by work term
+          </label>
+          <select
+            className={selectClassName}
+            defaultValue={filters.workTermSeason ?? ""}
+            disabled={workTerms.length === 0}
+            id="applications-work-term"
+            name={WORK_TERM_PARAM}
+          >
+            <option value="">All work terms</option>
+            {workTerms.map((season) => (
+              <option key={season} value={season}>
+                {season}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="sm:w-40">
+          <label className="sr-only" htmlFor="applications-category">
+            Filter by category
+          </label>
+          <select
+            className={selectClassName}
+            defaultValue={filters.category ?? ""}
+            id="applications-category"
+            name={CATEGORY_PARAM}
+          >
+            <option value="">All categories</option>
+            {JOB_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex gap-2">
+        <Button className="flex-1 sm:flex-none" type="submit" variant="secondary">
+          Apply
+        </Button>
+        {filtered ? (
+          <Link
+            className="inline-flex min-h-10 items-center justify-center rounded-control px-3 text-sm font-medium text-foreground-secondary transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            href="/applications"
+          >
+            Clear
+          </Link>
+        ) : null}
+      </div>
+    </form>
   );
 }

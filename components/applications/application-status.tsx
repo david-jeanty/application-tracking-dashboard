@@ -18,11 +18,53 @@ const statusClasses: Partial<Record<ApplicationStatus, string>> = {
   Withdrawn: "border-border-strong bg-surface-muted text-foreground-secondary",
 };
 
+/**
+ * The quiet form, coloured only where the colour means something.
+ *
+ * The stages an application passes through on the way — applied, screening,
+ * interview — are progress, and the rail beside them already shows progress.
+ * Colouring those too would turn a list of thirty applications into a rainbow
+ * and leave nothing for the outcomes to stand out against. So only the
+ * statuses that carry a verdict take a semantic colour, and they take the same
+ * one in every theme.
+ */
+const statusTextClasses: Partial<Record<ApplicationStatus, string>> = {
+  Interested: "text-foreground-secondary",
+  Preparing: "text-warning",
+  Applied: "text-foreground-secondary",
+  Screening: "text-foreground-secondary",
+  Assessment: "text-foreground-secondary",
+  Interview: "text-foreground-secondary",
+  Offer: "text-success",
+  Accepted: "text-success",
+  Rejected: "text-danger",
+  Withdrawn: "text-foreground-muted",
+};
+
+/**
+ * One application's exact status.
+ *
+ * `chip` is the prominent form, used where the status is a headline — the
+ * detail hero. `text` is the quiet form for a dense list, where a row of
+ * pills would fight the company names for attention. Both carry the same
+ * semantic colour, so a rejection is recognisable either way.
+ */
 export function ApplicationStatusLabel({
   status,
+  variant = "chip",
 }: {
   status: ApplicationStatus;
+  variant?: "chip" | "text";
 }) {
+  if (variant === "text") {
+    return (
+      <span className={cn("text-[13px] font-medium", statusTextClasses[status])}>
+        <span className="sr-only">Status: </span>
+        {status}
+      </span>
+    );
+  }
+
   return (
     <span
       className={cn(

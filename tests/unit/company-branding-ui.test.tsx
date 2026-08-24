@@ -47,6 +47,11 @@ vi.mock("@/lib/applications/repository", () => ({
   getApplicationById: (...args: unknown[]) => getApplicationById(...args),
   listActiveApplications: (...args: unknown[]) =>
     listActiveApplications(...args),
+  // The lifecycle rail reads status history. These tests are about the mark
+  // beside each company, so an empty history is enough: the rail still draws
+  // from the current status.
+  listStatusHistory: async () => ({ data: [], error: null }),
+  listApplicationStatusHistory: async () => ({ data: [], error: null }),
 }));
 
 const { ApplicationFields } = await import(
@@ -332,8 +337,13 @@ describe("company branding across the product", () => {
       ]);
       // Larger here than in a list row, and still smaller than the name.
       expect(container.querySelector("img")?.getAttribute("width")).toBe("40");
+      // The heading names the whole record — employer and role — so two
+      // applications at the same company do not share one.
       expect(
-        screen.getByRole("heading", { level: 1, name: "Shopify" }),
+        screen.getByRole("heading", {
+          level: 1,
+          name: "Shopify Data Analyst Intern",
+        }),
       ).toBeInTheDocument();
     });
 
@@ -345,7 +355,10 @@ describe("company branding across the product", () => {
 
       expect(logoSources(container)).toHaveLength(0);
       expect(
-        screen.getByRole("heading", { level: 1, name: "KPMG" }),
+        screen.getByRole("heading", {
+          level: 1,
+          name: "KPMG Data Analyst Intern",
+        }),
       ).toBeInTheDocument();
     });
   });

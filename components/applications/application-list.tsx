@@ -1,13 +1,15 @@
-import { AlertCircle, BriefcaseBusiness, SearchX } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ApplicationStatusLabel } from "@/components/applications/application-status";
+import { CompactLifecycleRail } from "@/components/applications/lifecycle-rail";
 import { CompanyLogo } from "@/components/branding/company-logo";
 import { ButtonLink } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { buildLifecycles, type Lifecycle } from "@/lib/applications/lifecycle";
 import { displayOptionalText } from "@/lib/applications/mapper";
 import {
   listActiveApplications,
+  listStatusHistory,
   type ActiveApplicationFilters,
 } from "@/lib/applications/repository";
 import { hasActiveFilters } from "@/lib/applications/search-params";
@@ -15,11 +17,30 @@ import type { ApplicationListItem } from "@/lib/applications/types";
 import { formatDateOnly } from "@/lib/dates/date-only";
 import { createClient } from "@/lib/supabase/server";
 
-function DateValue({ value }: { value: string | null }) {
-  return value ? formatDateOnly(value) : <span aria-label="Not set">—</span>;
+const linkClassName =
+  "rounded-sm hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus";
+
+function NotSet() {
+  return <span aria-label="Not set">—</span>;
 }
 
-function MobileApplicationCard({
+/**
+ * The one date a row shows.
+ *
+ * A recorded next action is what the student asked to be reminded of, so it
+ * wins. Before anything has been submitted the deadline is the date that
+ * matters instead. Both are facts already on the record — nothing here works
+ * out what the student *should* do next.
+ */
+function rowDate(application: ApplicationListItem): string | null {
+  if (application.next_action && application.next_action_due_date) {
+    return application.next_action_due_date;
+  }
+  if (!application.date_applied) return application.application_deadline;
+  return application.next_action_due_date ?? application.application_deadline;
+}
+
+function LocationAndTerm({
   application,
 }: {
   application: ApplicationListItem;
@@ -27,95 +48,107 @@ function MobileApplicationCard({
   const location = displayOptionalText(application.location);
 
   return (
-    <Card className="p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-3">
-          <CompanyLogo
-            companyName={application.company_name}
-            domain={application.company_domain}
-          />
-          <div className="min-w-0">
-            <h3 className="font-semibold text-foreground">
-              <Link
-                className="rounded-sm text-accent-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                href={`/applications/${application.id}`}
-              >
-                {application.company_name}
-              </Link>
-            </h3>
-            <p className="mt-1 text-sm text-foreground-secondary">
-              {application.original_job_title}
-            </p>
+    <>
+      <span className="block text-foreground">{location ?? <NotSet />}</span>
+      <span className="block text-[13px] text-foreground-muted">
+        {application.work_term_season}
+      </span>
+    </>
+  );
+}
+
+/**
+ * The lifecycle rail with the exact status beside it.
+ *
+ * `lifecycle` is null when the history read failed. The rail is a summary of
+ * data the status already states more precisely, so it simply goes away rather
+ * than being guessed at, and the row keeps working.
+ */
+function Progress({
+  application,
+  lifecycle,
+}: {
+  application: ApplicationListItem;
+  lifecycle: Lifecycle | undefined;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {lifecycle ? <CompactLifecycleRail lifecycle={lifecycle} /> : null}
+      <ApplicationStatusLabel
+        status={application.current_status}
+        variant="text"
+      />
+    </div>
+  );
+}
+
+/** One stacked record, for a phone. */
+function MobileApplicationRow({
+  application,
+  lifecycle,
+}: {
+  application: ApplicationListItem;
+  lifecycle: Lifecycle | undefined;
+}) {
+  const location = displayOptionalText(application.location);
+  const date = rowDate(application);
+
+  return (
+    <li className="border-b border-border last:border-b-0">
+      <div className="flex items-start gap-3 py-4">
+        <CompanyLogo
+          companyName={application.company_name}
+          domain={application.company_domain}
+        />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold text-foreground">
+            <Link
+              className={linkClassName}
+              href={`/applications/${application.id}`}
+            >
+              {application.company_name}
+            </Link>
+          </p>
+          <p className="mt-0.5 text-[13px] leading-5 text-foreground-secondary">
+            {application.original_job_title}
+          </p>
+
+          <div className="mt-3 flex items-center gap-3">
+            {lifecycle ? (
+              <CompactLifecycleRail
+                className="max-w-28"
+                lifecycle={lifecycle}
+              />
+            ) : null}
+            <ApplicationStatusLabel
+              status={application.current_status}
+              variant="text"
+            />
           </div>
-        </div>
-        <ApplicationStatusLabel status={application.current_status} />
-      </div>
-      <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-        <div className="col-span-2">
-          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            Category
-          </dt>
-          <dd className="mt-1 text-foreground">
-            {application.normalized_job_category}
-          </dd>
-        </div>
-        {location ? (
-          <div className="col-span-2">
-            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-              Location
-            </dt>
-            <dd className="mt-1 text-foreground">{location}</dd>
-          </div>
-        ) : null}
-        {application.date_applied ? (
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-              Applied
-            </dt>
-            <dd className="mt-1 text-foreground">
-              <DateValue value={application.date_applied} />
-            </dd>
-          </div>
-        ) : null}
-        {application.application_deadline ? (
-          <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-              Deadline
-            </dt>
-            <dd className="mt-1 text-foreground">
-              <DateValue value={application.application_deadline} />
-            </dd>
-          </div>
-        ) : null}
-        {application.next_action ? (
-          <div className="col-span-2">
-            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-              Next action
-            </dt>
-            <dd className="mt-1 text-foreground">
-              {application.next_action}
-              {application.next_action_due_date ? (
-                <span className="text-foreground-muted">
-                  {" "}
-                  · <DateValue value={application.next_action_due_date} />
+
+          <p className="mt-2 text-[13px] text-foreground-muted">
+            {location ? `${location} · ` : ""}
+            {application.work_term_season}
+            {date ? (
+              <>
+                {" · "}
+                <span className="text-foreground-secondary">
+                  Next {formatDateOnly(date)}
                 </span>
-              ) : null}
-            </dd>
-          </div>
-        ) : null}
-      </dl>
-    </Card>
+              </>
+            ) : null}
+          </p>
+        </div>
+      </div>
+    </li>
   );
 }
 
 export function ApplicationsListLoading() {
   return (
-    <div aria-label="Loading applications" className="space-y-3" role="status">
-      {[0, 1, 2].map((item) => (
-        <div
-          className="h-24 animate-pulse rounded-surface border border-border bg-surface"
-          key={item}
-        />
+    <div aria-label="Loading applications" className="space-y-px" role="status">
+      {[0, 1, 2, 3].map((item) => (
+        <div className="h-[72px] animate-pulse bg-surface-muted" key={item} />
       ))}
       <span className="sr-only">Loading applications…</span>
     </div>
@@ -134,17 +167,23 @@ export async function ApplicationList({
 
   if (!user) redirect("/login");
 
-  // Archive state is applied inside this read, not passed in, so a filter
+  // Two owner-scoped reads for the whole page, however many applications come
+  // back. The history read is not per row: it returns every event the student
+  // owns once, and each row's rail is built from that single result in memory.
+  //
+  // Archive state is applied inside the list read, not passed in, so a filter
   // built from the URL cannot reach archived records.
-  const { data, error } = await listActiveApplications(
-    supabase,
-    user.id,
-    filters,
-  );
+  const [applications, history] = await Promise.all([
+    listActiveApplications(supabase, user.id, filters),
+    listStatusHistory(supabase, user.id),
+  ]);
 
-  if (error) {
+  if (applications.error) {
     return (
-      <Card className="flex gap-3 border-danger/30 bg-danger-soft p-5 text-danger">
+      <div
+        className="flex gap-3 rounded-record border border-danger/30 bg-danger-soft p-5 text-danger"
+        role="alert"
+      >
         <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
         <div>
           <h2 className="font-semibold">Applications could not be loaded</h2>
@@ -153,22 +192,21 @@ export async function ApplicationList({
             database connection.
           </p>
         </div>
-      </Card>
+      </div>
     );
   }
 
-  if (!data?.length) {
+  const data = applications.data ?? [];
+
+  if (!data.length) {
     // A student with no matches has a different problem from a student with no
     // applications, so they get different words and a way out.
     return hasActiveFilters(filters) ? (
-      <Card className="px-6 py-12 text-center">
-        <span className="mx-auto grid size-12 place-items-center rounded-surface bg-surface-muted text-foreground-secondary">
-          <SearchX aria-hidden="true" className="size-6" />
-        </span>
-        <h2 className="mt-4 text-lg font-semibold text-foreground">
+      <div className="border-t border-border py-16 text-center">
+        <h2 className="text-base font-semibold text-foreground">
           No applications match these filters
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-foreground-secondary">
+        <p className="mx-auto mt-1.5 max-w-md text-sm leading-6 text-foreground-secondary">
           Try changing or clearing your search.
         </p>
         <div className="mt-5">
@@ -176,70 +214,70 @@ export async function ApplicationList({
             Clear filters
           </ButtonLink>
         </div>
-      </Card>
+      </div>
     ) : (
-      <Card className="px-6 py-12 text-center">
-        <span className="mx-auto grid size-12 place-items-center rounded-surface bg-accent-soft text-accent">
-          <BriefcaseBusiness aria-hidden="true" className="size-6" />
-        </span>
-        <h2 className="mt-4 text-lg font-semibold text-foreground">
+      <div className="border-t border-border py-16 text-center">
+        <h2 className="text-base font-semibold text-foreground">
           No applications yet
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-foreground-secondary">
+        <p className="mx-auto mt-1.5 max-w-md text-sm leading-6 text-foreground-secondary">
           Add your first application to keep its status, dates, and next action
           together.
         </p>
-      </Card>
+      </div>
     );
   }
 
+  // A failed history read leaves every rail off rather than taking the list
+  // down: the exact status still says where each application stands.
+  const lifecycles = buildLifecycles(data, history.error ? null : history.data);
+
   return (
-    <>
-      <div className="space-y-3 md:hidden">
+    <div className="space-y-3">
+      <p className="text-[13px] text-foreground-muted">
+        {data.length} application{data.length === 1 ? "" : "s"}
+      </p>
+
+      <ul className="md:hidden">
         {data.map((application) => (
-          <MobileApplicationCard
+          <MobileApplicationRow
             application={application}
             key={application.id}
+            lifecycle={lifecycles?.get(application.id)}
           />
         ))}
-      </div>
+      </ul>
 
-      <Card className="hidden overflow-hidden md:block">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] border-collapse text-left text-sm">
-            <caption className="sr-only">
-              Your active job applications
-            </caption>
-            <thead className="border-b border-border bg-surface-muted text-xs font-semibold uppercase tracking-wide text-foreground-secondary">
-              <tr>
-                <th className="px-4 py-3" scope="col">
-                  Company and role
-                </th>
-                <th className="px-4 py-3" scope="col">
-                  Category
-                </th>
-                <th className="px-4 py-3" scope="col">
-                  Status
-                </th>
-                <th className="px-4 py-3" scope="col">
-                  Location
-                </th>
-                <th className="px-4 py-3" scope="col">
-                  Applied
-                </th>
-                <th className="px-4 py-3" scope="col">
-                  Deadline
-                </th>
-                <th className="px-4 py-3" scope="col">
-                  Next action
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {data.map((application) => (
-                <tr className="align-top hover:bg-surface-muted" key={application.id}>
-                  <td className="px-4 py-4">
-                    <div className="flex items-start gap-3">
+      <div className="hidden md:block">
+        <table className="w-full border-collapse text-left text-sm">
+          <caption className="sr-only">Your active job applications</caption>
+          <thead>
+            <tr className="border-y border-border text-[11px] font-medium uppercase tracking-wide text-foreground-muted">
+              <th className="py-2.5 pr-4 font-medium" scope="col">
+                Employer / role
+              </th>
+              <th className="w-56 py-2.5 pr-4 font-medium" scope="col">
+                Progress
+              </th>
+              <th className="w-48 py-2.5 pr-4 font-medium" scope="col">
+                Location / term
+              </th>
+              <th className="w-28 py-2.5 font-medium" scope="col">
+                Next
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((application) => {
+              const date = rowDate(application);
+
+              return (
+                <tr
+                  className="border-b border-border align-middle transition-colors hover:bg-surface-muted"
+                  key={application.id}
+                >
+                  <td className="py-3 pr-4">
+                    <div className="flex items-center gap-3">
                       <CompanyLogo
                         companyName={application.company_name}
                         domain={application.company_domain}
@@ -247,55 +285,36 @@ export async function ApplicationList({
                       <div className="min-w-0">
                         <p className="font-semibold text-foreground">
                           <Link
-                            className="rounded-sm text-accent-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                            className={linkClassName}
                             href={`/applications/${application.id}`}
                           >
                             {application.company_name}
                           </Link>
                         </p>
-                        <p className="mt-1 text-foreground-secondary">
+                        <p className="mt-0.5 text-[13px] text-foreground-secondary">
                           {application.original_job_title}
                         </p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-foreground-secondary">
-                    {application.normalized_job_category}
-                  </td>
-                  <td className="px-4 py-4">
-                    <ApplicationStatusLabel
-                      status={application.current_status}
+                  <td className="py-3 pr-4">
+                    <Progress
+                      application={application}
+                      lifecycle={lifecycles?.get(application.id)}
                     />
                   </td>
-                  <td className="px-4 py-4 text-foreground-secondary">
-                    {displayOptionalText(application.location) ?? (
-                      <span aria-label="Not set">—</span>
-                    )}
+                  <td className="py-3 pr-4 text-[13px]">
+                    <LocationAndTerm application={application} />
                   </td>
-                  <td className="px-4 py-4 text-foreground-secondary">
-                    <DateValue value={application.date_applied} />
-                  </td>
-                  <td className="px-4 py-4 text-foreground-secondary">
-                    <DateValue value={application.application_deadline} />
-                  </td>
-                  <td className="max-w-56 px-4 py-4 text-foreground-secondary">
-                    {application.next_action ?? (
-                      <span aria-label="Not set">—</span>
-                    )}
-                    {application.next_action &&
-                    application.next_action_due_date ? (
-                      <span className="mt-1 block text-xs text-foreground-muted">
-                        Due{" "}
-                        <DateValue value={application.next_action_due_date} />
-                      </span>
-                    ) : null}
+                  <td className="py-3 text-[13px] text-foreground-secondary">
+                    {date ? formatDateOnly(date) : <NotSet />}
                   </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-    </>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   listApplicationsForAnalytics,
   listActiveWorkTermSeasons,
   listApplications,
+  listApplicationStatusHistory,
   listStatusHistory,
   listStatusTimeline,
 } from "@/lib/applications/repository";
@@ -336,6 +337,43 @@ describe("status history read", () => {
     await listStatusHistory(recorder.client, USER);
 
     expect(recorder.argsFor("is", "archived_at")).toBeUndefined();
+  });
+});
+
+describe("the single-application history read", () => {
+  it("is scoped to the authenticated owner as well as the application", async () => {
+    const recorder = recordingClient();
+
+    await listApplicationStatusHistory(recorder.client, USER, APPLICATION);
+
+    expect(recorder.argsFor("eq", "user_id")).toEqual(["user_id", USER]);
+    expect(recorder.argsFor("eq", "application_id")).toEqual([
+      "application_id",
+      APPLICATION,
+    ]);
+  });
+
+  it("reads only the history table, and only the columns the rail needs", async () => {
+    const recorder = recordingClient();
+
+    await listApplicationStatusHistory(recorder.client, USER, APPLICATION);
+
+    expect(recorder.find("from").map((call) => call.args[0])).toEqual([
+      "application_status_history",
+    ]);
+    expect(recorder.find("select").map((call) => call.args[0])).toEqual([
+      "application_id,new_status",
+    ]);
+  });
+
+  it("never writes", async () => {
+    const recorder = recordingClient();
+
+    await listApplicationStatusHistory(recorder.client, USER, APPLICATION);
+
+    for (const method of ["insert", "update", "delete", "upsert"]) {
+      expect(recorder.find(method)).toHaveLength(0);
+    }
   });
 });
 
