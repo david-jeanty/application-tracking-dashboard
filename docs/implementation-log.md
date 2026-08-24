@@ -1,5 +1,94 @@
 # Implementation log
 
+## 2026-08-24 — Phase 4: the pipeline board
+
+### Scope
+
+`/pipeline` stops being a placeholder. Every active application, grouped under
+the exact status it is at, with a control on each card that moves it to another
+status without leaving the board.
+
+No schema change, no new dependency, no new mutation, and no MCP change. The
+board reads through `listActiveApplications` and writes through
+`setApplicationStatus` — the same two functions the applications list and the
+detail page's quick update already use.
+
+### Decisions
+
+**The columns are the ten exact statuses, not the five lifecycle stages.** The
+rail is a coarse summary drawn over the statuses, and summarising is the wrong
+job here: a five-column board could not express moving an application from
+Screening to Assessment at all. The rail keeps its place on the list and the
+detail page, where progress is read rather than changed.
+
+**Terminal statuses get columns like every other.** An application that was
+rejected but never archived is still one of the student's records. Dropping it
+would leave the board disagreeing with the count printed above it. Archived
+records stay off the board entirely, which is the working-set rule the
+applications list already applies.
+
+**No drag-and-drop dependency.** Phase 4 was the phase to evaluate one, and the
+evaluation says no. A drag needs a library, a pointer, and then a keyboard
+alternative built anyway — and that alternative is the whole feature: a native
+`select` of the ten statuses and a submit button, which every student reaches
+by keyboard, works with no client JavaScript, and posts through the same
+validated Server Action the detail page uses. A drag would have been a second
+way to do the one thing, at the cost of a dependency and a second write path.
+So the status menu is not a fallback behind a drag; it is the control.
+
+**No optimistic client state.** With no client component on the page there is
+nothing to roll back: the move posts, the board re-renders from the database,
+and the card is under a different heading. Failure is a redirect carrying one
+fixed message — missing, somebody else's, archived, an invalid status, and a
+database error are indistinguishable in it, so a response never confirms that
+another student's application exists.
+
+**Two filters, not four.** Status is what the columns *are*; filtering by it
+would leave a board of one column, which is the applications list with extra
+steps. `parsePipelineFilters` therefore cannot produce one, and a bookmarked
+list URL opened on the board shows the whole board. Category is left to the
+list, where there is room for a fourth control.
+
+**One composition for every width.** The columns sit side by side and scroll
+horizontally where there is room, and stack into the phone's reading order
+where there is not — rather than two markups where a screen reader would meet
+every application twice. An empty column shows an honest zero on the board and
+is left out of the stacked view, where ten headings with nothing under them
+would be the loudest thing on the page.
+
+### What changed
+
+- `lib/pipeline/board.ts` — the grouping. Pure, and total: every application
+  lands in exactly one column, and `total` counts the records read rather than
+  the entries the grouping produced.
+- `lib/applications/context-date.ts` — the "which date does a compact view
+  show" rule, lifted out of the applications list unchanged so the list and the
+  board cannot drift about it.
+- `lib/applications/search-params.ts` — `parsePipelineFilters` and
+  `toPipelineUrl`. The redirect target is a fixed internal path with every
+  parameter re-encoded, so a filter value carrying its own `&` becomes text in
+  a query value rather than a second parameter.
+- `lib/applications/actions.ts` — `moveApplicationStatusAction`. Identity comes
+  from the session, the status goes through the existing `quickStatusSchema`,
+  and the write is the existing owner-scoped, active-only single-column update.
+  `/pipeline` was added to the archive and quick-update revalidations too,
+  since both change what the board shows.
+- `components/pipeline/` — the board, the card, and the filter form.
+- `app/(app)/pipeline/page.tsx` — the page, streaming the board inside a
+  `Suspense` boundary keyed on the applied filters.
+- `components/app-shell/placeholder-page.tsx` — deleted. The pipeline was its
+  last caller, so every route in the shell now shows real data.
+
+### Verification
+
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run test`: passed, 953 tests across 47 files — 45 of them new, covering
+  the grouping, the filter parsing and URL rebuilding, the move action's
+  authorisation and failure equivalence, and what the board renders.
+- `npm run build`: passed, with `/pipeline` now a dynamic route rather than a
+  prerendered placeholder.
+
 ## 2026-08-24 — Phase 3B: analytics visualisation and source performance
 
 ### Scope

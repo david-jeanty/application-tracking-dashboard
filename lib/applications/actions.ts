@@ -12,9 +12,16 @@ import {
   updateApplication,
 } from "@/lib/applications/repository";
 import type { QuickUpdateResult } from "@/lib/applications/repository";
+import {
+  parsePipelineFilters,
+  SEARCH_PARAM,
+  toPipelineUrl,
+  WORK_TERM_PARAM,
+} from "@/lib/applications/search-params";
 import type {
   ApplicationActionState,
   ArchiveOutcome,
+  PipelineMoveOutcome,
   QuickUpdateOutcome,
 } from "@/lib/applications/state";
 import { createClient } from "@/lib/supabase/server";
@@ -144,6 +151,9 @@ export async function updateApplicationAction(
 /** Where an archive or restore always returns to. Never taken from the request. */
 const APPLICATIONS_PATH = "/applications";
 
+/** The board's own path. Fixed, like every other redirect target here. */
+const PIPELINE_PATH = "/pipeline";
+
 /**
  * Moves one application across the archive line.
  *
@@ -186,10 +196,11 @@ async function setArchiveState(
     redirect(`${APPLICATIONS_PATH}?archive=error`);
   }
 
-  // Every surface that counts or lists applications is affected: the list and
-  // dashboard lose or regain the row, the archive page gains or loses it, and
-  // the detail page's archived banner flips.
+  // Every surface that counts or lists applications is affected: the list,
+  // board and dashboard lose or regain the row, the archive page gains or
+  // loses it, and the detail page's archived banner flips.
   revalidatePath(APPLICATIONS_PATH);
+  revalidatePath(PIPELINE_PATH);
   revalidatePath("/archive");
   revalidatePath("/dashboard");
   revalidatePath(`/applications/${parsedId.data}`);
@@ -302,9 +313,11 @@ async function applyQuickUpdate(
   }
 
   // Status and next action both show on the list and drive the dashboard's
-  // follow-up view, and the edit form must not open with a stale copy of a
-  // field the student just changed here.
+  // follow-up view, a status change moves the card to another column of the
+  // board, and the edit form must not open with a stale copy of a field the
+  // student just changed here.
   revalidatePath(APPLICATIONS_PATH);
+  revalidatePath(PIPELINE_PATH);
   revalidatePath("/dashboard");
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/applications/${applicationId}/edit`);
@@ -391,4 +404,87 @@ export async function clearNextActionAction(
   await applyQuickUpdate(applicationId, "next-action-cleared", (supabase, userId) =>
     setApplicationNextAction(supabase, userId, applicationId),
   );
+}
+
+/**
+ * The board a move came from, rebuilt from values the request carried.
+ *
+ * The two filter fields are read by name and put back through the board's own
+ * parser, so a crafted post gets the same treatment a crafted URL does: an
+ * over-long or unrecognised value is dropped, and what survives is re-encoded
+ * into a fresh query string against a fixed internal path. Nothing the request
+ * sent reaches the redirect as raw text.
+ */
+function pipelineReturnUrl(
+  formData: FormData,
+  notice: PipelineMoveOutcome,
+): string {
+  const filters = parsePipelineFilters({
+    [SEARCH_PARAM]: String(formData.get(SEARCH_PARAM) ?? ""),
+    [WORK_TERM_PARAM]: String(formData.get(WORK_TERM_PARAM) ?? ""),
+  });
+
+  return toPipelineUrl(filters, notice);
+}
+
+/**
+ * Moves one of the caller's own active applications to another status.
+ *
+ * The same single-column write the detail page's quick update performs, and
+ * deliberately the same one: a move on the board is a status change, not a
+ * board-specific concept, so it reuses `setApplicationStatus` rather than
+ * introducing a second way for a status to change. Nothing infers
+ * `date_applied`, touches the next action, archives anything, or enforces an
+ * order on the statuses — a student may drag an application backward from
+ * Interview to Applied, because real searches do.
+ *
+ * What differs from the quick update is only where the student ends up: back
+ * on the board, with the filters they were looking at, rather than on the
+ * application's detail page.
+ *
+ * Identity comes from the authenticated server session and is handed to an
+ * owner-scoped mutation, so no `user_id` is accepted from the form. Every
+ * rejected case — missing, owned by somebody else, archived, an invalid
+ * status, or a database error — returns the same `move=error`, so the response
+ * never reveals which it was.
+ */
+export async function moveApplicationStatusAction(
+  formData: FormData,
+): Promise<void> {
+  const parsedId = applicationIdSchema.safeParse(
+    String(formData.get("applicationId") ?? "").trim(),
+  );
+  if (!parsedId.success) redirect(pipelineReturnUrl(formData, "error"));
+
+  const parsed = quickStatusSchema.safeParse(values(formData));
+  if (!parsed.success) redirect(pipelineReturnUrl(formData, "error"));
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authenticationError,
+  } = await supabase.auth.getUser();
+
+  if (authenticationError || !user) redirect(`/login?next=${PIPELINE_PATH}`);
+
+  const result = await setApplicationStatus(
+    supabase,
+    user.id,
+    parsedId.data,
+    parsed.data.currentStatus,
+  );
+
+  if (result.outcome !== "updated") {
+    redirect(pipelineReturnUrl(formData, "error"));
+  }
+
+  // The card changes column here, the list and dashboard show the new status,
+  // and the edit form must not open with a stale copy of it.
+  revalidatePath(PIPELINE_PATH);
+  revalidatePath(APPLICATIONS_PATH);
+  revalidatePath("/dashboard");
+  revalidatePath(`/applications/${parsedId.data}`);
+  revalidatePath(`/applications/${parsedId.data}/edit`);
+
+  redirect(pipelineReturnUrl(formData, "moved"));
 }
