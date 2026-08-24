@@ -179,12 +179,66 @@ describe("what a mobile record shows", () => {
 
     const record = within(mobileList()).getAllByRole("listitem")[0];
 
+    expect(within(record).queryByText(/Next |Deadline /)).not.toBeInTheDocument();
+  });
+
+  it("names a next action as Next, since there is no column heading here", async () => {
+    await renderList({
+      rows: [
+        application({
+          next_action: "Follow up with recruiter",
+          next_action_due_date: "2026-08-28",
+        }),
+      ],
+    });
+
+    const record = within(mobileList()).getAllByRole("listitem")[0];
+
+    expect(within(record).getByText(/Next Aug 28, 2026/)).toBeInTheDocument();
+  });
+
+  it("names a pre-submission deadline as Deadline", async () => {
+    await renderList({
+      rows: [
+        application({
+          current_status: "Interested",
+          application_deadline: "2026-09-03",
+        }),
+      ],
+    });
+
+    const record = within(mobileList()).getAllByRole("listitem")[0];
+
+    expect(within(record).getByText(/Deadline Sep 3, 2026/)).toBeInTheDocument();
     expect(within(record).queryByText(/Next /)).not.toBeInTheDocument();
+  });
+
+  it("shows no deadline on a submitted application", async () => {
+    await renderList({
+      rows: [
+        application({
+          current_status: "Applied",
+          date_applied: null,
+          application_deadline: "2026-09-21",
+        }),
+      ],
+    });
+
+    const record = within(mobileList()).getAllByRole("listitem")[0];
+
+    expect(within(record).queryByText(/Deadline /)).not.toBeInTheDocument();
   });
 });
 
 describe("the date a row surfaces", () => {
-  it("prefers a recorded next-action due date", async () => {
+  /** The date under the desktop "Next" heading, or null when there is none. */
+  function nextColumn() {
+    const row = within(screen.getByRole("table")).getAllByRole("row")[1];
+    const cell = within(row).getAllByRole("cell")[3];
+    return cell.textContent?.trim() ?? "";
+  }
+
+  it("shows a recorded next-action due date", async () => {
     await renderList({
       rows: [
         application({
@@ -195,27 +249,123 @@ describe("the date a row surfaces", () => {
       ],
     });
 
-    expect(screen.getAllByText(/Aug 28, 2026/).length).toBeGreaterThan(0);
+    expect(nextColumn()).toBe("Aug 28, 2026");
   });
 
-  it("falls back to the deadline before anything has been submitted", async () => {
+  it("shows a deadline while the application is still only Interested", async () => {
     await renderList({
       rows: [
         application({
-          date_applied: null,
           current_status: "Interested",
           application_deadline: "2026-09-03",
         }),
       ],
     });
 
-    expect(screen.getAllByText(/Sep 3, 2026/).length).toBeGreaterThan(0);
+    expect(nextColumn()).toBe("Sep 3, 2026");
+  });
+
+  it("shows a deadline while the application is still being Prepared", async () => {
+    await renderList({
+      rows: [
+        application({
+          current_status: "Preparing",
+          application_deadline: "2026-09-03",
+        }),
+      ],
+    });
+
+    expect(nextColumn()).toBe("Sep 3, 2026");
+  });
+
+  it("lets an explicit next action outrank a deadline before submission", async () => {
+    await renderList({
+      rows: [
+        application({
+          current_status: "Interested",
+          next_action: "Ask for a referral",
+          next_action_due_date: "2026-08-28",
+          application_deadline: "2026-09-03",
+        }),
+      ],
+    });
+
+    expect(nextColumn()).toBe("Aug 28, 2026");
   });
 
   it("shows a dash when the record carries neither", async () => {
     await renderList({ rows: [application({ application_deadline: null })] });
 
-    expect(screen.getAllByLabelText("Not set").length).toBeGreaterThan(0);
+    expect(nextColumn()).toBe("—");
+  });
+});
+
+describe("a deadline stops being a next date once the application is out", () => {
+  function nextColumn() {
+    const row = within(screen.getByRole("table")).getAllByRole("row")[1];
+    return within(row).getAllByRole("cell")[3].textContent?.trim() ?? "";
+  }
+
+  // The deadline stays on the record; it just is not something still to do.
+  const submitted = [
+    "Applied",
+    "Screening",
+    "Assessment",
+    "Interview",
+    "Offer",
+    "Rejected",
+    "Withdrawn",
+    "Accepted",
+  ] as const;
+
+  for (const status of submitted) {
+    it(`hides a stored deadline at ${status}`, async () => {
+      cleanup();
+      await renderList({
+        rows: [
+          application({
+            current_status: status,
+            application_deadline: "2026-09-21",
+            next_action: null,
+            next_action_due_date: null,
+          }),
+        ],
+      });
+
+      expect(nextColumn()).toBe("—");
+    });
+  }
+
+  it("hides it even when no applied date was ever recorded", async () => {
+    // `date_applied` is optional, so it can never be the test for whether an
+    // application went out.
+    await renderList({
+      rows: [
+        application({
+          current_status: "Applied",
+          date_applied: null,
+          application_deadline: "2026-09-21",
+        }),
+      ],
+    });
+
+    expect(nextColumn()).toBe("—");
+  });
+
+  it("still shows a next action once submitted", async () => {
+    await renderList({
+      rows: [
+        application({
+          current_status: "Applied",
+          date_applied: null,
+          next_action: "Follow up with recruiter",
+          next_action_due_date: "2026-08-28",
+          application_deadline: "2026-09-21",
+        }),
+      ],
+    });
+
+    expect(nextColumn()).toBe("Aug 28, 2026");
   });
 });
 

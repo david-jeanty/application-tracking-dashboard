@@ -5,6 +5,8 @@ import { ApplicationStatusLabel } from "@/components/applications/application-st
 import { CompactLifecycleRail } from "@/components/applications/lifecycle-rail";
 import { CompanyLogo } from "@/components/branding/company-logo";
 import { ButtonLink } from "@/components/ui/button";
+import { PRE_SUBMISSION_STATUSES } from "@/lib/analytics/definitions";
+import type { ApplicationStatus } from "@/lib/applications/constants";
 import { buildLifecycles, type Lifecycle } from "@/lib/applications/lifecycle";
 import { displayOptionalText } from "@/lib/applications/mapper";
 import {
@@ -24,20 +26,45 @@ function NotSet() {
   return <span aria-label="Not set">—</span>;
 }
 
+/** Which of the record's dates a row ended up showing, so it can be named. */
+type RowDate =
+  | { kind: "next-action"; date: string }
+  | { kind: "deadline"; date: string }
+  | null;
+
 /**
  * The one date a row shows.
  *
  * A recorded next action is what the student asked to be reminded of, so it
- * wins. Before anything has been submitted the deadline is the date that
- * matters instead. Both are facts already on the record — nothing here works
- * out what the student *should* do next.
+ * wins outright. Failing that, an application deadline is shown only while the
+ * application has not been submitted: once it is out, the deadline has served
+ * its purpose, and repeating it would be telling a student about work they
+ * have already done.
+ *
+ * Submission is read from the status, never from `date_applied`. That column
+ * is optional — an application can be sitting at Interview with no date
+ * recorded — so using it would leak deadlines onto rows long past them. The
+ * status vocabulary is reused from the analytics definitions rather than
+ * restated here, so this cannot drift from what the dashboard means by the
+ * same word.
+ *
+ * Both branches are facts already on the record. Nothing here works out what
+ * the student *should* do next.
  */
-function rowDate(application: ApplicationListItem): string | null {
+function rowDate(application: ApplicationListItem): RowDate {
   if (application.next_action && application.next_action_due_date) {
-    return application.next_action_due_date;
+    return { kind: "next-action", date: application.next_action_due_date };
   }
-  if (!application.date_applied) return application.application_deadline;
-  return application.next_action_due_date ?? application.application_deadline;
+
+  const notYetSubmitted = (
+    PRE_SUBMISSION_STATUSES as readonly ApplicationStatus[]
+  ).includes(application.current_status);
+
+  if (notYetSubmitted && application.application_deadline) {
+    return { kind: "deadline", date: application.application_deadline };
+  }
+
+  return null;
 }
 
 function LocationAndTerm({
@@ -133,7 +160,8 @@ function MobileApplicationRow({
               <>
                 {" · "}
                 <span className="text-foreground-secondary">
-                  Next {formatDateOnly(date)}
+                  {date.kind === "deadline" ? "Deadline" : "Next"}{" "}
+                  {formatDateOnly(date.date)}
                 </span>
               </>
             ) : null}
@@ -307,7 +335,7 @@ export async function ApplicationList({
                     <LocationAndTerm application={application} />
                   </td>
                   <td className="py-3 text-[13px] text-foreground-secondary">
-                    {date ? formatDateOnly(date) : <NotSet />}
+                    {date ? formatDateOnly(date.date) : <NotSet />}
                   </td>
                 </tr>
               );
