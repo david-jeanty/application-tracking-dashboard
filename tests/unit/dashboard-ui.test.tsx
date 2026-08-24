@@ -44,13 +44,13 @@ describe("needs attention", () => {
           attentionItem({ reason: "overdue-action" }),
           attentionItem({
             applicationId: "b",
-            reason: "deadline-soon",
+            reason: "deadline-critical",
             timing: "Deadline tomorrow",
           }),
           attentionItem({
             applicationId: "c",
-            reason: "stale",
-            timing: "No status movement for 17 days",
+            reason: "action-due-soon",
+            timing: "Due in 5 days",
           }),
         ]}
       />,
@@ -60,7 +60,65 @@ describe("needs attention", () => {
     // nothing about an entry is knowable only from a swatch.
     expect(screen.getByText("Overdue")).toBeInTheDocument();
     expect(screen.getByText("Deadline")).toBeInTheDocument();
-    expect(screen.getByText("No movement")).toBeInTheDocument();
+    expect(screen.getByText("Next action")).toBeInTheDocument();
+  });
+
+  it("collapses the five priority tiers to three readable labels", () => {
+    render(
+      <NeedsAttention
+        items={[
+          attentionItem({ applicationId: "a", reason: "deadline-critical" }),
+          attentionItem({ applicationId: "b", reason: "deadline-important" }),
+          attentionItem({ applicationId: "c", reason: "action-due-now" }),
+          attentionItem({ applicationId: "d", reason: "action-due-soon" }),
+        ]}
+      />,
+    );
+
+    // Tiers exist to rank the list; labels exist to say what kind of thing an
+    // entry is. A student does not need to read the ranking.
+    expect(screen.getAllByText("Deadline")).toHaveLength(2);
+    expect(screen.getAllByText("Next action")).toHaveLength(2);
+  });
+
+  it("shows why a deadline still applies, without advising what to do", () => {
+    render(
+      <NeedsAttention
+        items={[
+          attentionItem({
+            reason: "deadline-important",
+            detail: "Business Analyst Intern",
+            timing: "Deadline in 3 days",
+            note: "Saved 2 days ago · Still Interested",
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Business Analyst Intern")).toBeInTheDocument();
+    expect(screen.getByText("Deadline in 3 days")).toBeInTheDocument();
+    expect(
+      screen.getByText("Saved 2 days ago · Still Interested"),
+    ).toBeInTheDocument();
+  });
+
+  it("carries no note on a next-action entry", () => {
+    render(<NeedsAttention items={[attentionItem()]} />);
+
+    expect(screen.queryByText(/Still |Saved /)).toBeNull();
+  });
+
+  it("never speaks about employer silence or movement", () => {
+    render(
+      <NeedsAttention
+        items={[
+          attentionItem({ applicationId: "a", reason: "overdue-action" }),
+          attentionItem({ applicationId: "b", reason: "deadline-critical" }),
+        ]}
+      />,
+    );
+
+    expect(screen.queryByText(/no status movement|stale|no movement/i)).toBeNull();
   });
 
   it("links each entry to its own application", () => {
@@ -100,6 +158,12 @@ describe("needs attention", () => {
 
     expect(screen.getByText(/you\u2019re caught up/i)).toBeInTheDocument();
     expect(screen.queryByRole("listitem")).not.toBeInTheDocument();
+  });
+
+  it("explains the empty state without mentioning silence or movement", () => {
+    render(<NeedsAttention items={[]} />);
+
+    expect(screen.queryByText(/movement|quiet|stale|days/i)).toBeNull();
   });
 
   it("manufactures no work in the empty state", () => {

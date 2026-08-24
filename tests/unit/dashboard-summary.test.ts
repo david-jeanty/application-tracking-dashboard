@@ -237,22 +237,45 @@ describe("the whole dashboard comes together", () => {
         next_action_due_date: "2026-08-24",
       }),
       application({ id: "quiet", company_name: "BMO", current_status: "Screening" }),
+      application({
+        id: "closing",
+        company_name: "Shopify",
+        current_status: "Interested",
+        application_deadline: "2026-08-29",
+        created_at: "2026-08-20T12:00:00.000Z",
+      }),
     ]),
     ok([
       timelineEvent({ application_id: "overdue", changed_at: "2026-08-25T16:00:00.000Z" }),
       timelineEvent({ application_id: "quiet", changed_at: "2026-07-20T16:00:00.000Z" }),
+      timelineEvent({
+        application_id: "closing",
+        new_status: "Interested",
+        changed_at: "2026-08-20T16:00:00.000Z",
+      }),
     ]),
     TODAY,
     ZONE,
   );
 
-  it("surfaces the overdue follow-up first and the quiet application after", () => {
+  it("surfaces the overdue follow-up, then the unsubmitted deadline", () => {
     if (built.kind !== "ready") throw new Error("expected a ready dashboard");
 
+    // BMO has been at Screening since July and is deliberately absent: an
+    // employer not replying is not a task the student can act on.
     expect(built.attention.map((item) => [item.companyName, item.reason])).toEqual([
       ["KPMG", "overdue-action"],
-      ["BMO", "stale"],
+      ["Shopify", "deadline-important"],
     ]);
+  });
+
+  it("reads saved age from created_at, through the same zone as everything else", () => {
+    if (built.kind !== "ready") throw new Error("expected a ready dashboard");
+
+    const deadline = built.attention.find(
+      (item) => item.reason === "deadline-important",
+    );
+    expect(deadline?.note).toBe("Saved 6 days ago · Still Interested");
   });
 
   it("reports the pipeline, the week, and recent activity together", () => {
@@ -261,6 +284,6 @@ describe("the whole dashboard comes together", () => {
     expect(built.pipeline.find((stage) => stage.status === "Applied")?.count).toBe(1);
     expect(built.week.weekStart).toBe("2026-08-24");
     expect(built.week.submitted).toBe(1);
-    expect(built.activity).toHaveLength(2);
+    expect(built.activity).toHaveLength(3);
   });
 });

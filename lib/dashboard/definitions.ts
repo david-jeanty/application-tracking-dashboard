@@ -1,5 +1,5 @@
 import type { ApplicationStatus } from "@/lib/applications/constants";
-import { ACTIVE_STATUSES } from "@/lib/analytics/definitions";
+import { PRE_SUBMISSION_STATUSES } from "@/lib/analytics/definitions";
 
 /**
  * The thresholds and vocabulary the dashboard is defined from.
@@ -21,20 +21,26 @@ import { ACTIVE_STATUSES } from "@/lib/analytics/definitions";
 export const UPCOMING_WINDOW_DAYS = 7;
 
 /**
- * How long an application sits without moving before it is called stale.
+ * Today or tomorrow: near enough that nothing else is allowed to qualify it.
  *
- * Fourteen days, not twenty-one. Employer response windows for student and
- * co-op roles run one to two weeks, so at fourteen days a follow-up is both
- * warranted and still timely; by twenty-one the useful moment to nudge has
- * usually passed, which would make the card a record of regret rather than a
- * prompt to act.
- *
- * "Moved" means a status event, never an edit. A student who fixed a typo in
- * their notes yesterday has not heard from anybody, and reading `updated_at`
- * would silently clear the flag for them — which is why staleness is measured
- * from `application_status_history`.
+ * A deadline inside this window is shown whatever else is true of the
+ * application, including one saved minutes ago. Outside it, an approaching
+ * deadline has to earn its place.
  */
-export const STALE_AFTER_DAYS = 14;
+export const IMMEDIATE_WINDOW_DAYS = 1;
+
+/**
+ * How long an unsubmitted application must have been saved before an
+ * approaching deadline is worth mentioning.
+ *
+ * Two days. A student who saved a posting this morning knows it is there and
+ * knows when it closes; telling them again the same day is noise, and noise is
+ * what makes a student stop reading the card. Once a couple of days have
+ * passed, a posting they meant to finish and did not is genuinely worth
+ * surfacing. Deadlines today or tomorrow ignore this entirely — those are
+ * urgent whenever the application was saved.
+ */
+export const DEADLINE_MINIMUM_SAVED_DAYS = 2;
 
 /**
  * How many attention entries the dashboard shows at once.
@@ -49,18 +55,21 @@ export const ATTENTION_LIMIT = 6;
 export const ACTIVITY_LIMIT = 6;
 
 /**
- * The statuses an application can be stale in.
+ * The statuses in which an application deadline is still an action.
  *
- * Exactly the analytics `ACTIVE_STATUSES` — Applied, Screening, Assessment,
- * Interview. That set already excludes both ends for the right reasons:
- * Interested and Preparing were never sent anywhere, so silence from an
- * employer is not a fact about them, and Rejected, Withdrawn, and Accepted are
- * finished, so silence is the expected state rather than a problem.
+ * Exactly the analytics `PRE_SUBMISSION_STATUSES` — Interested and Preparing.
  *
- * Reused rather than redeclared, so a future change to what "active" means
- * cannot leave the two pages disagreeing.
+ * The action a deadline represents is "finish and submit this application".
+ * Once the application has been sent, the deadline has served its purpose:
+ * nothing about it is actionable, and repeating it would be telling a student
+ * about work they have already done. Everything from Applied onward is
+ * therefore excluded, terminal statuses included.
+ *
+ * Reused rather than redeclared, so a future change to what "not yet
+ * submitted" means cannot leave the dashboard and the analytics page
+ * disagreeing.
  */
-export const STALE_CANDIDATE_STATUSES = ACTIVE_STATUSES;
+export const UNSUBMITTED_STATUSES = PRE_SUBMISSION_STATUSES;
 
 /**
  * The statuses the pipeline snapshot walks, in order.

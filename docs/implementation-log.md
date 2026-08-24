@@ -1,5 +1,105 @@
 # Implementation log
 
+## 2026-08-25 — Needs attention: only what a student can act on
+
+### Scope
+
+A corrective follow-up to Phase 3A. The Needs attention rules only. Pipeline
+snapshot, This week, Recent activity, analytics definitions, MCP, and the schema
+are untouched.
+
+### The product principle
+
+> Needs Attention surfaces commitments the student recorded and opportunities
+> they may miss. Employer silence alone is not treated as a task.
+
+Phase 3A shipped a fourth category — an application flagged after 14 days
+without a status event. It read as advice, and the advice was unfounded: an
+application sitting at Applied is not a task. Nothing about it is for the
+student to do, and the honest reading is usually that the employer has not
+replied yet. Telling somebody to "review" it manufactures work out of silence.
+
+The deadline rule had a related flaw. A deadline's action is "finish and submit
+this application", so once the application is submitted the deadline has served
+its purpose. Showing it afterwards told a student about work they had already
+done.
+
+### The rules now
+
+Three concepts, five priority tiers. Active applications only, one entry per
+application, capped at six.
+
+1. **Overdue next action** — an action exists and its due date is past.
+2. **Unsubmitted deadline, today or tomorrow** — status `Interested` or
+   `Preparing`, deadline not passed. Shown however recently the application was
+   saved.
+3. **Next action due today or tomorrow.**
+4. **Unsubmitted deadline 2–7 days out** — same status rule, and the
+   application must have been saved at least 2 calendar days ago.
+5. **Next action due 2–7 days out.**
+
+Five tiers rather than three, because urgency has to be able to outrank
+category: a posting closing tomorrow matters more than a follow-up due Friday,
+even though a recorded commitment generally outranks a deadline. The tier order
+*is* the `ATTENTION_REASONS` array order, so ranking stays a property of the
+vocabulary. The five tiers collapse to three labels in the UI — Overdue,
+Deadline, Next action — because tiers rank the list and labels name the kind of
+thing an entry is.
+
+The unsubmitted status set is the analytics `PRE_SUBMISSION_STATUSES`, reused
+rather than restated. Everything from Applied onward is excluded, terminal
+statuses included.
+
+The two-day minimum is what keeps the card quiet. A student who saved a posting
+this morning knows it is there and knows when it closes; repeating it the same
+day is noise, and noise is what makes somebody stop reading the section.
+Deadlines today or tomorrow bypass it entirely.
+
+Nothing is inferred. If the student did not write an action down, there is no
+action.
+
+### Saved age
+
+`created_at` was already on the list projection and on `ApplicationListItem`, so
+**no schema, query, or projection changed**. `buildDashboard` converts it to a
+calendar day through `dateOnlyFromTimestamp` in the same zone it already uses
+for history timestamps, and `AttentionApplication` carries `createdOn` as a
+date-only string. No timestamp is ever compared to a date-only deadline.
+
+### Removed
+
+`STALE_AFTER_DAYS`, `STALE_CANDIDATE_STATUSES`, the `"stale"` reason, the stale
+classifier branch, `lastMovementByApplication` and `LastMovementByApplication`
+(which existed only to feed it), the "No movement" UI label, the "No status
+movement for N days" copy, and the empty state's reference to applications
+sitting quiet.
+
+`listStatusTimeline` and every history read stay: This week and Recent activity
+still use them. What was removed is the interpretation of silence, not the
+ability to read history.
+
+`needsAttention` no longer takes a movement map — its signature is now
+`(applications, today, limit?)`.
+
+### Verification
+
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run test`: passed, 481 tests across 27 files.
+- `npm run build`: passed.
+- Playwright: 10 credential-free tests passed, 8 authenticated tests correctly
+  skipped for want of credentials.
+
+### Not verified here
+
+No live run against a real database; the authenticated Playwright specs need
+credentials and stayed skipped.
+
+No pgTAP suite was added: this correction changes pure classification logic and
+introduces no database behaviour. `supabase/tests/003`, `004`, and `005` remain
+written but not executed, Docker being unreachable, and must not be described as
+passing.
+
 ## 2026-08-24 — Phase 3A: dashboard command centre
 
 ### Scope
@@ -62,6 +162,12 @@ active-only, matching the applications list.
 
 ### Needs attention
 
+> Superseded on 2026-08-25. This entry originally shipped a fourth category —
+> stale submitted applications, flagged after 14 days without a status event —
+> and a deadline rule that applied at any status. Both were removed; see the
+> 2026-08-25 entry for the rules that hold now. The description below is kept
+> only as a record of what was built.
+
 Active applications only, one entry per application, capped at six.
 
 1. **Overdue next action** — an action exists and its due date is past.
@@ -73,9 +179,6 @@ Active applications only, one entry per application, capped at six.
 An application matching several reasons appears once, under the highest, so one
 company cannot push five others off the card. A due date with no action is
 ignored, because a date alone describes nothing to do.
-
-Staleness is measured from `application_status_history`, never `updated_at`: a
-student who fixed a typo yesterday has not heard from anybody.
 
 ### This week
 
