@@ -62,7 +62,7 @@ export function QuickUpdate({
           </label>
           <div className="flex flex-col gap-3 sm:flex-row">
             <select
-              className={selectClassName}
+              className={`${selectClassName} sm:max-w-56`}
               defaultValue={application.current_status}
               id="quickStatus"
               name="currentStatus"

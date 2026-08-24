@@ -171,7 +171,8 @@ describe("what a mobile record shows", () => {
     ).toBeInTheDocument();
     expect(within(record).getByText("Applied")).toBeInTheDocument();
     expect(within(record).getByText(/Toronto · Winter 2027/)).toBeInTheDocument();
-    expect(within(record).getByText(/Next Aug 28, 2026/)).toBeInTheDocument();
+    expect(record.textContent).toContain("Next: Follow up");
+    expect(record.textContent).toContain("Aug 28, 2026");
   });
 
   it("leaves the date out entirely when there is none to show", async () => {
@@ -179,7 +180,8 @@ describe("what a mobile record shows", () => {
 
     const record = within(mobileList()).getAllByRole("listitem")[0];
 
-    expect(within(record).queryByText(/Next |Deadline /)).not.toBeInTheDocument();
+    expect(record.textContent).not.toContain("Next:");
+    expect(record.textContent).not.toContain("Deadline:");
   });
 
   it("names a next action as Next, since there is no column heading here", async () => {
@@ -194,7 +196,8 @@ describe("what a mobile record shows", () => {
 
     const record = within(mobileList()).getAllByRole("listitem")[0];
 
-    expect(within(record).getByText(/Next Aug 28, 2026/)).toBeInTheDocument();
+    expect(record.textContent).toContain("Next: Follow up");
+    expect(record.textContent).toContain("Aug 28, 2026");
   });
 
   it("names a pre-submission deadline as Deadline", async () => {
@@ -209,8 +212,8 @@ describe("what a mobile record shows", () => {
 
     const record = within(mobileList()).getAllByRole("listitem")[0];
 
-    expect(within(record).getByText(/Deadline Sep 3, 2026/)).toBeInTheDocument();
-    expect(within(record).queryByText(/Next /)).not.toBeInTheDocument();
+    expect(record.textContent).toContain("Deadline: Sep 3, 2026");
+    expect(record.textContent).not.toContain("Next:");
   });
 
   it("shows no deadline on a submitted application", async () => {
@@ -226,7 +229,7 @@ describe("what a mobile record shows", () => {
 
     const record = within(mobileList()).getAllByRole("listitem")[0];
 
-    expect(within(record).queryByText(/Deadline /)).not.toBeInTheDocument();
+    expect(record.textContent).not.toContain("Deadline");
   });
 });
 
@@ -238,7 +241,7 @@ describe("the date a row surfaces", () => {
     return cell.textContent?.trim() ?? "";
   }
 
-  it("shows a recorded next-action due date", async () => {
+  it("names the action, then dates it", async () => {
     await renderList({
       rows: [
         application({
@@ -249,7 +252,8 @@ describe("the date a row surfaces", () => {
       ],
     });
 
-    expect(nextColumn()).toBe("Aug 28, 2026");
+    // A bare date under a "Next" heading never said next what.
+    expect(nextColumn()).toBe("Follow up with recruiterAug 28, 2026");
   });
 
   it("shows a deadline while the application is still only Interested", async () => {
@@ -262,7 +266,7 @@ describe("the date a row surfaces", () => {
       ],
     });
 
-    expect(nextColumn()).toBe("Sep 3, 2026");
+    expect(nextColumn()).toBe("DeadlineSep 3, 2026");
   });
 
   it("shows a deadline while the application is still being Prepared", async () => {
@@ -275,7 +279,7 @@ describe("the date a row surfaces", () => {
       ],
     });
 
-    expect(nextColumn()).toBe("Sep 3, 2026");
+    expect(nextColumn()).toBe("DeadlineSep 3, 2026");
   });
 
   it("lets an explicit next action outrank a deadline before submission", async () => {
@@ -290,7 +294,7 @@ describe("the date a row surfaces", () => {
       ],
     });
 
-    expect(nextColumn()).toBe("Aug 28, 2026");
+    expect(nextColumn()).toBe("Ask for a referralAug 28, 2026");
   });
 
   it("shows a dash when the record carries neither", async () => {
@@ -365,7 +369,7 @@ describe("a deadline stops being a next date once the application is out", () =>
       ],
     });
 
-    expect(nextColumn()).toBe("Aug 28, 2026");
+    expect(nextColumn()).toBe("Follow up with recruiterAug 28, 2026");
   });
 });
 

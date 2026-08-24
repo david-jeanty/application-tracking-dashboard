@@ -88,7 +88,7 @@ export default async function ApplicationDetailPage({
     .join(" · ");
 
   return (
-    <div className="max-w-4xl">
+    <div className="w-full">
       <Link
         className="inline-flex items-center gap-1.5 rounded-sm text-[13px] text-foreground-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
         href="/applications"
@@ -175,7 +175,7 @@ export default async function ApplicationDetailPage({
           <p className="text-[11px] font-medium uppercase tracking-wide text-foreground-muted">
             Lifecycle
           </p>
-          <LabelledLifecycleRail className="mt-3" lifecycle={lifecycle} />
+          <LabelledLifecycleRail className="mt-3 max-w-3xl" lifecycle={lifecycle} />
         </div>
       ) : null}
 

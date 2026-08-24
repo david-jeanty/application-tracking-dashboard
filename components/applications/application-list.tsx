@@ -28,7 +28,7 @@ function NotSet() {
 
 /** Which of the record's dates a row ended up showing, so it can be named. */
 type RowDate =
-  | { kind: "next-action"; date: string }
+  | { kind: "next-action"; date: string; action: string }
   | { kind: "deadline"; date: string }
   | null;
 
@@ -53,7 +53,11 @@ type RowDate =
  */
 function rowDate(application: ApplicationListItem): RowDate {
   if (application.next_action && application.next_action_due_date) {
-    return { kind: "next-action", date: application.next_action_due_date };
+    return {
+      kind: "next-action",
+      date: application.next_action_due_date,
+      action: application.next_action,
+    };
   }
 
   const notYetSubmitted = (
@@ -156,16 +160,22 @@ function MobileApplicationRow({
           <p className="mt-2 text-[13px] text-foreground-muted">
             {location ? `${location} · ` : ""}
             {application.work_term_season}
-            {date ? (
-              <>
-                {" · "}
-                <span className="text-foreground-secondary">
-                  {date.kind === "deadline" ? "Deadline" : "Next"}{" "}
-                  {formatDateOnly(date.date)}
-                </span>
-              </>
-            ) : null}
           </p>
+          {date ? (
+            <p className="mt-1 truncate text-[13px] text-foreground-secondary">
+              {date.kind === "next-action" ? (
+                <>
+                  Next: {date.action}
+                  <span className="text-foreground-muted">
+                    {" · "}
+                    {formatDateOnly(date.date)}
+                  </span>
+                </>
+              ) : (
+                <>Deadline: {formatDateOnly(date.date)}</>
+              )}
+            </p>
+          ) : null}
         </div>
       </div>
     </li>
@@ -284,13 +294,13 @@ export async function ApplicationList({
               <th className="py-2.5 pr-4 font-medium" scope="col">
                 Employer / role
               </th>
-              <th className="w-56 py-2.5 pr-4 font-medium" scope="col">
+              <th className="w-52 py-2.5 pr-4 font-medium" scope="col">
                 Progress
               </th>
-              <th className="w-48 py-2.5 pr-4 font-medium" scope="col">
+              <th className="w-44 py-2.5 pr-4 font-medium" scope="col">
                 Location / term
               </th>
-              <th className="w-28 py-2.5 font-medium" scope="col">
+              <th className="w-56 py-2.5 font-medium" scope="col">
                 Next
               </th>
             </tr>
@@ -334,8 +344,36 @@ export async function ApplicationList({
                   <td className="py-3 pr-4 text-[13px]">
                     <LocationAndTerm application={application} />
                   </td>
-                  <td className="py-3 text-[13px] text-foreground-secondary">
-                    {date ? formatDateOnly(date.date) : <NotSet />}
+                  <td className="py-3 text-[13px]">
+                    {date ? (
+                      <>
+                        {/*
+                          The heading says "Next"; it does not say next what.
+                          The action itself is the useful line, clamped so one
+                          long follow-up cannot widen the column.
+                        */}
+                        {/*
+                          A definite width, because a `<th>` width is only a
+                          hint to an auto-layout table: without it the cell
+                          grows to fit the longest action instead of clamping.
+                        */}
+                        <span
+                          className="block w-52 truncate text-foreground"
+                          title={
+                            date.kind === "next-action" ? date.action : undefined
+                          }
+                        >
+                          {date.kind === "next-action" ? date.action : "Deadline"}
+                        </span>
+                        <span className="block text-foreground-muted">
+                          {formatDateOnly(date.date)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-foreground-secondary">
+                        <NotSet />
+                      </span>
+                    )}
                   </td>
                 </tr>
               );
