@@ -7,7 +7,11 @@ import {
   type ActiveApplicationFilters,
 } from "@/lib/applications/repository";
 import { hasActiveFilters } from "@/lib/applications/search-params";
-import { buildPipelineBoard, type PipelineColumn } from "@/lib/pipeline/board";
+import {
+  buildPipelineBoard,
+  type PipelineBoard as Board,
+  type PipelineColumn,
+} from "@/lib/pipeline/board";
 import { createClient } from "@/lib/supabase/server";
 
 /** One status column, with everything currently sitting at it. */
@@ -21,22 +25,14 @@ function Column({
   const headingId = `pipeline-${column.status.toLowerCase()}`;
 
   return (
-    <section
-      aria-labelledby={headingId}
-      /*
-        Empty columns are shown on the board, where a gap in the sequence would
-        be harder to read than an honest zero and the column is still somewhere
-        to move an application to. Stacked on a phone, that same column is a
-        heading with nothing under it, repeated for every status the student is
-        not using, so there it is left out — nothing is hidden but a zero the
-        board above already reports.
-      */
-      className={
-        column.count
-          ? "md:w-64 md:shrink-0"
-          : "hidden md:block md:w-64 md:shrink-0"
-      }
-    >
+    /*
+      Every status is a column at every width, empty ones included. A gap in
+      the sequence is harder to read than an honest zero, the column is still
+      somewhere to move an application to, and a student scrolling a phone
+      should be able to count the same ten headings in the same order they see
+      on a desktop rather than a shorter list that changes as the search moves.
+    */
+    <section aria-labelledby={headingId} className="md:w-64 md:shrink-0">
       <div className="flex items-baseline justify-between gap-3 border-b border-border pb-2">
         <h2
           className="text-[13px] font-medium text-foreground"
@@ -50,7 +46,10 @@ function Column({
       </div>
 
       {column.count ? (
-        <ul aria-label={`${column.status} applications`} className="mt-3 space-y-2">
+        <ul
+          aria-label={`${column.status} applications`}
+          className="mt-3 space-y-2"
+        >
           {column.applications.map((application) => (
             <PipelineCard
               application={application}
@@ -60,6 +59,8 @@ function Column({
           ))}
         </ul>
       ) : (
+        // Quiet enough to scroll past, present enough that the column reads as
+        // empty rather than as something that failed to load.
         <p className="mt-3 text-[12px] text-foreground-muted">None</p>
       )}
     </section>
@@ -79,6 +80,44 @@ export function PipelineBoardLoading() {
         </div>
       ))}
       <span className="sr-only">Loading pipeline…</span>
+    </div>
+  );
+}
+
+/**
+ * The board's layout: the count, and the columns beneath it.
+ *
+ * Split from the read above it so the same markup can be rendered from a
+ * built board whatever produced it — the page's owner-scoped query, or a set
+ * of fixtures under visual review. It holds no data access of its own.
+ */
+export function PipelineColumns({
+  board,
+  filters = {},
+}: {
+  board: Board;
+  filters?: ActiveApplicationFilters;
+}) {
+  return (
+    <div>
+      <p className="text-[13px] text-foreground-muted">
+        {board.total} application{board.total === 1 ? "" : "s"}
+      </p>
+
+      {/*
+        One composition for every width. The columns sit side by side and scroll
+        horizontally when there is room for a board, and stack into the phone's
+        reading order when there is not — rather than two markups where a screen
+        reader would meet every application twice.
+
+        The horizontal padding is there so a focus ring on a card at the edge of
+        a column is not clipped by the scroll container.
+      */}
+      <div className="mt-5 flex flex-col gap-8 md:-mx-1 md:flex-row md:items-start md:gap-4 md:overflow-x-auto md:px-1 md:pb-3">
+        {board.columns.map((column) => (
+          <Column column={column} filters={filters} key={column.status} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -152,30 +191,20 @@ export async function PipelineBoard({
           Add your first application and it will appear in the column for the
           status you gave it.
         </p>
+        {/*
+          `/applications` rather than an `/applications/new` this app does not
+          have: adding is a panel the list page opens, and the button that
+          opens it is the first thing on that page. Sending somebody to a route
+          that 404s would be worse than not offering the way in at all.
+        */}
+        <div className="mt-5">
+          <ButtonLink href="/applications" variant="secondary">
+            Add an application
+          </ButtonLink>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div>
-      <p className="text-[13px] text-foreground-muted">
-        {board.total} application{board.total === 1 ? "" : "s"}
-      </p>
-
-      {/*
-        One composition for every width. The columns sit side by side and scroll
-        horizontally when there is room for a board, and stack into the phone's
-        reading order when there is not — rather than two markups where a screen
-        reader would meet every application twice.
-
-        The horizontal padding is there so a focus ring on a card at the edge of
-        a column is not clipped by the scroll container.
-      */}
-      <div className="mt-5 flex flex-col gap-8 md:-mx-1 md:flex-row md:items-start md:gap-4 md:overflow-x-auto md:px-1 md:pb-3">
-        {board.columns.map((column) => (
-          <Column column={column} filters={filters} key={column.status} />
-        ))}
-      </div>
-    </div>
-  );
+  return <PipelineColumns board={board} filters={filters} />;
 }

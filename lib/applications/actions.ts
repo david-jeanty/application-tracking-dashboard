@@ -13,6 +13,7 @@ import {
 } from "@/lib/applications/repository";
 import type { QuickUpdateResult } from "@/lib/applications/repository";
 import {
+  CATEGORY_PARAM,
   parsePipelineFilters,
   SEARCH_PARAM,
   toPipelineUrl,
@@ -153,6 +154,9 @@ const APPLICATIONS_PATH = "/applications";
 
 /** The board's own path. Fixed, like every other redirect target here. */
 const PIPELINE_PATH = "/pipeline";
+
+/** Refreshed after a status change only, for the reason given at each call. */
+const ANALYTICS_PATH = "/analytics";
 
 /**
  * Moves one application across the archive line.
@@ -322,6 +326,13 @@ async function applyQuickUpdate(
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/applications/${applicationId}/edit`);
 
+  // Analytics only when the status moved. A status change writes a
+  // status-history event, which is what every figure on that page is drawn
+  // from; saving or clearing a next action writes two columns no analytics
+  // read selects, so refreshing it there would be work for a page that cannot
+  // have changed.
+  if (outcome === "status") revalidatePath(ANALYTICS_PATH);
+
   redirect(`/applications/${applicationId}?quick=${outcome}`);
 }
 
@@ -409,7 +420,7 @@ export async function clearNextActionAction(
 /**
  * The board a move came from, rebuilt from values the request carried.
  *
- * The two filter fields are read by name and put back through the board's own
+ * The three filter fields are read by name and put back through the board's own
  * parser, so a crafted post gets the same treatment a crafted URL does: an
  * over-long or unrecognised value is dropped, and what survives is re-encoded
  * into a fresh query string against a fixed internal path. Nothing the request
@@ -422,6 +433,7 @@ function pipelineReturnUrl(
   const filters = parsePipelineFilters({
     [SEARCH_PARAM]: String(formData.get(SEARCH_PARAM) ?? ""),
     [WORK_TERM_PARAM]: String(formData.get(WORK_TERM_PARAM) ?? ""),
+    [CATEGORY_PARAM]: String(formData.get(CATEGORY_PARAM) ?? ""),
   });
 
   return toPipelineUrl(filters, notice);
@@ -435,7 +447,7 @@ function pipelineReturnUrl(
  * board-specific concept, so it reuses `setApplicationStatus` rather than
  * introducing a second way for a status to change. Nothing infers
  * `date_applied`, touches the next action, archives anything, or enforces an
- * order on the statuses — a student may drag an application backward from
+ * order on the statuses — a student may move an application backward from
  * Interview to Applied, because real searches do.
  *
  * What differs from the quick update is only where the student ends up: back
@@ -479,10 +491,14 @@ export async function moveApplicationStatusAction(
   }
 
   // The card changes column here, the list and dashboard show the new status,
-  // and the edit form must not open with a stale copy of it.
+  // and the edit form must not open with a stale copy of it. Analytics too:
+  // the database's trigger has just written a status-history event, and every
+  // figure on that page — the funnel, the conversion rates, source
+  // performance — is drawn from that history.
   revalidatePath(PIPELINE_PATH);
   revalidatePath(APPLICATIONS_PATH);
   revalidatePath("/dashboard");
+  revalidatePath(ANALYTICS_PATH);
   revalidatePath(`/applications/${parsedId.data}`);
   revalidatePath(`/applications/${parsedId.data}/edit`);
 

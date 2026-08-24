@@ -123,26 +123,27 @@ export function describeActiveFilters(
 /**
  * Reads the pipeline board's filters out of a URL.
  *
- * The same parser as the list's, minus status and category. Status is what the
- * board's columns *are*: filtering it away would leave a board of one column,
- * which is the applications list with extra steps. Category is left out
- * because the board is already the wider surface of the two — a third control
- * beside a horizontally scrolling board buys less than the room it costs, and
- * a student who wants to narrow by category has the list for it.
+ * The same parser as the list's, minus status. Status is what the board's
+ * columns *are*: filtering it away would leave a board of one column, which is
+ * the applications list with extra steps. Search, work term and role category
+ * all narrow *which* applications the board is about, which is a different
+ * question from where each one stands, so all three are kept.
  *
  * Sharing `ActiveApplicationFilters` rather than a pipeline-specific type is
  * deliberate: the board reads through the same owner-scoped, archive-safe
  * `listActiveApplications` the list uses, so it must not be able to describe a
- * filter that read would not accept.
+ * filter that read would not accept — and the category filter it produces is
+ * the same equality match on `normalized_job_category` the list already sends.
  */
 export function parsePipelineFilters(
   params: RawSearchParams,
 ): ActiveApplicationFilters {
-  const { search, workTermSeason } = parseApplicationFilters(params);
+  const { search, workTermSeason, category } = parseApplicationFilters(params);
 
   return {
     ...(search ? { search } : {}),
     ...(workTermSeason ? { workTermSeason } : {}),
+    ...(category ? { category } : {}),
   };
 }
 
@@ -168,6 +169,7 @@ export function toPipelineUrl(
   if (filters.workTermSeason) {
     params.set(WORK_TERM_PARAM, filters.workTermSeason);
   }
+  if (filters.category) params.set(CATEGORY_PARAM, filters.category);
   if (notice) params.set(MOVE_PARAM, notice);
 
   const query = params.toString();

@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { JOB_CATEGORIES } from "@/lib/applications/constants";
 import type { ActiveApplicationFilters } from "@/lib/applications/repository";
 import {
+  CATEGORY_PARAM,
   hasActiveFilters,
   SEARCH_PARAM,
   WORK_TERM_PARAM,
@@ -19,8 +21,8 @@ const selectClassName =
  * is doing what it always does with a form. No client component, and the board
  * keeps rendering on the server.
  *
- * Two controls rather than the list's four. Status is what the columns are, and
- * category is left to the list — see `parsePipelineFilters` for why.
+ * Three controls rather than the list's four. Status is the one the board does
+ * not offer, because the columns are the statuses — see `parsePipelineFilters`.
  *
  * The work-term options come from the student's own active applications, since
  * `work_term_season` is free text rather than an enum.
@@ -45,7 +47,7 @@ export function PipelineFilters({
   return (
     <form
       action="/pipeline"
-      className="flex flex-col gap-2.5 sm:flex-row sm:items-center"
+      className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center"
       method="get"
     >
       <div className="sm:min-w-56 sm:flex-1">
@@ -62,24 +64,50 @@ export function PipelineFilters({
         />
       </div>
 
-      <div className="sm:w-44">
-        <label className="sr-only" htmlFor="pipeline-work-term">
-          Filter by work term
-        </label>
-        <select
-          className={selectClassName}
-          defaultValue={filters.workTermSeason ?? ""}
-          disabled={workTerms.length === 0}
-          id="pipeline-work-term"
-          name={WORK_TERM_PARAM}
-        >
-          <option value="">All work terms</option>
-          {workTerms.map((season) => (
-            <option key={season} value={season}>
-              {season}
-            </option>
-          ))}
-        </select>
+      {/*
+        The two narrow controls share a row of their own on a phone, then
+        dissolve into the same flex row as the search field once there is width
+        for it.
+      */}
+      <div className="grid grid-cols-2 gap-2 sm:contents">
+        <div className="sm:w-40">
+          <label className="sr-only" htmlFor="pipeline-work-term">
+            Filter by work term
+          </label>
+          <select
+            className={selectClassName}
+            defaultValue={filters.workTermSeason ?? ""}
+            disabled={workTerms.length === 0}
+            id="pipeline-work-term"
+            name={WORK_TERM_PARAM}
+          >
+            <option value="">All work terms</option>
+            {workTerms.map((season) => (
+              <option key={season} value={season}>
+                {season}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="sm:w-44">
+          <label className="sr-only" htmlFor="pipeline-category">
+            Filter by role type
+          </label>
+          <select
+            className={selectClassName}
+            defaultValue={filters.category ?? ""}
+            id="pipeline-category"
+            name={CATEGORY_PARAM}
+          >
+            <option value="">All role types</option>
+            {JOB_CATEGORIES.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <div className="flex gap-2">

@@ -8,6 +8,7 @@ import { contextDate } from "@/lib/applications/context-date";
 import { displayOptionalText } from "@/lib/applications/mapper";
 import type { ActiveApplicationFilters } from "@/lib/applications/repository";
 import {
+  CATEGORY_PARAM,
   SEARCH_PARAM,
   WORK_TERM_PARAM,
 } from "@/lib/applications/search-params";
@@ -15,41 +16,68 @@ import type { ApplicationListItem } from "@/lib/applications/types";
 import { formatDateOnly } from "@/lib/dates/date-only";
 
 /*
- * The board's controls stay at the shell's standard 36px minimum rather than
- * shrinking to suit a small card: it is the touch target every other control
- * in the app offers, and a board is the surface most likely to be used on a
- * phone with a thumb.
+ * Quiet until it is wanted, and a full-sized target when it is.
+ *
+ * The control keeps the shell's standard 36px minimum height — it is the touch
+ * target every other control in the app offers, and a board is the surface
+ * most likely to be used on a phone with a thumb — but it drops the border and
+ * fill it would otherwise carry, and it is only as wide as its widest status.
+ * A bordered, card-wide bar on every card made the move control the loudest
+ * thing in a column, competing with the roles it belongs to. The native
+ * dropdown arrow still marks it as a menu, and the border returns on hover and
+ * focus.
  */
 const selectClassName =
-  "min-h-9 w-full rounded-control border border-border bg-surface px-1.5 text-base text-foreground-secondary hover:border-border-strong focus:border-accent focus:outline-none focus-visible:outline-none sm:text-[12px]";
+  "min-h-9 max-w-full rounded-control border border-transparent bg-transparent px-1 text-base text-foreground-muted hover:border-border hover:text-foreground-secondary focus:border-accent focus:text-foreground-secondary focus:outline-none focus-visible:outline-none sm:text-[12px]";
 
 /**
- * The one line of context a card carries, and only one.
+ * Where the role is: location and work term, when the record has them.
  *
- * A recorded follow-up or a live deadline is the fact worth a student's
- * attention, and `contextDate` is the same rule the applications list applies,
- * imported rather than restated. When there is neither, the work term is shown
- * instead: it is always recorded, it is what separates two otherwise identical
- * postings, and it is a fact on the record rather than a guess at one.
- *
- * The lifecycle rail is deliberately absent. The column heading above the card
- * already says which stage this application is at, and drawing five dots to
- * repeat it would be the loudest thing on a card the size of a business card.
+ * Quiet metadata rather than the card's point. It is what separates two
+ * postings that would otherwise read identically, and it is always the same
+ * two facts in the same place, so a column can be scanned down rather than
+ * read card by card. Either may be missing — `location` and
+ * `work_term_season` both carry the legacy `Not specified` sentinel — and the
+ * separator goes with whichever is absent.
  */
-function CardContext({ application }: { application: ApplicationListItem }) {
-  const date = contextDate(application);
+function CardPlacement({ application }: { application: ApplicationListItem }) {
+  const location = displayOptionalText(application.location);
   const workTerm = displayOptionalText(application.work_term_season);
 
-  if (!date) {
-    if (!workTerm) return null;
-
-    return (
-      <p className="mt-2.5 text-[12px] text-foreground-muted">{workTerm}</p>
-    );
-  }
+  if (!location && !workTerm) return null;
 
   return (
-    <p className="mt-2.5 flex items-start gap-1.5 text-[12px] text-foreground-muted">
+    <p className="mt-1.5 truncate text-[12px] text-foreground-muted">
+      {[location, workTerm].filter(Boolean).join(" · ")}
+    </p>
+  );
+}
+
+/**
+ * The one thing coming up on this application, when there is one.
+ *
+ * `contextDate` is the shared rule, imported rather than restated: a recorded
+ * next action wins outright, and an application deadline shows only while the
+ * application has not been submitted. Nothing is shown when the record holds
+ * neither — an invented line would push the genuinely urgent cards down the
+ * column.
+ *
+ * Separate from the placement line above rather than a fallback for it. The
+ * two answer different questions — where the role is, and what is coming up —
+ * and collapsing them would mean a card silently lost its location the moment
+ * a follow-up was recorded.
+ *
+ * The lifecycle rail is deliberately absent from the whole card. The column
+ * heading above it already says which stage this application is at, and
+ * drawing five dots to repeat it would be the loudest thing on a card the size
+ * of a business card.
+ */
+function CardNext({ application }: { application: ApplicationListItem }) {
+  const date = contextDate(application);
+  if (!date) return null;
+
+  return (
+    <p className="mt-2 flex items-start gap-1.5 text-[12px] text-foreground-muted">
       <CalendarDays
         aria-hidden="true"
         className="mt-px size-3.5 shrink-0"
@@ -95,28 +123,34 @@ export function PipelineCard({
         />
         <div className="min-w-0">
           {/*
+            The role leads and the employer follows it, as on the applications
+            list: two roles at one employer are the pair a student most needs
+            to tell apart, and a column of eight cards is exactly where that
+            happens.
+
             Both lines sit inside the link, so the card's one stretched target
-            is announced as "RBC Marketing Intern" rather than as an employer
-            name that could belong to any of three postings. The space between
-            them is a real text node rather than something the block layout is
-            trusted to imply, so the accessible name reads as two words however
-            the stylesheet arrives.
+            is announced as "Marketing Intern RBC" rather than as a role that
+            could be at any of three employers. The space between them is a
+            real text node rather than something the block layout is trusted to
+            imply, so the accessible name reads as two words however the
+            stylesheet arrives.
           */}
           <h3 className="text-[14px] font-medium leading-snug text-foreground">
             <Link
               className="after:absolute after:inset-0 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
               href={`/applications/${application.id}`}
             >
-              {application.company_name}{" "}
-              <span className="mt-0.5 block text-[13px] font-normal text-foreground-secondary">
-                {application.original_job_title}
+              {application.original_job_title}{" "}
+              <span className="mt-0.5 block text-[12px] font-normal text-foreground-secondary">
+                {application.company_name}
               </span>
             </Link>
           </h3>
+          <CardPlacement application={application} />
         </div>
       </div>
 
-      <CardContext application={application} />
+      <CardNext application={application} />
 
       {/*
         A native select and a submit button: the status menu is reachable by
@@ -130,7 +164,7 @@ export function PipelineCard({
       */}
       <form
         action={moveApplicationStatusAction}
-        className="relative z-10 mt-3 flex gap-1.5"
+        className="relative z-10 mt-2 flex items-center gap-1"
       >
         <input name="applicationId" type="hidden" value={application.id} />
         {filters.search ? (
@@ -142,6 +176,9 @@ export function PipelineCard({
             type="hidden"
             value={filters.workTermSeason}
           />
+        ) : null}
+        {filters.category ? (
+          <input name={CATEGORY_PARAM} type="hidden" value={filters.category} />
         ) : null}
         <label className="sr-only" htmlFor={moveId}>
           Move {application.original_job_title} at {application.company_name} to
@@ -166,9 +203,9 @@ export function PipelineCard({
           application it belongs to.
         */}
         <Button
-          className="shrink-0 px-2.5 text-[12px]"
+          className="shrink-0 px-2 text-[12px]"
           type="submit"
-          variant="secondary"
+          variant="ghost"
         >
           Move{" "}
           <span className="sr-only">

@@ -127,11 +127,29 @@ describe("every application lands in exactly one column", () => {
   });
 });
 
-describe("the board reads fewer filters than the list", () => {
-  it("keeps the search and the work term", () => {
+describe("the board reads every filter but the status", () => {
+  it("keeps the search, the work term and the role type", () => {
     expect(
-      parsePipelineFilters({ q: "analyst", work_term: "Winter 2027" }),
-    ).toEqual({ search: "analyst", workTermSeason: "Winter 2027" });
+      parsePipelineFilters({
+        q: "analyst",
+        work_term: "Winter 2027",
+        category: "Marketing",
+      }),
+    ).toEqual({
+      search: "analyst",
+      workTermSeason: "Winter 2027",
+      category: "Marketing",
+    });
+  });
+
+  it("matches a role type case-insensitively, like the list", () => {
+    expect(parsePipelineFilters({ category: "marketing" })).toEqual({
+      category: "Marketing",
+    });
+  });
+
+  it("drops a role type that is not one of the categories", () => {
+    expect(parsePipelineFilters({ category: "Banana" })).toEqual({});
   });
 
   it("ignores a status, because the columns are the statuses", () => {
@@ -142,10 +160,6 @@ describe("the board reads fewer filters than the list", () => {
     // column pretending to be it.
     expect(parseApplicationFilters(raw).status).toBe("Interview");
     expect(parsePipelineFilters(raw)).toEqual({ search: "analyst" });
-  });
-
-  it("ignores a category", () => {
-    expect(parsePipelineFilters({ category: "Marketing" })).toEqual({});
   });
 
   it("cannot describe an archived record", () => {
@@ -163,9 +177,26 @@ describe("the board's own URL is rebuilt, never echoed", () => {
   });
 
   it("carries the filters a student was looking at", () => {
-    expect(toPipelineUrl({ search: "analyst", workTermSeason: "Winter 2027" })).toBe(
-      "/pipeline?q=analyst&work_term=Winter+2027",
-    );
+    expect(
+      toPipelineUrl({
+        search: "analyst",
+        workTermSeason: "Winter 2027",
+        category: "Marketing",
+      }),
+    ).toBe("/pipeline?q=analyst&work_term=Winter+2027&category=Marketing");
+  });
+
+  it("round-trips through the parser it was built from", () => {
+    const filters = {
+      search: "analyst",
+      workTermSeason: "Winter 2027",
+      category: "Marketing" as const,
+    };
+    const url = new URL(toPipelineUrl(filters), "https://jobtrack.test");
+
+    expect(
+      parsePipelineFilters(Object.fromEntries(url.searchParams.entries())),
+    ).toEqual(filters);
   });
 
   it("re-encodes a value that tries to become a second parameter", () => {

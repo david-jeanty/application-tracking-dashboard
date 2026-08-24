@@ -43,18 +43,30 @@ fixed message — missing, somebody else's, archived, an invalid status, and a
 database error are indistinguishable in it, so a response never confirms that
 another student's application exists.
 
-**Two filters, not four.** Status is what the columns *are*; filtering by it
-would leave a board of one column, which is the applications list with extra
-steps. `parsePipelineFilters` therefore cannot produce one, and a bookmarked
-list URL opened on the board shows the whole board. Category is left to the
-list, where there is room for a fourth control.
+**Three filters, not four.** Search, work term and role category all narrow
+*which* applications the board is about. Status is the one it does not offer,
+because status is what the columns *are*: filtering by it would leave a board
+of one column, which is the applications list with extra steps.
+`parsePipelineFilters` therefore cannot produce one, and a bookmarked list URL
+carrying `?status=` opens the whole board.
 
 **One composition for every width.** The columns sit side by side and scroll
 horizontally where there is room, and stack into the phone's reading order
 where there is not — rather than two markups where a screen reader would meet
-every application twice. An empty column shows an honest zero on the board and
-is left out of the stacked view, where ten headings with nothing under them
-would be the loudest thing on the page.
+every application twice. Every status is a column at every width, empty ones
+included: a student counting ten headings on a phone should see the same ten,
+in the same order, as on a desktop, and a list that shortened as the search
+moved would be harder to trust than ten honest zeros. An empty column carries
+a quiet `None` rather than nothing at all, so it reads as empty instead of as
+something that failed to load.
+
+**The card leads with the role.** Role, then employer, then where it is —
+location and work term, when the record has them — and then, separately, the
+one thing coming up on it. The placement line and the next item answer
+different questions, so the next item is not a fallback for the placement
+line: a card must not lose its location the moment a follow-up is recorded.
+Nothing else is on the card. No lifecycle rail (the column heading already
+says the stage), no status chip, no salary, no notes, no category label.
 
 ### What changed
 
@@ -73,9 +85,17 @@ would be the loudest thing on the page.
   and the write is the existing owner-scoped, active-only single-column update.
   `/pipeline` was added to the archive and quick-update revalidations too,
   since both change what the board shows.
+- Analytics revalidation, on a status change only. A status change writes a
+  status-history event, which is what every figure on the analytics page is
+  drawn from, so both paths that change a status — the board's move and the
+  detail page's quick update — now refresh `/analytics`. Saving or clearing a
+  next action does not: it writes two columns no analytics read selects and
+  produces no history event, so the page cannot have changed.
 - `components/pipeline/` — the board, the card, and the filter form.
 - `app/(app)/pipeline/page.tsx` — the page, streaming the board inside a
-  `Suspense` boundary keyed on the applied filters.
+  `Suspense` boundary keyed on the applied filters. Its empty state offers
+  `/applications`, because that is where this app's add-application panel
+  lives; there is no `/applications/new` route to send anybody to.
 - `components/app-shell/placeholder-page.tsx` — deleted. The pipeline was its
   last caller, so every route in the shell now shows real data.
 
@@ -83,11 +103,24 @@ would be the loudest thing on the page.
 
 - `npm run lint`: passed.
 - `npm run typecheck`: passed.
-- `npm run test`: passed, 953 tests across 47 files — 45 of them new, covering
-  the grouping, the filter parsing and URL rebuilding, the move action's
-  authorisation and failure equivalence, and what the board renders.
+- `npm run test`: passed. The new suites cover the grouping, the filter parsing
+  and URL rebuilding, the move action's authorisation and failure equivalence,
+  which paths a move refreshes, and what the board renders at every status.
 - `npm run build`: passed, with `/pipeline` now a dynamic route rather than a
   prerendered placeholder.
+- Visual review against fixtures of 45, 6 and 2 applications, through a
+  temporary harness that rendered the real components inside the real shell and
+  was removed before this commit. Checked at 1440 (light and dark), 834 and
+  390, on two accents; with every status represented and with several statuses
+  empty; with long role names, several roles at one employer, records missing
+  a location or a work term, and cards carrying next actions and deadlines.
+  The board's ten columns hold 256px at every desktop width and never
+  compress, the last column is fully reachable at the end of the scroll, and
+  no width produced horizontal overflow outside the board's own scroller —
+  including with a card focused. The one change the review prompted: the move
+  control was a bordered, card-wide bar that read as the loudest thing in a
+  column, so it lost its border and fill and is now only as wide as its widest
+  status, with the border returning on hover and focus.
 
 ## 2026-08-24 — Phase 3B: analytics visualisation and source performance
 

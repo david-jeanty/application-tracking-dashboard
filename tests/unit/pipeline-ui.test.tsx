@@ -146,10 +146,34 @@ describe("the board shows every status as a column", () => {
     expect(within(screening).getByText("0")).toBeInTheDocument();
     expect(within(screening).getByText("None")).toBeInTheDocument();
   });
+
+  it("keeps every status at every width, empty ones included", async () => {
+    await renderBoard({ rows: [application({ current_status: "Applied" })] });
+
+    // Nothing is hidden below `md`: a student counting ten headings on a phone
+    // sees the same ten, in the same order, as on a desktop.
+    for (const status of APPLICATION_STATUSES) {
+      const column = screen
+        .getByRole("heading", { level: 2, name: status })
+        .closest("section") as HTMLElement;
+
+      expect(column.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+    }
+  });
+
+  it("keeps the canonical status order", async () => {
+    await renderBoard({ rows: [application()] });
+
+    const headings = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((heading) => heading.textContent);
+
+    expect(headings).toEqual([...APPLICATION_STATUSES]);
+  });
 });
 
-describe("a card carries the employer, the role, and one fact", () => {
-  it("names the employer and the role in one link to the record", async () => {
+describe("a card leads with the role, then places it", () => {
+  it("names the role and the employer in one link to the record", async () => {
     await renderBoard({
       rows: [
         application({
@@ -162,8 +186,35 @@ describe("a card carries the employer, the role, and one fact", () => {
     const card = cardsIn("Applied")[0];
     const link = within(card).getByRole("link");
 
-    expect(link).toHaveAccessibleName("Shopify Marketing Intern");
+    // The role leads, as it does on the applications list: two roles at one
+    // employer are the pair a student most needs to tell apart.
+    expect(link).toHaveAccessibleName("Marketing Intern Shopify");
     expect(link.getAttribute("href")).toMatch(/^\/applications\//);
+  });
+
+  it("shows the location and the work term as quiet metadata", async () => {
+    await renderBoard({
+      rows: [application({ location: "Toronto", work_term_season: "Fall 2027" })],
+    });
+
+    expect(
+      within(cardsIn("Applied")[0]).getByText("Toronto · Fall 2027"),
+    ).toBeInTheDocument();
+  });
+
+  it("drops the separator when only one of the two is recorded", async () => {
+    await renderBoard({
+      rows: [
+        application({
+          location: "Not specified",
+          work_term_season: "Fall 2027",
+        }),
+      ],
+    });
+
+    expect(
+      within(cardsIn("Applied")[0]).getByText("Fall 2027"),
+    ).toBeInTheDocument();
   });
 
   it("shows a recorded next action ahead of anything else", async () => {
@@ -205,10 +256,32 @@ describe("a card carries the employer, the role, and one fact", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("falls back to the work term when there is no date to show", async () => {
-    await renderBoard({ rows: [application({ work_term_season: "Fall 2027" })] });
+  it("keeps the placement line when there is a next item too", async () => {
+    // The two answer different questions, so a recorded follow-up must not
+    // cost the card its location.
+    await renderBoard({
+      rows: [
+        application({
+          location: "Toronto",
+          work_term_season: "Fall 2027",
+          next_action: "Follow up with recruiter",
+          next_action_due_date: "2026-09-01",
+        }),
+      ],
+    });
 
-    expect(within(cardsIn("Applied")[0]).getByText("Fall 2027")).toBeInTheDocument();
+    const card = cardsIn("Applied")[0];
+    expect(within(card).getByText("Toronto · Fall 2027")).toBeInTheDocument();
+    expect(within(card).getByText("Follow up with recruiter")).toBeInTheDocument();
+  });
+
+  it("shows no next item at all when the record holds neither", async () => {
+    await renderBoard({ rows: [application()] });
+
+    const card = cardsIn("Applied")[0];
+    expect(within(card).queryByText("Application deadline")).toBeNull();
+    // Only the placement line, the identity, and the move control.
+    expect(within(card).queryByText("—")).toBeNull();
   });
 
   it("does not repeat the lifecycle rail the column already states", async () => {
@@ -254,7 +327,11 @@ describe("a card can be moved by keyboard alone", () => {
   it("carries the application's id and the filters in view", async () => {
     await renderBoard({
       rows: [application()],
-      filters: { search: "analyst", workTermSeason: "Winter 2027" },
+      filters: {
+        search: "analyst",
+        workTermSeason: "Winter 2027",
+        category: "Marketing",
+      },
     });
 
     const card = cardsIn("Applied")[0];
@@ -267,6 +344,7 @@ describe("a card can be moved by keyboard alone", () => {
 
     expect(values).toContainEqual(["q", "analyst"]);
     expect(values).toContainEqual(["work_term", "Winter 2027"]);
+    expect(values).toContainEqual(["category", "Marketing"]);
     expect(values.map(([name]) => name)).toContain("applicationId");
   });
 
@@ -287,6 +365,22 @@ describe("the board when there is nothing to show", () => {
 
     expect(screen.getByText("Nothing in the pipeline")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Clear filters" })).toBeNull();
+  });
+
+  it("offers the way in that this app actually has", async () => {
+    await renderBoard({ rows: [] });
+
+    // Adding is a panel the applications list opens; there is no
+    // `/applications/new` route to send anybody to.
+    expect(
+      screen.getByRole("link", { name: "Add an application" }),
+    ).toHaveAttribute("href", "/applications");
+  });
+
+  it("does not offer it when filters are what emptied the board", async () => {
+    await renderBoard({ rows: [], filters: { category: "Marketing" } });
+
+    expect(screen.queryByRole("link", { name: "Add an application" })).toBeNull();
   });
 
   it("offers a way out when filters matched nothing", async () => {

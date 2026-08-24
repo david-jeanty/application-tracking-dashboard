@@ -10,6 +10,7 @@ class RedirectError extends Error {
 
 const getUser = vi.fn();
 const setApplicationStatus = vi.fn();
+const setApplicationNextAction = vi.fn();
 const revalidatePath = vi.fn();
 
 vi.mock("next/navigation", () => ({
@@ -27,14 +28,17 @@ vi.mock("@/lib/applications/repository", () => ({
   createApplication: vi.fn(),
   deleteArchivedApplication: vi.fn(),
   setApplicationArchiveState: vi.fn(),
-  setApplicationNextAction: vi.fn(),
+  setApplicationNextAction: (...args: unknown[]) =>
+    setApplicationNextAction(...args),
   setApplicationStatus: (...args: unknown[]) => setApplicationStatus(...args),
   updateApplication: vi.fn(),
 }));
 
-const { moveApplicationStatusAction } = await import(
-  "@/lib/applications/actions"
-);
+const {
+  moveApplicationStatusAction,
+  updateApplicationStatusAction,
+  updateNextActionAction,
+} = await import("@/lib/applications/actions");
 
 const USER = { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" };
 const APPLICATION = "11111111-1111-4111-8111-111111111111";
@@ -45,10 +49,13 @@ function form(entries: Record<string, string>): FormData {
   return data;
 }
 
-/** Runs the action, which always redirects, and reports where to. */
-async function destinationOf(entries: Record<string, string>): Promise<string> {
+/** Runs an action that always redirects, and reports where to. */
+async function redirectOf(
+  action: (data: FormData) => Promise<void>,
+  entries: Record<string, string>,
+): Promise<string> {
   try {
-    await moveApplicationStatusAction(form(entries));
+    await action(form(entries));
   } catch (error) {
     if (error instanceof RedirectError) return error.destination;
     throw error;
@@ -56,12 +63,19 @@ async function destinationOf(entries: Record<string, string>): Promise<string> {
   throw new Error("expected a redirect, but the action returned normally");
 }
 
+/** The board's own move, which is what most of this suite is about. */
+async function destinationOf(entries: Record<string, string>): Promise<string> {
+  return redirectOf(moveApplicationStatusAction, entries);
+}
+
 beforeEach(() => {
   getUser.mockReset();
   setApplicationStatus.mockReset();
+  setApplicationNextAction.mockReset();
   revalidatePath.mockReset();
   getUser.mockResolvedValue({ data: { user: USER }, error: null });
   setApplicationStatus.mockResolvedValue({ outcome: "updated" });
+  setApplicationNextAction.mockResolvedValue({ outcome: "updated" });
 });
 
 describe("moving a card writes one status for the signed-in student", () => {
@@ -105,14 +119,27 @@ describe("moving a card writes one status for the signed-in student", () => {
       currentStatus: "Screening",
       q: "analyst",
       work_term: "Winter 2027",
+      category: "Marketing",
     });
 
     expect(destination).toBe(
-      "/pipeline?q=analyst&work_term=Winter+2027&move=moved",
+      "/pipeline?q=analyst&work_term=Winter+2027&category=Marketing&move=moved",
     );
   });
 
-  it("refreshes every surface the status shows on", async () => {
+  it("drops a role type that is not one of the categories", async () => {
+    const destination = await destinationOf({
+      applicationId: APPLICATION,
+      currentStatus: "Screening",
+      category: "Banana",
+    });
+
+    // The same treatment a hand-edited URL gets: unrecognised values are
+    // dropped rather than rejected, and never reach the redirect.
+    expect(destination).toBe("/pipeline?move=moved");
+  });
+
+  it("refreshes every surface the status shows on, analytics included", async () => {
     await destinationOf({
       applicationId: APPLICATION,
       currentStatus: "Screening",
@@ -124,6 +151,20 @@ describe("moving a card writes one status for the signed-in student", () => {
     expect(paths).toContain("/dashboard");
     expect(paths).toContain(`/applications/${APPLICATION}`);
     expect(paths).toContain(`/applications/${APPLICATION}/edit`);
+    // The move wrote a status-history event, and every analytics figure is
+    // drawn from that history.
+    expect(paths).toContain("/analytics");
+  });
+
+  it("refreshes nothing when the move was refused", async () => {
+    setApplicationStatus.mockResolvedValue({ outcome: "not_found" });
+
+    await destinationOf({
+      applicationId: APPLICATION,
+      currentStatus: "Screening",
+    });
+
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 
@@ -226,5 +267,34 @@ describe("the notice a move leaves behind", () => {
     for (const value of [undefined, null, "", "moved!", ["moved"], 1]) {
       expect(toPipelineMoveNotice(value)).toBeNull();
     }
+  });
+});
+
+describe("analytics is refreshed when, and only when, a status moved", () => {
+  const refreshedPaths = () =>
+    revalidatePath.mock.calls.map((call) => call[0] as string);
+
+  it("refreshes it after the detail page's quick status change", async () => {
+    // The same trigger writes the same history event whichever surface the
+    // status was changed from, so the same page goes stale.
+    await redirectOf(updateApplicationStatusAction, {
+      applicationId: APPLICATION,
+      currentStatus: "Interview",
+    });
+
+    expect(refreshedPaths()).toContain("/analytics");
+  });
+
+  it("leaves it alone when only a next action was saved", async () => {
+    await redirectOf(updateNextActionAction, {
+      applicationId: APPLICATION,
+      nextAction: "Follow up with recruiter",
+      nextActionDueDate: "2026-09-01",
+    });
+
+    // Two columns no analytics read selects, and no history event: the page
+    // cannot have changed, so refreshing it would be work for nothing.
+    expect(refreshedPaths()).not.toContain("/analytics");
+    expect(refreshedPaths()).toContain("/dashboard");
   });
 });
