@@ -188,6 +188,7 @@ type ToolResult = {
 
 type ToolDefinition = {
   name: string;
+  description?: string;
   inputSchema: {
     properties: Record<string, Record<string, unknown>>;
     required?: string[];
@@ -804,6 +805,139 @@ describe("company domain over MCP", () => {
         (job) => job.company === "Data Analyst",
       ),
     ).toBe(false);
+    await connection.close();
+  });
+});
+
+/**
+ * What Claude is actually told about `company_domain`.
+ *
+ * These assert the advertised JSON Schema a connected client reads, not our
+ * source strings, because the description is the whole mechanism here: nothing
+ * in JobTrack derives a domain, so whether a saved application gets a logo
+ * depends entirely on what this text asks Claude to do.
+ *
+ * They are written against the intent rather than the exact prose — that the
+ * guidance is active rather than permissive, that it names the hosts to avoid,
+ * and that it still keeps the field optional — so wording can be improved
+ * without rewriting the suite.
+ */
+describe("the company_domain guidance Claude reads", () => {
+  const describedDomain = (tools: ToolDefinition[], name: string) =>
+    String(
+      tools.find((tool) => tool.name === name)!.inputSchema.properties
+        .company_domain.description ?? "",
+    );
+
+  it("asks save_job to fill the domain in whenever the employer is identifiable", async () => {
+    const connection = await connectServer();
+    const description = describedDomain(await connection.listTools(), "save_job");
+
+    expect(description).toMatch(/fill it in/i);
+    expect(description).toMatch(/reasonably identified/i);
+    // Active guidance, not a request to wait for permission. The field used to
+    // say "supply it when you already know it; never guess", which is exactly
+    // what left applications saved through Claude without a logo.
+    expect(description).not.toMatch(/never guess/i);
+    await connection.close();
+  });
+
+  it("names the applicant-tracking hosts that are not the employer", async () => {
+    const connection = await connectServer();
+    const tools = await connection.listTools();
+
+    for (const name of ["save_job", "update_job"]) {
+      const description = describedDomain(tools, name);
+      for (const host of [
+        "Workday",
+        "Greenhouse",
+        "Lever",
+        "LinkedIn",
+        "Indeed",
+      ]) {
+        expect(description).toContain(host);
+      }
+      expect(description).toMatch(/canonical/i);
+    }
+    await connection.close();
+  });
+
+  it("carries the same worked examples on both tools", async () => {
+    const connection = await connectServer();
+    const tools = await connection.listTools();
+
+    for (const name of ["save_job", "update_job"]) {
+      const description = describedDomain(tools, name);
+      for (const example of [
+        "shopify.com",
+        "kpmg.com",
+        "rbc.com",
+        "bmo.com",
+        "microsoft.com",
+      ]) {
+        expect(description).toContain(example);
+      }
+    }
+    await connection.close();
+  });
+
+  it("asks update_job to fill in a domain an application is missing", async () => {
+    const connection = await connectServer();
+    const description = describedDomain(
+      await connection.listTools(),
+      "update_job",
+    );
+
+    expect(description).toMatch(/none stored/i);
+    expect(description).toMatch(/fill it in/i);
+    // Clearing is still reachable, so a student is never stuck with a domain
+    // Claude guessed wrong.
+    expect(description).toMatch(/clear it/i);
+    await connection.close();
+  });
+
+  it("says so in the tool descriptions Claude reads before any argument", async () => {
+    const connection = await connectServer();
+    const tools = await connection.listTools();
+    const description = (name: string) =>
+      String(tools.find((tool) => tool.name === name)!.description ?? "");
+
+    expect(description("save_job")).toMatch(/company_domain/);
+    expect(description("save_job")).toMatch(/without the student having to ask/i);
+    expect(description("update_job")).toMatch(/company_domain/);
+    await connection.close();
+  });
+
+  it("keeps the field optional, so storage stays nullable", async () => {
+    const connection = await connectServer();
+    const tools = await connection.listTools();
+
+    for (const name of ["save_job", "update_job"]) {
+      const tool = tools.find((candidate) => candidate.name === name)!;
+      expect(tool.inputSchema.required ?? []).not.toContain("company_domain");
+    }
+    // And the guidance says as much, rather than only leaving it out.
+    expect(describedDomain(tools, "save_job")).toMatch(
+      /still saves without it/i,
+    );
+    await connection.close();
+  });
+
+  it("still saves a job when the employer cannot be identified", async () => {
+    // The behavioural half of the promise above: encouraging the domain must
+    // not have turned it into something a save depends on.
+    const connection = await connectServer();
+
+    const saved = await connection.callTool("save_job", {
+      company: "A local startup with no website",
+      job_title: "Marketing Assistant",
+    });
+    const read = await connection.callTool("get_job", {
+      application_id: MISSING_ID,
+    });
+
+    expect(saved.isError).toBeUndefined();
+    expect(read.structuredContent).toMatchObject({ company_domain: null });
     await connection.close();
   });
 });

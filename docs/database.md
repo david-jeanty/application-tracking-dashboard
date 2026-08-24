@@ -33,7 +33,13 @@ input to a bare lowercase hostname before writing, so the column never holds a
 scheme, a path, or a `www.` prefix; the database's own check is the 253-
 character DNS limit. It is nullable with no default and no backfill: every
 application saved before the column existed holds null and renders a local
-lettermark instead. Nothing infers a domain from a company name.
+lettermark instead.
+
+Nothing in the application infers a domain from a company name: no
+employer-to-domain table exists here and no model is called from the server.
+An assistant connected over MCP supplies the value, which is why the column
+stays nullable — an employer that cannot be identified confidently produces a
+row with null rather than a failed insert or a guess.
 
 That column needed no row-level-security change. Policies on `applications`
 are owner predicates on `user_id` and apply to the whole row whatever its

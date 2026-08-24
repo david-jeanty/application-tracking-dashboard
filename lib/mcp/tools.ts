@@ -105,7 +105,7 @@ export function registerJobTrackTools(
     {
       title: "Save job application",
       description:
-        "Saves a job to the student's application tracker. Use this when they share a job posting and want it recorded, or say they have applied somewhere. Pass the full job description verbatim when it is available so they can reread it later.",
+        "Saves a job to the student's application tracker. Use this when they share a job posting and want it recorded, or say they have applied somewhere. Pass the full job description verbatim when it is available so they can reread it later. Fill in company_domain with the employer's own website whenever you can identify the employer, so the saved application shows its logo without the student having to ask for it.",
       inputSchema: saveJobInputSchema,
     },
     async (args, ctx) => {
@@ -240,7 +240,7 @@ export function registerJobTrackTools(
     {
       title: "Update job application",
       description:
-        "Updates an existing job application in the student's tracker. Send only the fields that changed, such as moving the status to Applied or Interview, recording a date, or setting the next action. Fields you omit keep their current value. Requires the application's id.",
+        "Updates an existing job application in the student's tracker. Send only the fields that changed, such as moving the status to Applied or Interview, recording a date, or setting the next action. Fields you omit keep their current value. One exception is worth taking on your own: if the application has no company_domain stored and you can identify the employer's website, fill it in alongside whatever else you are updating. Requires the application's id.",
       inputSchema: updateJobInputSchema,
       outputSchema: updateJobOutputSchema,
     },

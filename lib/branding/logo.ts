@@ -58,8 +58,15 @@ export function logoDevToken(): string | undefined {
  * stored value can add a path segment, a query parameter, or a host.
  *
  * `size` is the rendered CSS size; the image is requested at twice that so it
- * stays sharp on high-density screens. PNG, because a logo needs transparency
- * to sit on the card background rather than in a white rectangle.
+ * stays sharp on high-density screens.
+ *
+ * JPEG, and that choice carries weight beyond file size. The mark is drawn as
+ * a lettermark with the logo layered over it, so the layer on top has to be
+ * opaque once it arrives — otherwise a transparent logo lets the letter show
+ * through it. JPEG has no alpha channel at all, so opacity is a property of
+ * the format rather than a background the component paints. That distinction
+ * is the whole point: a painted background would also cover the letter while
+ * the image is still loading, or forever if the request fails.
  */
 export function companyLogoUrl(
   domain: string | null | undefined,
@@ -78,7 +85,9 @@ export function companyLogoUrl(
   );
   url.searchParams.set("token", options.token);
   url.searchParams.set("size", String(requested));
-  url.searchParams.set("format", "png");
+  // No alpha channel, so what arrives covers the lettermark completely and
+  // nothing in the component has to paint a background to make it do so.
+  url.searchParams.set("format", "jpg");
 
   return url.toString();
 }

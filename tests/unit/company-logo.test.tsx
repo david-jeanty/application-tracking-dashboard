@@ -25,7 +25,9 @@ describe("logo.dev url construction", () => {
     expect(parsed.host).toBe(LOGO_DEV_HOST);
     expect(parsed.pathname).toBe("/shopify.com");
     expect(parsed.searchParams.get("token")).toBe(TOKEN);
-    expect(parsed.searchParams.get("format")).toBe("png");
+    // JPEG has no alpha channel, so an arrived logo covers the lettermark
+    // underneath it without the component painting any background of its own.
+    expect(parsed.searchParams.get("format")).toBe("jpg");
   });
 
   it("requests twice the rendered size so the mark stays sharp", () => {
@@ -215,6 +217,35 @@ describe("the company logo component", () => {
     // Both are present: the letter is the layer, not an error branch.
     expect(container.textContent).toBe("S");
     expect(container.querySelector("img")).not.toBeNull();
+  });
+
+  it("never lets the image paint an opaque square over that lettermark", () => {
+    // A background on the `img` is painted whether or not image data ever
+    // arrives, so one would blank the letter out for the whole of a slow load
+    // and permanently on a failed one. Covering the letter once the logo has
+    // actually arrived is the JPEG format's job, asserted above.
+    const { container } = render(
+      <CompanyLogo companyName="Shopify" domain="shopify.com" />,
+    );
+    const image = container.querySelector("img") as HTMLImageElement;
+
+    expect([...image.classList].filter((name) => name.startsWith("bg-"))).toEqual(
+      [],
+    );
+    expect(image.style.backgroundColor).toBe("");
+    expect(image.style.background).toBe("");
+  });
+
+  it("keeps the letter legible against the container, not the image", () => {
+    // The box that holds both layers is what carries the background, and it is
+    // the element the letter is drawn on.
+    const { container } = render(
+      <CompanyLogo companyName="Shopify" domain="shopify.com" />,
+    );
+    const box = container.firstElementChild as HTMLElement;
+
+    expect(box.className).toContain("bg-slate-50");
+    expect(box.textContent).toBe("S");
   });
 
   it("is decorative, so the company name beside it is announced once", () => {

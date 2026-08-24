@@ -12,6 +12,22 @@ import { MAXIMUM_DOMAIN_LENGTH } from "@/lib/branding/domain";
 
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * What Claude is told about `company_domain`, written once.
+ *
+ * `save_job` and `update_job` both carry the field, and their guidance must not
+ * drift: an assistant that fills the domain in confidently while saving but
+ * hesitates while updating would leave half a student's tracker without logos
+ * for no reason anybody could explain.
+ *
+ * The employer examples are guidance to a model, not a lookup table. Nothing in
+ * this product maps a company name to a domain — such a list rots, and the
+ * knowledge belongs to Claude, which is why the field is supplied over the wire
+ * rather than derived here.
+ */
+const COMPANY_DOMAIN_GUIDANCE =
+  "Prefer the employer's own canonical website over an applicant-tracking or job-board host such as Workday, Greenhouse, Lever, LinkedIn, or Indeed. Examples: Shopify → shopify.com, KPMG → kpmg.com, RBC or Royal Bank of Canada → rbc.com, BMO or Bank of Montreal → bmo.com, Microsoft → microsoft.com.";
+
 /** A date being changed may also be cleared, which an empty string expresses. */
 const CLEARABLE_DATE_PATTERN = /^(\d{4}-\d{2}-\d{2})?$/;
 
@@ -41,7 +57,7 @@ export const saveJobInputSchema = z.object({
     .max(MAXIMUM_DOMAIN_LENGTH)
     .optional()
     .describe(
-      "The employer's own website domain, for example 'shopify.com' for Shopify or 'rbc.com' for Royal Bank of Canada. Used only to show the company's logo. Supply it when you already know it; never guess. Not the posting URL, not a LinkedIn link, and not the applicant-tracking host a posting is served from unless that genuinely is the employer's own domain.",
+      `The employer's canonical public website domain, which is what shows the company's logo. This is ordinary employer metadata: fill it in whenever the employer can be reasonably identified — from the job posting, the employer name, a supplied URL, or ordinary knowledge — rather than waiting for the student to ask for it or for a logo. ${COMPANY_DOMAIN_GUIDANCE} It is not the posting URL, which belongs in job_url. Leave it out only when the employer genuinely cannot be identified confidently; the job still saves without it.`,
     ),
   location: z
     .string()
@@ -175,7 +191,7 @@ export const updateJobInputSchema = z.object({
     .max(MAXIMUM_DOMAIN_LENGTH)
     .optional()
     .describe(
-      "The employer's own website domain, for example 'shopify.com', or empty to clear it. Used only to show the company's logo.",
+      `The employer's canonical public website domain, which is what shows the company's logo, or an empty string to clear it. When an application has none stored and the employer can be reasonably identified, fill it in as part of the update rather than leaving it empty. ${COMPANY_DOMAIN_GUIDANCE}`,
     ),
   job_title: z.string().min(1).max(200).optional(),
   location: z.string().max(200).optional(),
