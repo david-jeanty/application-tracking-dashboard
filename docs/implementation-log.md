@@ -105,7 +105,11 @@ All three — funnel, current status, categories — are single-series magnitude
 comparisons over ten, sixteen, and five ordered rows. That is the case where a
 table is the recommended form rather than a compromise, and the page already
 renders it as a real table: row headers, values in cells, a decorative bar
-layered over numbers that are already readable. The accessibility requirement
+layered over numbers that are already readable. The bar occupies a real column
+and so carries a real column header, visible only to assistive technology —
+the same treatment the archive table gives its actions column. A body row with
+more cells than the header row describes is how a table stops being navigable,
+whatever those extra cells contain. The accessibility requirement
 (and the architecture plan's own rule that every chart gets a table equivalent)
 means a chart here would be rendered *in addition to* that table, so the same
 numbers would exist twice in two components that can drift.

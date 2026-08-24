@@ -64,6 +64,13 @@ export type MetricRow = {
  * the bars are decoration layered over numbers that are already readable, and
  * are hidden from assistive technology because they say nothing the cells do
  * not. Nothing here needs hover, keyboard focus, or colour vision to read.
+ *
+ * The bar occupies a real column, so it gets a real column header: a cell whose
+ * label is visible only to assistive technology, matching how the archive
+ * table heads its actions column. Leaving it out would give every row one more
+ * body cell than the header row describes, which is how a table stops being
+ * navigable — the header row has to account for every column, including the one
+ * that only exists to be looked at.
  */
 export function MetricBars({
   caption,
@@ -84,6 +91,12 @@ export function MetricBars({
           <th scope="col">Name</th>
           <th scope="col">{valueHeading}</th>
           {detailHeading ? <th scope="col">{detailHeading}</th> : null}
+          {/*
+            The bar's column. Its cells are deliberately empty to assistive
+            technology, and this header says why rather than leaving an
+            unexplained blank at the end of every row.
+          */}
+          <th scope="col">Shown as a bar</th>
         </tr>
       </thead>
       <tbody>
@@ -116,7 +129,8 @@ export function MetricBars({
               {/*
                 Purely decorative. Every number it encodes is in a cell to its
                 left, so it carries no information of its own and is hidden
-                rather than described.
+                rather than described. The cell around it stays, because the
+                column is real and the header row names it.
               */}
               <span
                 aria-hidden="true"

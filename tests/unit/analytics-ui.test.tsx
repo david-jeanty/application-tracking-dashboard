@@ -1,5 +1,9 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  MetricBars,
+  type MetricRow,
+} from "@/components/analytics/metric-display";
 import type { ApplicationStatus } from "@/lib/applications/constants";
 import { UNSPECIFIED_DATABASE_VALUE } from "@/lib/applications/constants";
 import type { ApplicationAnalyticsRow } from "@/lib/applications/types";
@@ -397,5 +401,93 @@ describe("degenerate data", () => {
     // an interview, and its source carries that interview.
     expect(rowFor("Reached an interview")).toBeInTheDocument();
     expect(screen.getAllByText("100% · 1 of 1").length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * The bar occupies a real column, so the header row has to account for it.
+ *
+ * A body row with more cells than the header row describes is how a table
+ * stops being navigable: every cell past the last header has no header at all,
+ * whatever it contains. These assert the shape directly rather than through the
+ * page, because the shape is the component's own contract and both of its
+ * column layouts have to hold it.
+ */
+describe("metric bars column structure", () => {
+  const rows: MetricRow[] = [
+    { label: "Applied", valueLabel: "7", detailLabel: "70%", percent: 70 },
+    { label: "Interview", valueLabel: "2", detailLabel: "20%", percent: 20 },
+  ];
+
+  function columnCounts(container: HTMLElement) {
+    const headers = container.querySelectorAll("thead th").length;
+    const bodyRows = [...container.querySelectorAll("tbody tr")].map(
+      (row) => row.querySelectorAll("th, td").length,
+    );
+
+    return { headers, bodyRows };
+  }
+
+  it("heads every column when there is no detail column", () => {
+    const { container } = render(
+      <MetricBars
+        caption="Number of applications at each current status"
+        rows={rows}
+        valueHeading="Applications"
+      />,
+    );
+
+    // Name, value, bar.
+    const { headers, bodyRows } = columnCounts(container);
+    expect(headers).toBe(3);
+    expect(bodyRows).toEqual([3, 3]);
+  });
+
+  it("heads every column when a detail column is present", () => {
+    const { container } = render(
+      <MetricBars
+        caption="Applications that ever reached each stage"
+        detailHeading="Share of submitted applications"
+        rows={rows}
+        valueHeading="Applications"
+      />,
+    );
+
+    // Name, value, detail, bar.
+    const { headers, bodyRows } = columnCounts(container);
+    expect(headers).toBe(4);
+    expect(bodyRows).toEqual([4, 4]);
+  });
+
+  it("names the bar's column rather than leaving a blank header", () => {
+    const { container } = render(
+      <MetricBars
+        caption="Number of applications at each current status"
+        rows={rows}
+        valueHeading="Applications"
+      />,
+    );
+
+    const headers = [...container.querySelectorAll("thead th")].map(
+      (cell) => cell.textContent,
+    );
+
+    expect(headers).toEqual(["Name", "Applications", "Shown as a bar"]);
+  });
+
+  it("keeps the bar itself decorative", () => {
+    const { container } = render(
+      <MetricBars
+        caption="Number of applications at each current status"
+        rows={rows}
+        valueHeading="Applications"
+      />,
+    );
+
+    // The column is real; what sits in it is not announced, because every
+    // number it draws is already text in a cell to its left.
+    const bars = container.querySelectorAll("tbody [aria-hidden='true']");
+    expect(bars).toHaveLength(rows.length);
+    expect(screen.getByRole("cell", { name: "7" })).toBeInTheDocument();
   });
 });

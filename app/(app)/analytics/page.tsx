@@ -183,7 +183,7 @@ export default async function AnalyticsPage() {
           ) : (
             <NotEnoughData>
               Nothing has been submitted yet, so there is nothing to measure
-              here. These figures appear once an application reaches Applied.
+              here. These figures appear once you have submitted an application.
             </NotEnoughData>
           )}
         </MetricPanel>
@@ -199,8 +199,8 @@ export default async function AnalyticsPage() {
             <SourcePerformance rows={sources} />
           ) : (
             <NotEnoughData>
-              Nothing has been submitted yet. Sources appear here once an
-              application you saved from one reaches Applied.
+              Nothing has been submitted yet. A source appears here once one of
+              the applications you saved from it has been submitted.
             </NotEnoughData>
           )}
         </MetricPanel>
