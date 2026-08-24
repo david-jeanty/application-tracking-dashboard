@@ -95,10 +95,10 @@ export type FunnelSummary = {
   transitions: FunnelTransition[];
   ratios: SearchRatios;
   /**
-   * The lowest recorded stage-to-stage conversion, or null.
+   * The lowest sufficiently observed stage-to-stage conversion, or null.
    *
-   * Null below `NARROWING_MINIMUM_SUBMITTED`, and null when no transition has a
-   * denominator to be measured against.
+   * Null below `NARROWING_MINIMUM_SUBMITTED`, and null when no step clears
+   * `NARROWING_MINIMUM_DENOMINATOR` on its own denominator.
    */
   narrowing: FunnelNarrowing | null;
   submitted: number;
@@ -114,6 +114,33 @@ export type FunnelSummary = {
  * funnel's own counts are still shown from the very first submission.
  */
 export const NARROWING_MINIMUM_SUBMITTED = 5;
+
+/**
+ * How many observations a *single step* needs before it can be named.
+ *
+ * The threshold above is not enough on its own, because it is global while the
+ * narrowing claim is local. A search with 80 submitted applications clears it
+ * easily, and can still contain:
+ *
+ *     Interview → offer     0 of 1
+ *
+ * That step is a genuine 0%, and the funnel shows it as one. But it rests on a
+ * single interview, and naming it "where your funnel narrows" would take one
+ * unanswered conversation and present it as the shape of an eighty-application
+ * search — the same coin-flip problem the global threshold exists to prevent,
+ * arriving one stage further down.
+ *
+ * So eligibility is judged on each step's own denominator: `Submitted →
+ * employer response` needs five submitted, `Employer response → interview`
+ * needs five responses, and `Interview → offer` needs five interviews. A step
+ * that has not been entered five times is not evidence about a search, whatever
+ * is true above it.
+ *
+ * This governs the callout only. The funnel still draws every stage's count and
+ * every defined step's rate, including `0 of 1` — the facts are the student's
+ * either way; it is the conclusion that waits for a sample.
+ */
+export const NARROWING_MINIMUM_DENOMINATOR = 5;
 
 /** The four milestones, each bound to the canonical status set that defines it. */
 const MILESTONES: readonly {
@@ -226,10 +253,15 @@ export function summarizeFunnel(
 /**
  * The lowest recorded stage-to-stage conversion.
  *
- * Undefined transitions are not candidates — a step nobody reached cannot be
- * the narrowest one — so a search with five submissions and no responses
- * correctly reports `Submitted → employer response` at 0% and ignores the two
- * steps below it, which have no denominator at all.
+ * A step is a candidate only when it is both **defined** and **observed enough
+ * times**. Undefined steps are out because a step nobody reached cannot be the
+ * narrowest one, so a search with five submissions and no responses correctly
+ * reports `Submitted → employer response` at 0% and ignores the two steps below
+ * it, which have no denominator at all. Thinly observed steps are out because
+ * `0 of 1` is a number, not evidence — see `NARROWING_MINIMUM_DENOMINATOR`.
+ *
+ * When no step qualifies there is no answer, and the callout renders nothing
+ * rather than reaching for the best of a bad set.
  *
  * Comparison is on the exact ratio rather than on the displayed percentage, so
  * two steps that both round to 17% are separated by their real values instead of
@@ -253,6 +285,7 @@ function narrowestTransition(
 
   for (const transition of transitions) {
     if (transition.percent === undefined) continue;
+    if (transition.denominator < NARROWING_MINIMUM_DENOMINATOR) continue;
 
     const exact = transition.reached / transition.denominator;
     if (exact < narrowestExact) {

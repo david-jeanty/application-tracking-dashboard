@@ -130,6 +130,21 @@ export type PerformanceSummary = {
    * few, stated exactly rather than folded into an invented composite group.
    */
   remainder: { groups: number; submitted: number };
+  /**
+   * How many groups this lens can actually compare — shown and hidden alike,
+   * and excluding the unspecified bucket.
+   *
+   * `rows.length` is the wrong number to ask this of. `Not specified` is a row
+   * on the chart but it is not a source: it is the residue left after the real
+   * ones, and a student who recorded `LinkedIn` on half their applications and
+   * nothing on the other half has one source, not two. Counting the bucket
+   * would let that search render as a comparison and invite a reader to read a
+   * difference between "LinkedIn" and "no record kept".
+   *
+   * Role categories are always one of the enum's values, so nothing is ever
+   * excluded there and this equals the group count.
+   */
+  comparableGroups: number;
   /** Submitted applications across every group, shown and hidden alike. */
   submitted: number;
 };
@@ -160,11 +175,14 @@ export const SMALL_SAMPLE_THRESHOLD = 5;
 export const MAXIMUM_NAMED_GROUPS = 5;
 
 /**
- * How many groups a lens needs before it is worth drawing.
+ * How many comparable groups a lens needs before it is worth drawing.
  *
  * Two. A comparison of one thing with nothing is not a comparison, and a single
  * full-width bar labelled `LinkedIn` tells a student only what they already
  * knew from the funnel above it.
+ *
+ * Measured against `comparableGroups`, never against `rows.length` — see that
+ * field for why the unspecified bucket does not count towards it.
  */
 export const MINIMUM_COMPARABLE_GROUPS = 2;
 
@@ -337,6 +355,9 @@ export function summarizePerformance(
       groups: hidden.length,
       submitted: hidden.reduce((total, row) => total + row.submitted, 0),
     },
+    // Every named group, including the ones volume pushed off the chart: a
+    // sixth source being hidden does not make the comparison less real.
+    comparableGroups: named.length,
     submitted,
   };
 }
