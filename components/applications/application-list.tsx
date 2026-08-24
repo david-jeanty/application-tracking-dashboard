@@ -35,15 +35,15 @@ function MobileApplicationCard({
             domain={application.company_domain}
           />
           <div className="min-w-0">
-            <h3 className="font-semibold text-slate-950">
+            <h3 className="font-semibold text-foreground">
               <Link
-                className="rounded-sm text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                className="rounded-sm text-accent-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                 href={`/applications/${application.id}`}
               >
                 {application.company_name}
               </Link>
             </h3>
-            <p className="mt-1 text-sm text-slate-700">
+            <p className="mt-1 text-sm text-foreground-secondary">
               {application.original_job_title}
             </p>
           </div>
@@ -52,50 +52,50 @@ function MobileApplicationCard({
       </div>
       <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
         <div className="col-span-2">
-          <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
             Category
           </dt>
-          <dd className="mt-1 text-slate-800">
+          <dd className="mt-1 text-foreground">
             {application.normalized_job_category}
           </dd>
         </div>
         {location ? (
           <div className="col-span-2">
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
               Location
             </dt>
-            <dd className="mt-1 text-slate-800">{location}</dd>
+            <dd className="mt-1 text-foreground">{location}</dd>
           </div>
         ) : null}
         {application.date_applied ? (
           <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
               Applied
             </dt>
-            <dd className="mt-1 text-slate-800">
+            <dd className="mt-1 text-foreground">
               <DateValue value={application.date_applied} />
             </dd>
           </div>
         ) : null}
         {application.application_deadline ? (
           <div>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
               Deadline
             </dt>
-            <dd className="mt-1 text-slate-800">
+            <dd className="mt-1 text-foreground">
               <DateValue value={application.application_deadline} />
             </dd>
           </div>
         ) : null}
         {application.next_action ? (
           <div className="col-span-2">
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
               Next action
             </dt>
-            <dd className="mt-1 text-slate-800">
+            <dd className="mt-1 text-foreground">
               {application.next_action}
               {application.next_action_due_date ? (
-                <span className="text-slate-500">
+                <span className="text-foreground-muted">
                   {" "}
                   · <DateValue value={application.next_action_due_date} />
                 </span>
@@ -113,7 +113,7 @@ export function ApplicationsListLoading() {
     <div aria-label="Loading applications" className="space-y-3" role="status">
       {[0, 1, 2].map((item) => (
         <div
-          className="h-24 animate-pulse rounded-2xl border border-slate-200 bg-white"
+          className="h-24 animate-pulse rounded-surface border border-border bg-surface"
           key={item}
         />
       ))}
@@ -144,7 +144,7 @@ export async function ApplicationList({
 
   if (error) {
     return (
-      <Card className="flex gap-3 border-red-200 bg-red-50 p-5 text-red-900">
+      <Card className="flex gap-3 border-danger/30 bg-danger-soft p-5 text-danger">
         <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
         <div>
           <h2 className="font-semibold">Applications could not be loaded</h2>
@@ -162,13 +162,13 @@ export async function ApplicationList({
     // applications, so they get different words and a way out.
     return hasActiveFilters(filters) ? (
       <Card className="px-6 py-12 text-center">
-        <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-slate-600">
+        <span className="mx-auto grid size-12 place-items-center rounded-surface bg-surface-muted text-foreground-secondary">
           <SearchX aria-hidden="true" className="size-6" />
         </span>
-        <h2 className="mt-4 text-lg font-semibold text-slate-950">
+        <h2 className="mt-4 text-lg font-semibold text-foreground">
           No applications match these filters
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-foreground-secondary">
           Try changing or clearing your search.
         </p>
         <div className="mt-5">
@@ -179,13 +179,13 @@ export async function ApplicationList({
       </Card>
     ) : (
       <Card className="px-6 py-12 text-center">
-        <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+        <span className="mx-auto grid size-12 place-items-center rounded-surface bg-accent-soft text-accent">
           <BriefcaseBusiness aria-hidden="true" className="size-6" />
         </span>
-        <h2 className="mt-4 text-lg font-semibold text-slate-950">
+        <h2 className="mt-4 text-lg font-semibold text-foreground">
           No applications yet
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+        <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-foreground-secondary">
           Add your first application to keep its status, dates, and next action
           together.
         </p>
@@ -210,7 +210,7 @@ export async function ApplicationList({
             <caption className="sr-only">
               Your active job applications
             </caption>
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
+            <thead className="border-b border-border bg-surface-muted text-xs font-semibold uppercase tracking-wide text-foreground-secondary">
               <tr>
                 <th className="px-4 py-3" scope="col">
                   Company and role
@@ -235,9 +235,9 @@ export async function ApplicationList({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
               {data.map((application) => (
-                <tr className="align-top hover:bg-slate-50/70" key={application.id}>
+                <tr className="align-top hover:bg-surface-muted" key={application.id}>
                   <td className="px-4 py-4">
                     <div className="flex items-start gap-3">
                       <CompanyLogo
@@ -245,21 +245,21 @@ export async function ApplicationList({
                         domain={application.company_domain}
                       />
                       <div className="min-w-0">
-                        <p className="font-semibold text-slate-950">
+                        <p className="font-semibold text-foreground">
                           <Link
-                            className="rounded-sm text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                            className="rounded-sm text-accent-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                             href={`/applications/${application.id}`}
                           >
                             {application.company_name}
                           </Link>
                         </p>
-                        <p className="mt-1 text-slate-600">
+                        <p className="mt-1 text-foreground-secondary">
                           {application.original_job_title}
                         </p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-slate-700">
+                  <td className="px-4 py-4 text-foreground-secondary">
                     {application.normalized_job_category}
                   </td>
                   <td className="px-4 py-4">
@@ -267,24 +267,24 @@ export async function ApplicationList({
                       status={application.current_status}
                     />
                   </td>
-                  <td className="px-4 py-4 text-slate-700">
+                  <td className="px-4 py-4 text-foreground-secondary">
                     {displayOptionalText(application.location) ?? (
                       <span aria-label="Not set">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-4 text-slate-700">
+                  <td className="px-4 py-4 text-foreground-secondary">
                     <DateValue value={application.date_applied} />
                   </td>
-                  <td className="px-4 py-4 text-slate-700">
+                  <td className="px-4 py-4 text-foreground-secondary">
                     <DateValue value={application.application_deadline} />
                   </td>
-                  <td className="max-w-56 px-4 py-4 text-slate-700">
+                  <td className="max-w-56 px-4 py-4 text-foreground-secondary">
                     {application.next_action ?? (
                       <span aria-label="Not set">—</span>
                     )}
                     {application.next_action &&
                     application.next_action_due_date ? (
-                      <span className="mt-1 block text-xs text-slate-500">
+                      <span className="mt-1 block text-xs text-foreground-muted">
                         Due{" "}
                         <DateValue value={application.next_action_due_date} />
                       </span>

@@ -42,10 +42,10 @@ export function ApplicationCreatePanel() {
     <Card className="p-5 sm:p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-950">
+          <h2 className="text-lg font-semibold text-foreground">
             Add application
           </h2>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
+          <p className="mt-1 text-sm leading-6 text-foreground-secondary">
             Required fields are marked with an asterisk. Category selection is
             manual in this phase.
           </p>
@@ -79,8 +79,8 @@ export function ApplicationCreatePanel() {
             aria-live="polite"
             className={
               state.status === "success"
-                ? "flex gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"
-                : "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+                ? "flex gap-2 rounded-control border border-success/30 bg-success-soft p-3 text-sm text-success"
+                : "rounded-control border border-danger/30 bg-danger-soft p-3 text-sm text-danger"
             }
             role={state.status === "error" ? "alert" : "status"}
           >
@@ -96,7 +96,7 @@ export function ApplicationCreatePanel() {
 
         <ApplicationFields errors={errors} />
 
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
           <Button
             onClick={() => setIsOpen(false)}
             type="button"

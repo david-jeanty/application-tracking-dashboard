@@ -47,7 +47,7 @@ export function ConsentForm({ authorizationId }: { authorizationId: string }) {
 
       {state.status === "error" && state.message ? (
         <p
-          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          className="rounded-control border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger"
           role="alert"
         >
           {state.message}

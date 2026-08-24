@@ -17,7 +17,7 @@ import {
 
 /** Matches the select styling the application form already uses. */
 const selectClassName =
-  "min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-base text-slate-950 shadow-sm hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-3 focus:ring-blue-100 sm:text-sm";
+  "min-h-11 w-full rounded-control border border-border-strong bg-surface px-3.5 text-base text-foreground hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
 
 /**
  * Search and filter controls for the applications list.
@@ -130,7 +130,7 @@ export function ApplicationFilters({
             </Button>
             {filtered ? (
               <Link
-                className="inline-flex min-h-11 items-center justify-center rounded-lg px-4 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                className="inline-flex min-h-11 items-center justify-center rounded-control px-4 text-sm font-semibold text-foreground-secondary transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                 href="/applications"
               >
                 Clear

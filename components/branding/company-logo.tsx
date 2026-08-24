@@ -70,7 +70,7 @@ export function CompanyLogo({
     <span
       aria-hidden="true"
       className={cn(
-        "relative grid shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 font-semibold uppercase text-slate-600",
+        "relative grid shrink-0 place-items-center overflow-hidden rounded-control border border-border bg-surface-muted font-semibold uppercase text-foreground-secondary",
         sizeClassName,
         className,
       )}

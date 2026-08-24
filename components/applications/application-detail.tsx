@@ -19,17 +19,17 @@ function Value({
 }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
         {label}
       </dt>
-      <dd className="mt-1.5 text-sm leading-6 text-slate-900">{children}</dd>
+      <dd className="mt-1.5 text-sm leading-6 text-foreground">{children}</dd>
     </div>
   );
 }
 
 function OptionalValue({ value }: { value: string | null | undefined }) {
   return displayOptionalText(value) ?? (
-    <span className="text-slate-500">Not set</span>
+    <span className="text-foreground-muted">Not set</span>
   );
 }
 
@@ -37,7 +37,7 @@ function DateValue({ value }: { value: string | null }) {
   return value ? (
     formatDateOnly(value)
   ) : (
-    <span className="text-slate-500">Not set</span>
+    <span className="text-foreground-muted">Not set</span>
   );
 }
 
@@ -50,10 +50,10 @@ function TextSection({
 }) {
   return (
     <Card className="p-5 sm:p-6">
-      <h2 className="font-semibold text-slate-950">{title}</h2>
-      <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-slate-700">
+      <h2 className="font-semibold text-foreground">{title}</h2>
+      <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-foreground-secondary">
         {displayOptionalText(value) ?? (
-          <span className="text-slate-500">Not set</span>
+          <span className="text-foreground-muted">Not set</span>
         )}
       </p>
     </Card>
@@ -70,7 +70,7 @@ export function ApplicationDetail({
   return (
     <div className="space-y-5">
       {application.archived_at ? (
-        <div className="flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <div className="flex gap-2 rounded-record border border-warning/30 bg-warning-soft p-4 text-sm text-warning">
           <Archive aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           This application is archived. It remains stored and can still be
           reviewed or edited.
@@ -79,7 +79,7 @@ export function ApplicationDetail({
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="p-5 sm:p-6">
-          <h2 className="font-semibold text-slate-950">Application</h2>
+          <h2 className="font-semibold text-foreground">Application</h2>
           <dl className="mt-4 grid gap-5 sm:grid-cols-2">
             <Value label="Status">
               <ApplicationStatusLabel status={application.current_status} />
@@ -98,7 +98,7 @@ export function ApplicationDetail({
             <Value label="Application URL">
               {externalUrl ? (
                 <a
-                  className="inline-flex items-center gap-1.5 break-all font-medium text-blue-700 underline decoration-blue-200 underline-offset-4 hover:text-blue-800"
+                  className="inline-flex items-center gap-1.5 break-all font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:text-accent-hover"
                   href={externalUrl}
                   rel="noreferrer noopener"
                   target="_blank"
@@ -107,7 +107,7 @@ export function ApplicationDetail({
                   <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
                 </a>
               ) : (
-                <span className="text-slate-500">
+                <span className="text-foreground-muted">
                   {application.application_url ? "Unavailable" : "Not set"}
                 </span>
               )}
@@ -116,7 +116,7 @@ export function ApplicationDetail({
         </Card>
 
         <Card className="p-5 sm:p-6">
-          <h2 className="font-semibold text-slate-950">Work term</h2>
+          <h2 className="font-semibold text-foreground">Work term</h2>
           <dl className="mt-4 grid gap-5 sm:grid-cols-2">
             <Value label="Season">{application.work_term_season}</Value>
             <Value label="Duration">
@@ -127,7 +127,7 @@ export function ApplicationDetail({
             </Value>
             <Value label="Work arrangement">
               {application.work_arrangement === "Unknown" ? (
-                <span className="text-slate-500">Not set</span>
+                <span className="text-foreground-muted">Not set</span>
               ) : (
                 application.work_arrangement
               )}
@@ -139,7 +139,7 @@ export function ApplicationDetail({
         </Card>
 
         <Card className="p-5 sm:p-6">
-          <h2 className="font-semibold text-slate-950">Dates</h2>
+          <h2 className="font-semibold text-foreground">Dates</h2>
           <dl className="mt-4 grid gap-5 sm:grid-cols-2">
             <Value label="Date applied">
               <DateValue value={application.date_applied} />
@@ -151,7 +151,7 @@ export function ApplicationDetail({
         </Card>
 
         <Card className="p-5 sm:p-6">
-          <h2 className="font-semibold text-slate-950">Next action</h2>
+          <h2 className="font-semibold text-foreground">Next action</h2>
           <dl className="mt-4 grid gap-5 sm:grid-cols-2">
             <Value label="Action">
               <OptionalValue value={application.next_action} />
@@ -170,7 +170,7 @@ export function ApplicationDetail({
       <TextSection title="Notes" value={application.notes} />
 
       <Card className="p-5 sm:p-6">
-        <h2 className="font-semibold text-slate-950">Record details</h2>
+        <h2 className="font-semibold text-foreground">Record details</h2>
         <dl className="mt-4 grid gap-5 sm:grid-cols-3">
           <Value label="Created">{formatDateTime(application.created_at)}</Value>
           <Value label="Last updated">

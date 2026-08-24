@@ -45,11 +45,11 @@ export default async function EditApplicationPage({
       </ButtonLink>
 
       <div>
-        <p className="text-sm font-semibold text-blue-700">Application</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+        <p className="text-sm font-semibold text-accent">Application</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           Edit application
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
           Update {application.company_name} — {application.original_job_title}.
           If this record changed after the page loaded, you will be asked to
           review the latest version before saving.

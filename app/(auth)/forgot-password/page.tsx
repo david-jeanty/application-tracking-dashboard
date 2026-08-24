@@ -13,7 +13,7 @@ export default function ForgotPasswordPage() {
       description="Enter your email. If it matches an account, we’ll send a secure reset link."
       footer={
         <Link
-          className="inline-flex items-center gap-2 font-semibold text-blue-700 hover:underline"
+          className="inline-flex items-center gap-2 font-semibold text-accent hover:underline"
           href="/login"
         >
           <ArrowLeft aria-hidden="true" className="size-4" />

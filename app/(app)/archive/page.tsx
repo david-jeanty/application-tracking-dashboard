@@ -35,11 +35,11 @@ export default async function ArchivePage({
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-sm font-semibold text-blue-700">Archive</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+        <p className="text-sm font-semibold text-accent">Archive</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           Archived applications
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
           Archiving is not deletion. These applications keep their status and
           history, and restoring one puts it back in your list.
         </p>
@@ -49,8 +49,8 @@ export default async function ArchivePage({
         <div
           className={
             deleteNotice.tone === "success"
-              ? "flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
-              : "flex gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+              ? "flex gap-2 rounded-record border border-success/30 bg-success-soft p-4 text-sm text-success"
+              : "flex gap-2 rounded-record border border-danger/30 bg-danger-soft p-4 text-sm text-danger"
           }
           role="status"
         >
@@ -64,7 +64,7 @@ export default async function ArchivePage({
       ) : null}
 
       {error ? (
-        <Card className="flex gap-3 border-red-200 bg-red-50 p-5 text-red-900">
+        <Card className="flex gap-3 border-danger/30 bg-danger-soft p-5 text-danger">
           <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
           <div>
             <h2 className="font-semibold">

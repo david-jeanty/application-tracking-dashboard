@@ -56,28 +56,28 @@ export default async function DeleteApplicationPage({
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <Card className="p-6 sm:p-8">
-        <span className="grid size-12 place-items-center rounded-xl bg-red-50 text-red-700">
+        <span className="grid size-12 place-items-center rounded-record bg-danger-soft text-danger">
           <TriangleAlert aria-hidden="true" className="size-6" />
         </span>
 
-        <h1 className="mt-5 text-xl font-semibold text-slate-950">
+        <h1 className="mt-5 text-xl font-semibold text-foreground">
           Permanently delete this application?
         </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+        <p className="mt-2 text-sm leading-6 text-foreground-secondary">
           This will permanently delete the application and its history. This
           cannot be undone.
         </p>
 
-        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <p className="font-semibold text-slate-950">
+        <div className="mt-5 rounded-record border border-border bg-surface-muted p-4">
+          <p className="font-semibold text-foreground">
             {application.company_name}
           </p>
-          <p className="mt-1 text-sm text-slate-700">
+          <p className="mt-1 text-sm text-foreground-secondary">
             {application.original_job_title}
           </p>
         </div>
 
-        <p className="mt-4 text-sm leading-6 text-slate-600">
+        <p className="mt-4 text-sm leading-6 text-foreground-secondary">
           If you only want it out of your list, go back and leave it archived
           instead — an archived application keeps its history and can be
           restored.

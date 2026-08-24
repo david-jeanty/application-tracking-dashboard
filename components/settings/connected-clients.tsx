@@ -31,14 +31,14 @@ function describeGrantedAt(value: string): string | null {
 export function ConnectedClients({ clients }: { clients: ConnectedClient[] }) {
   if (clients.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-5 py-8 text-center">
-        <span className="mx-auto grid size-10 place-items-center rounded-xl bg-white text-slate-500">
+      <div className="rounded-surface border border-dashed border-border-strong bg-surface-muted px-5 py-8 text-center">
+        <span className="mx-auto grid size-10 place-items-center rounded-record bg-surface text-foreground-muted">
           <PlugZap aria-hidden="true" className="size-5" />
         </span>
-        <p className="mt-3 text-sm font-medium text-slate-800">
+        <p className="mt-3 text-sm font-medium text-foreground">
           No assistants connected yet
         </p>
-        <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-slate-600">
+        <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-foreground-secondary">
           Once you connect one using the steps above, it will appear here and
           you can disconnect it at any time.
         </p>
@@ -47,16 +47,16 @@ export function ConnectedClients({ clients }: { clients: ConnectedClient[] }) {
   }
 
   return (
-    <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+    <ul className="divide-y divide-border rounded-record border border-border">
       {clients.map((client) => (
         <li
           className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
           key={client.id}
         >
           <div className="min-w-0">
-            <p className="font-medium text-slate-950">{client.name}</p>
+            <p className="font-medium text-foreground">{client.name}</p>
             {describeGrantedAt(client.grantedAt) ? (
-              <p className="mt-0.5 text-sm text-slate-600">
+              <p className="mt-0.5 text-[13px] text-foreground-secondary">
                 Connected {describeGrantedAt(client.grantedAt)}
               </p>
             ) : null}

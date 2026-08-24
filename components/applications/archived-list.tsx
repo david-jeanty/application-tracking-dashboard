@@ -31,7 +31,7 @@ function ArchivedRowActions({
         </Button>
       </form>
       <Link
-        className="rounded-sm text-sm font-semibold text-red-700 underline decoration-red-200 underline-offset-4 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+        className="rounded-sm text-sm font-semibold text-danger underline decoration-danger/40 underline-offset-4 hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger"
         href={`/applications/${applicationId}/delete`}
       >
         Delete permanently
@@ -43,13 +43,13 @@ function ArchivedRowActions({
 export function ArchivedApplicationsEmptyState() {
   return (
     <Card className="px-6 py-12 text-center">
-      <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-slate-100 text-slate-600">
+      <span className="mx-auto grid size-12 place-items-center rounded-surface bg-surface-muted text-foreground-secondary">
         <Archive aria-hidden="true" className="size-6" />
       </span>
-      <h2 className="mt-4 text-lg font-semibold text-slate-950">
+      <h2 className="mt-4 text-lg font-semibold text-foreground">
         No archived applications
       </h2>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-foreground-secondary">
         Applications you archive will appear here. Archiving keeps an
         application and its history, and you can restore it at any time.
       </p>
@@ -82,22 +82,22 @@ export function ArchivedApplicationsList({
                   domain={application.company_domain}
                 />
                 <div className="min-w-0">
-                  <h3 className="font-semibold text-slate-950">
+                  <h3 className="font-semibold text-foreground">
                     <Link
-                      className="rounded-sm text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                      className="rounded-sm text-accent-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                       href={`/applications/${application.id}`}
                     >
                       {application.company_name}
                     </Link>
                   </h3>
-                  <p className="mt-1 text-sm text-slate-700">
+                  <p className="mt-1 text-sm text-foreground-secondary">
                     {application.original_job_title}
                   </p>
                 </div>
               </div>
               <ApplicationStatusLabel status={application.current_status} />
             </div>
-            <p className="mt-3 text-xs text-slate-500">
+            <p className="mt-3 text-xs text-foreground-muted">
               Archived{" "}
               {application.archived_at
                 ? formatDateTime(application.archived_at)
@@ -114,7 +114,7 @@ export function ArchivedApplicationsList({
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] border-collapse text-left text-sm">
             <caption className="sr-only">Your archived applications</caption>
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-600">
+            <thead className="border-b border-border bg-surface-muted text-xs font-semibold uppercase tracking-wide text-foreground-secondary">
               <tr>
                 <th className="px-4 py-3" scope="col">
                   Company and role
@@ -130,9 +130,9 @@ export function ArchivedApplicationsList({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-border">
               {applications.map((application) => (
-                <tr className="align-top hover:bg-slate-50/70" key={application.id}>
+                <tr className="align-top hover:bg-surface-muted" key={application.id}>
                   <td className="px-4 py-4">
                     <div className="flex items-start gap-3">
                       <CompanyLogo
@@ -140,15 +140,15 @@ export function ArchivedApplicationsList({
                         domain={application.company_domain}
                       />
                       <div className="min-w-0">
-                        <p className="font-semibold text-slate-950">
+                        <p className="font-semibold text-foreground">
                           <Link
-                            className="rounded-sm text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                            className="rounded-sm text-accent-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                             href={`/applications/${application.id}`}
                           >
                             {application.company_name}
                           </Link>
                         </p>
-                        <p className="mt-1 text-slate-600">
+                        <p className="mt-1 text-foreground-secondary">
                           {application.original_job_title}
                         </p>
                       </div>
@@ -157,7 +157,7 @@ export function ArchivedApplicationsList({
                   <td className="px-4 py-4">
                     <ApplicationStatusLabel status={application.current_status} />
                   </td>
-                  <td className="px-4 py-4 text-slate-700">
+                  <td className="px-4 py-4 text-foreground-secondary">
                     {application.archived_at
                       ? formatDateTime(application.archived_at)
                       : "—"}

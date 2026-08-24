@@ -46,18 +46,18 @@ function countsFor(row: SourcePerformanceRow): number[] {
  */
 function SourceCard({ row }: { row: SourcePerformanceRow }) {
   return (
-    <div className="rounded-xl border border-slate-200 p-4">
+    <div className="rounded-record border border-border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
         <h3
           className={`font-semibold ${
-            row.isUnspecified ? "text-slate-600" : "text-slate-950"
+            row.isUnspecified ? "text-foreground-secondary" : "text-foreground"
           }`}
         >
           {row.source}
         </h3>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-foreground-secondary">
           Interview rate{" "}
-          <span className="font-medium tabular-nums text-slate-900">
+          <span className="font-medium tabular-nums text-foreground">
             {rateLabel(row)}
           </span>
         </p>
@@ -65,10 +65,10 @@ function SourceCard({ row }: { row: SourcePerformanceRow }) {
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
         {COLUMNS.map((column, index) => (
           <div key={column}>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">
+            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
               {column}
             </dt>
-            <dd className="mt-0.5 tabular-nums text-slate-900">
+            <dd className="mt-0.5 tabular-nums text-foreground">
               {countsFor(row)[index]}
             </dd>
           </div>
@@ -101,7 +101,7 @@ export function SourcePerformance({
             Submitted applications by source, with what happened to them and the
             share that reached an interview
           </caption>
-          <thead className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-600">
+          <thead className="border-b border-border text-xs font-semibold uppercase tracking-wide text-foreground-secondary">
             <tr>
               <th className="py-2 pr-3" scope="col">
                 Source
@@ -116,12 +116,12 @@ export function SourcePerformance({
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-border">
             {rows.map((row) => (
               <tr key={row.source}>
                 <th
                   className={`py-2.5 pr-3 align-middle font-medium ${
-                    row.isUnspecified ? "text-slate-600" : "text-slate-800"
+                    row.isUnspecified ? "text-foreground-secondary" : "text-foreground"
                   }`}
                   scope="row"
                 >
@@ -133,23 +133,23 @@ export function SourcePerformance({
                   */}
                   <span
                     aria-hidden="true"
-                    className="mt-1 block h-1.5 w-full max-w-40 overflow-hidden rounded-sm bg-slate-100"
+                    className="mt-1 block h-1.5 w-full max-w-40 overflow-hidden rounded-sm bg-surface-muted"
                   >
                     <span
-                      className="block h-1.5 rounded-r-sm bg-blue-600"
+                      className="block h-1.5 rounded-r-sm bg-accent"
                       style={{ width: `${(row.submitted / widest) * 100}%` }}
                     />
                   </span>
                 </th>
                 {countsFor(row).map((count, index) => (
                   <td
-                    className="py-2.5 pr-3 text-right align-middle tabular-nums text-slate-900"
+                    className="py-2.5 pr-3 text-right align-middle tabular-nums text-foreground"
                     key={COLUMNS[index]}
                   >
                     {count}
                   </td>
                 ))}
-                <td className="py-2.5 text-right align-middle tabular-nums text-slate-900">
+                <td className="py-2.5 text-right align-middle tabular-nums text-foreground">
                   {rateLabel(row)}
                 </td>
               </tr>

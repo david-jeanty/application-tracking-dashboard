@@ -244,7 +244,7 @@ describe("the company logo component", () => {
     );
     const box = container.firstElementChild as HTMLElement;
 
-    expect(box.className).toContain("bg-slate-50");
+    expect(box.className).toContain("bg-surface-muted");
     expect(box.textContent).toBe("S");
   });
 
