@@ -11,16 +11,20 @@ import {
   type PipelineStage,
   type WeekSummary,
 } from "@/lib/dashboard/calculate";
-import { STALE_AFTER_DAYS } from "@/lib/dashboard/definitions";
 import { formatDateOnly } from "@/lib/dates/date-only";
 
 /**
  * What each attention reason is called, and how it is toned.
  *
+ * Five priority tiers collapse to three labels, because the tiers exist to
+ * rank the list and the labels exist to name the kind of thing an entry is. A
+ * student does not need to know that a deadline tomorrow outranks a follow-up
+ * due Friday; they need to know which is which.
+ *
  * The label is the accessible carrier: every entry states its reason and its
- * timing in words, so the colour is a second signal for people who can use it
- * rather than the only one. Two reasons deliberately share the amber tone —
- * the distinction between them lives in the text, not the swatch.
+ * timing in words, so colour is a second signal for people who can use it
+ * rather than the only one. Several tiers deliberately share a tone — the
+ * distinction between them lives in the text, not the swatch.
  */
 const reasonPresentation: Record<
   AttentionReason,
@@ -30,17 +34,21 @@ const reasonPresentation: Record<
     label: "Overdue",
     className: "border-red-200 bg-red-50 text-red-800",
   },
-  "deadline-soon": {
+  "deadline-critical": {
     label: "Deadline",
-    className: "border-amber-200 bg-amber-50 text-amber-900",
+    className: "border-red-200 bg-red-50 text-red-800",
   },
-  "action-soon": {
+  "action-due-now": {
     label: "Next action",
     className: "border-amber-200 bg-amber-50 text-amber-900",
   },
-  stale: {
-    label: "No movement",
-    className: "border-slate-200 bg-slate-100 text-slate-800",
+  "deadline-important": {
+    label: "Deadline",
+    className: "border-amber-200 bg-amber-50 text-amber-900",
+  },
+  "action-due-soon": {
+    label: "Next action",
+    className: "border-amber-200 bg-amber-50 text-amber-900",
   },
 };
 
@@ -102,8 +110,8 @@ export function NeedsAttention({ items }: { items: AttentionItem[] }) {
         <div>
           <p className="font-semibold text-slate-950">You&rsquo;re caught up.</p>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            No overdue follow-ups, no deadlines this week, and nothing sitting
-            quiet for more than {STALE_AFTER_DAYS} days.
+            Nothing you noted is due, and no application you are still working
+            on is about to close.
           </p>
         </div>
       </Card>
@@ -129,6 +137,17 @@ export function NeedsAttention({ items }: { items: AttentionItem[] }) {
                   <p className="mt-0.5 truncate text-sm text-slate-600">
                     {item.detail || item.jobTitle}
                   </p>
+                  {/*
+                    Only deadlines carry a note, and it says why the deadline
+                    still applies: how long the application has sat, and that
+                    it has not been submitted. Stated, never advised — the
+                    dashboard does not tell a student what to do about it.
+                  */}
+                  {item.note ? (
+                    <p className="mt-0.5 truncate text-xs text-slate-500">
+                      {item.note}
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                   <span

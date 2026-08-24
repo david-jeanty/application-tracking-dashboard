@@ -2,8 +2,8 @@ import { summarizeApplications } from "@/lib/analytics/calculate";
 import type { ApplicationListItem } from "@/lib/applications/types";
 import type { ApplicationTimelineEvent } from "@/lib/applications/types";
 import {
-  lastMovementByApplication,
   needsAttention,
+  type AttentionApplication,
   type AttentionItem,
 } from "@/lib/dashboard/attention";
 import {
@@ -104,6 +104,17 @@ export function buildDashboard(
     changedOn: dateOnlyFromTimestamp(event.changed_at, timeZone),
   }));
 
+  // The same conversion, for the other timestamp the dashboard reasons about.
+  // How long an unsubmitted application has been saved decides whether its
+  // approaching deadline is worth mentioning, and that has to be a comparison
+  // between calendar days rather than between an instant and a date.
+  const attentionInput: AttentionApplication[] = applications.map(
+    (application) => ({
+      ...application,
+      createdOn: dateOnlyFromTimestamp(application.created_at, timeZone),
+    }),
+  );
+
   const analytics = summarizeApplications(applications, timelineRead.data);
 
   return {
@@ -114,11 +125,7 @@ export function buildDashboard(
       interviews: reached(analytics.conversions, "Reached an interview"),
       offers: reached(analytics.conversions, "Received an offer"),
     },
-    attention: needsAttention(
-      applications,
-      lastMovementByApplication(events),
-      today,
-    ),
+    attention: needsAttention(attentionInput, today),
     pipeline: pipelineSnapshot(applications),
     week: summarizeWeek(events, today),
     activity: recentActivity(events, applications),

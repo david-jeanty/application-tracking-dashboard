@@ -111,8 +111,9 @@ JobTrack is deployed and the Claude connection works today.
 - Status history recorded automatically as an application moves
 - Quick status and next-action updates without opening the full edit form
 - Archiving and restoring applications, and permanently deleting archived ones
-- A dashboard that shows what needs your attention: overdue follow-ups,
-  deadlines this week, and applications that have gone quiet
+- A dashboard that shows what needs your attention: follow-ups you noted that
+  are due or overdue, and applications you haven't submitted yet that are about
+  to close
 - Analytics: where your applications stand, and how far they got
 - Settings: connect an AI assistant, see what's connected, and disconnect it
 

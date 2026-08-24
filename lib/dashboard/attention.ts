@@ -1,13 +1,20 @@
 import type { ApplicationStatus } from "@/lib/applications/constants";
 import {
   ATTENTION_LIMIT,
-  STALE_AFTER_DAYS,
-  STALE_CANDIDATE_STATUSES,
+  DEADLINE_MINIMUM_SAVED_DAYS,
+  IMMEDIATE_WINDOW_DAYS,
+  UNSUBMITTED_STATUSES,
   UPCOMING_WINDOW_DAYS,
 } from "@/lib/dashboard/definitions";
 import { differenceInCalendarDays } from "@/lib/dates/date-only";
 
-/** The application fields attention rules read. A subset of the list projection. */
+/**
+ * The application fields attention rules read.
+ *
+ * `createdOn` is a calendar day rather than the raw `created_at` timestamp:
+ * the conversion happens once, at the edge, in a named zone, so nothing here
+ * compares an instant to a date-only deadline.
+ */
 export type AttentionApplication = {
   id: string;
   company_name: string;
@@ -17,30 +24,32 @@ export type AttentionApplication = {
   next_action_due_date: string | null;
   application_deadline: string | null;
   archived_at: string | null;
+  createdOn: string;
 };
-
-/**
- * When each application last actually moved, as a calendar day.
- *
- * Keyed by application id. An application missing from the map has no recorded
- * movement at all and is left alone rather than assumed stale.
- */
-export type LastMovementByApplication = ReadonlyMap<string, string>;
 
 /**
  * Why an entry is on the list, in the order the list is sorted.
  *
- * The order of this array is the priority order, so ranking is a property of
- * the vocabulary rather than a comparator somewhere else that could drift from
- * it. A missed commitment outranks an approaching one; a hard external deadline
- * outranks a self-set follow-up, because the deadline cannot be moved; silence
- * comes last, because nothing about it is due today.
+ * Three concepts, split into five priority tiers so that urgency can outrank
+ * category: a posting closing tomorrow matters more than a follow-up due next
+ * Friday, even though a recorded commitment generally outranks a deadline.
+ *
+ * The order of this array *is* the priority order, so ranking is a property of
+ * the vocabulary rather than a comparator elsewhere that could drift from it.
+ *
+ * Everything here is something the student can act on. An explicit next action
+ * is a commitment they recorded; an approaching deadline on an unsubmitted
+ * application is an opportunity they may lose. Employer silence is neither —
+ * an application sitting at Applied is not a task, and treating it as one told
+ * students to "follow up" when the honest reading was simply that nothing had
+ * happened yet.
  */
 export const ATTENTION_REASONS = [
   "overdue-action",
-  "deadline-soon",
-  "action-soon",
-  "stale",
+  "deadline-critical",
+  "action-due-now",
+  "deadline-important",
+  "action-due-soon",
 ] as const;
 
 export type AttentionReason = (typeof ATTENTION_REASONS)[number];
@@ -51,10 +60,12 @@ export type AttentionItem = {
   jobTitle: string;
   status: ApplicationStatus;
   reason: AttentionReason;
-  /** What the student committed to, when the entry is about a next action. */
+  /** What the student committed to, or the role a deadline belongs to. */
   detail: string;
   /** The urgency, in words. Never conveyed by colour alone. */
   timing: string;
+  /** Why a deadline still applies — how long it has sat, and at what status. */
+  note?: string;
   /**
    * Days from today. Negative is overdue, so ascending sort puts the most
    * overdue first and, among future dates, the soonest first.
@@ -74,14 +85,24 @@ function describeDue(days: number, label: string): string {
   return `${label} in ${plural(days, "day")}`;
 }
 
+/** "Saved today", "Saved yesterday", "Saved 3 days ago". */
+function describeSavedAge(days: number): string {
+  if (days <= 0) return "Saved today";
+  if (days === 1) return "Saved yesterday";
+  return `Saved ${plural(days, "day")} ago`;
+}
+
 /**
  * The one entry, if any, that an application earns.
  *
  * Deliberately one. An application can be overdue on a follow-up *and* have a
- * deadline this week *and* have gone quiet, and listing it three times would
- * push three other companies off a six-entry card while telling the student
- * about one company. The highest-priority reason wins and the rest are
- * implied — opening the application shows them all.
+ * deadline this week, and listing it twice would push another company off a
+ * six-entry card while telling the student about one. The highest-priority
+ * reason wins and the rest are implied — opening the application shows them
+ * all.
+ *
+ * The branches are written in priority order, because the first match is the
+ * one returned. Every branch describes something the student can actually do.
  *
  * Archived applications are never returned. The dashboard's working set is
  * what a student is still pursuing; an application they filed away is not
@@ -90,7 +111,6 @@ function describeDue(days: number, label: string): string {
 function classify(
   application: AttentionApplication,
   today: string,
-  lastMovement: LastMovementByApplication,
 ): AttentionItem | null {
   if (application.archived_at) return null;
 
@@ -102,114 +122,111 @@ function classify(
   };
 
   // A due date without an action describes nothing a student can do, so the
-  // action is what makes either next-action rule apply.
+  // action is what makes either next-action rule apply. Nothing is inferred:
+  // if the student did not write an action down, there is no action.
   const action = application.next_action?.trim();
   const actionDue = action ? application.next_action_due_date : null;
   const actionDays = actionDue
     ? differenceInCalendarDays(today, actionDue)
     : null;
 
+  const actionItem = (reason: AttentionReason, days: number): AttentionItem => ({
+    ...base,
+    reason,
+    detail: action ?? "",
+    timing: describeDue(days, "Due"),
+    daysFromToday: days,
+  });
+
   if (actionDays !== null && actionDays < 0) {
-    return {
-      ...base,
-      reason: "overdue-action",
-      detail: action ?? "",
-      timing: describeDue(actionDays, "Due"),
-      daysFromToday: actionDays,
-    };
+    return actionItem("overdue-action", actionDays);
   }
 
-  const deadline = application.application_deadline;
+  // A deadline is only an action while the application is unsubmitted, and
+  // only while it has not passed. Once it is sent, the deadline has done its
+  // job; once it is past, nothing can be done about it.
+  const isUnsubmitted = UNSUBMITTED_STATUSES.some(
+    (status) => status === application.current_status,
+  );
+  const deadline = isUnsubmitted ? application.application_deadline : null;
   const deadlineDays = deadline
     ? differenceInCalendarDays(today, deadline)
     : null;
+  const savedAgeDays = differenceInCalendarDays(application.createdOn, today);
 
-  // A deadline already past is not upcoming, and nothing can be done about it
-  // now — flagging it would be a reminder of a closed door.
+  const deadlineItem = (
+    reason: AttentionReason,
+    days: number,
+    note: string,
+  ): AttentionItem => ({
+    ...base,
+    reason,
+    // The role, not a restatement of "Application deadline" — the timing line
+    // already says that, and the title is what identifies which posting.
+    detail: application.original_job_title,
+    timing: describeDue(days, "Deadline"),
+    note,
+    daysFromToday: days,
+  });
+
   if (
     deadlineDays !== null &&
     deadlineDays >= 0 &&
-    deadlineDays <= UPCOMING_WINDOW_DAYS
+    deadlineDays <= IMMEDIATE_WINDOW_DAYS
   ) {
-    return {
-      ...base,
-      reason: "deadline-soon",
-      detail: "Application deadline",
-      timing: describeDue(deadlineDays, "Deadline"),
-      daysFromToday: deadlineDays,
-    };
+    // Closing today or tomorrow. Shown however recently it was saved.
+    return deadlineItem(
+      "deadline-critical",
+      deadlineDays,
+      `Still ${application.current_status}`,
+    );
   }
 
   if (
     actionDays !== null &&
     actionDays >= 0 &&
-    actionDays <= UPCOMING_WINDOW_DAYS
+    actionDays <= IMMEDIATE_WINDOW_DAYS
   ) {
-    return {
-      ...base,
-      reason: "action-soon",
-      detail: action ?? "",
-      timing: describeDue(actionDays, "Due"),
-      daysFromToday: actionDays,
-    };
+    return actionItem("action-due-now", actionDays);
   }
 
-  const isStaleCandidate = STALE_CANDIDATE_STATUSES.some(
-    (status) => status === application.current_status,
-  );
-  const movedOn = lastMovement.get(application.id);
+  if (
+    deadlineDays !== null &&
+    deadlineDays > IMMEDIATE_WINDOW_DAYS &&
+    deadlineDays <= UPCOMING_WINDOW_DAYS &&
+    savedAgeDays >= DEADLINE_MINIMUM_SAVED_DAYS
+  ) {
+    // Saved a couple of days ago and still not finished. A posting saved this
+    // morning is deliberately left alone: the student already knows.
+    return deadlineItem(
+      "deadline-important",
+      deadlineDays,
+      `${describeSavedAge(savedAgeDays)} · Still ${application.current_status}`,
+    );
+  }
 
-  if (isStaleCandidate && movedOn) {
-    const quietDays = differenceInCalendarDays(movedOn, today);
-    if (quietDays >= STALE_AFTER_DAYS) {
-      return {
-        ...base,
-        reason: "stale",
-        detail: "No status movement",
-        timing: `No status movement for ${plural(quietDays, "day")}`,
-        // Older silence is more urgent, so it sorts the same direction as an
-        // overdue date: further from today, further up the list.
-        daysFromToday: -quietDays,
-      };
-    }
+  if (
+    actionDays !== null &&
+    actionDays > IMMEDIATE_WINDOW_DAYS &&
+    actionDays <= UPCOMING_WINDOW_DAYS
+  ) {
+    return actionItem("action-due-soon", actionDays);
   }
 
   return null;
 }
 
 /**
- * The latest real movement per application, as a calendar day.
- *
- * Every event counts, the creation event included: an application saved
- * eighteen days ago as `Applied` and untouched since has been silent for
- * eighteen days, and ignoring its only event would hide exactly the case this
- * rule exists to catch.
- *
- * Timestamps become calendar days here, once, in the caller's zone — the only
- * point where the timestamp and date-only worlds meet.
- */
-export function lastMovementByApplication(
-  events: readonly { application_id: string; changedOn: string }[],
-): LastMovementByApplication {
-  const latest = new Map<string, string>();
-
-  for (const event of events) {
-    const current = latest.get(event.application_id);
-    if (!current || event.changedOn > current) {
-      latest.set(event.application_id, event.changedOn);
-    }
-  }
-
-  return latest;
-}
-
-/**
  * What needs the student's attention today, most urgent first.
  *
- * Pure, and given everything it needs: the applications, when each last moved,
- * and what day it is. No clock, no database, no request — the same inputs
- * always produce the same list, which is what makes these rules testable at
- * all.
+ * Pure, and given everything it needs: the applications and what day it is. No
+ * clock, no database, no request — the same inputs always produce the same
+ * list, which is what makes these rules testable at all.
+ *
+ * The list contains only things a student can act on: commitments they wrote
+ * down, and unsubmitted applications whose deadlines are approaching. It never
+ * reports that an employer has not replied, because that is not a task and
+ * there is nothing to do about it.
  *
  * Sorted by reason first, then by date within a reason, then by company so the
  * order never wobbles between two renders of identical data. Capped, because a
@@ -217,12 +234,11 @@ export function lastMovementByApplication(
  */
 export function needsAttention(
   applications: readonly AttentionApplication[],
-  lastMovement: LastMovementByApplication,
   today: string,
   limit: number = ATTENTION_LIMIT,
 ): AttentionItem[] {
   const items = applications
-    .map((application) => classify(application, today, lastMovement))
+    .map((application) => classify(application, today))
     .filter((item): item is AttentionItem => item !== null);
 
   items.sort((first, second) => {
