@@ -4,10 +4,7 @@ import { WhatWorks } from "@/components/analytics/performance";
 import { QuietNote } from "@/components/analytics/section";
 import { ButtonLink } from "@/components/ui/button";
 import { summarizeActivity } from "@/lib/analytics/activity";
-import {
-  NARROWING_MINIMUM_SUBMITTED,
-  summarizeFunnel,
-} from "@/lib/analytics/funnel";
+import { summarizeFunnel } from "@/lib/analytics/funnel";
 import {
   MINIMUM_COMPARABLE_GROUPS,
   summarizePerformance,
@@ -24,11 +21,24 @@ import type { ApplicationAnalyticsRow } from "@/lib/applications/types";
  * events and an already-resolved `today`, and reads no clock and no request of
  * its own.
  *
- * Three visualisations, and the page grows into them. A student with four
- * submitted applications gets counts and ratios; one with fifty gets the
- * narrowing callout, both performance lenses and a weekly line. Sections with
- * nothing meaningful to say are absent rather than empty — five bordered boxes
- * each announcing that they have no data is a worse page than a short one.
+ * Three visualisations, and each one decides for itself whether it has
+ * something to show. That is the whole disclosure rule: **hide weak
+ * conclusions, not the student's recorded data.**
+ *
+ * There is deliberately no page-level submitted-count gate. One used to sit
+ * here, and it was wrong: a small sample is a reason not to name a narrowest
+ * stage, and it is not a reason to withhold a chart that is only reporting what
+ * the student entered. Three applications from two sources is a real comparison
+ * of two rows marked `n=2` and `n=1`; three applications across two weeks is a
+ * real fortnight of history. Neither is a claim about significance, and both
+ * belong to the student.
+ *
+ * So each section owns its own threshold and none of them gates another:
+ * `FunnelNarrowing` returns null unless a step is well enough observed,
+ * `WhatWorks` needs two comparable groups in some lens, and `SearchActivity`
+ * needs dated submissions in more than one week. Sections with nothing
+ * meaningful to say are absent rather than empty — five bordered boxes each
+ * announcing that they have no data is a worse page than a short one.
  */
 export function AnalyticsView({
   events,
@@ -44,37 +54,6 @@ export function AnalyticsView({
 
   const funnel = summarizeFunnel(rows, events);
   if (funnel.submitted === 0) return <NoSubmittedHistory />;
-
-  /*
-    Below five submitted applications the page is the funnel and its ratios,
-    and one sentence saying why there is not more.
-
-    The same threshold governs the narrowing callout and the performance
-    comparison, because both fail the same way: naming a narrowest stage from
-    three applications dresses up a coin flip as a finding, and a chart
-    comparing one source at n=2 against another at n=1 puts two coin flips side
-    by side and invites a reader to prefer one. The funnel's own counts are
-    still shown from the very first submission — it is the *conclusions* that
-    wait for a sample, not the facts.
-  */
-  const enoughToCompare = funnel.submitted >= NARROWING_MINIMUM_SUBMITTED;
-
-  if (!enoughToCompare) {
-    return (
-      <div className="space-y-14">
-        <AnalyticsHeader />
-        <Funnel funnel={funnel} />
-        {/*
-          One explanation, not one per absent section. Three quiet paragraphs
-          stacked down an otherwise empty page is the empty-state grid this
-          design is trying to avoid, drawn in text instead of boxes.
-        */}
-        <QuietNote>
-          More comparisons appear as your submitted history grows.
-        </QuietNote>
-      </div>
-    );
-  }
 
   const activity = summarizeActivity(rows, events, today);
 
@@ -116,19 +95,24 @@ export function AnalyticsView({
         </section>
       ) : null}
 
+      {activity.hasEnoughHistory ? <SearchActivity activity={activity} /> : null}
+
       {/*
-        A line drawn from one week, or from four dated applications, looks like
-        a shape and says nothing. One sentence replaces it — and only this
-        sentence, because at this point the funnel and the comparison above it
-        have already given the page something to say.
+        One sentence, and only when the funnel is the whole page.
+
+        Not one note per absent section: a student with two sources and a
+        single week of dates would otherwise get a chart followed by a line
+        apologising for the chart that is missing, which reads as a page
+        keeping score. When something beyond the funnel rendered, the page has
+        already shown that it grows, and the absence explains itself.
+
+        It says what appears, not what is missing. "More breakdowns appear as
+        your search history grows" is a fact about the page; "not enough data
+        yet" would be a verdict on the search.
       */}
-      {activity.hasEnoughHistory ? (
-        <SearchActivity activity={activity} />
-      ) : (
-        <QuietNote>
-          More dated submissions are needed to show activity over time.
-        </QuietNote>
-      )}
+      {lenses.length === 0 && !activity.hasEnoughHistory ? (
+        <QuietNote>More breakdowns appear as your search history grows.</QuietNote>
+      ) : null}
     </div>
   );
 }
