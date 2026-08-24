@@ -96,10 +96,11 @@ function CardNext({ application }: { application: ApplicationListItem }) {
 /**
  * One application on the board.
  *
- * Employer, role, one contextual line, and the control that moves it. The
- * employer leads here — the opposite of the applications list, where the role
- * does — because a column is already a set of applications at one stage, and
- * the question a student answers while scanning it is "who is this with".
+ * Role, employer, where it is, what is coming up on it, and the control that
+ * moves it — in that order. The role leads, as it does on the applications
+ * list: a column is already a set of applications at one stage, so the
+ * question a student answers while scanning it is which of these roles this
+ * one is.
  *
  * The whole card is a link to the detail page, and the move control sits above
  * that overlay so it stays clickable.
@@ -184,13 +185,36 @@ export function PipelineCard({
           Move {application.original_job_title} at {application.company_name} to
           another status
         </label>
+        {/*
+          The menu offers destinations, so the status the application is
+          already at is not among them, and it opens on a placeholder rather
+          than on that status.
+
+          Both together are what stop a no-op. Opening on the current status
+          meant a student could press Move without choosing anything, get a
+          write that changed nothing, no history event, and a notice saying the
+          application had moved. `required` is the browser's own constraint
+          validation — no JavaScript — so submitting with the placeholder still
+          selected is refused where the control is, with the browser's own
+          message, rather than by a redirect after a pointless round trip.
+
+          Nothing about the order is enforced: every other status is offered,
+          so a move backward from Interview to Applied, or a skip straight to
+          Offer, is one selection away. Real searches do both.
+        */}
         <select
           className={selectClassName}
-          defaultValue={application.current_status}
+          defaultValue=""
           id={moveId}
           name="currentStatus"
+          required
         >
-          {APPLICATION_STATUSES.map((status) => (
+          <option disabled value="">
+            Move to…
+          </option>
+          {APPLICATION_STATUSES.filter(
+            (status) => status !== application.current_status,
+          ).map((status) => (
             <option key={status} value={status}>
               {status}
             </option>

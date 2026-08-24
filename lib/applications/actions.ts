@@ -34,6 +34,38 @@ import {
   quickStatusSchema,
 } from "@/lib/validation/application";
 
+/** Where an archive or restore always returns to. Never taken from the request. */
+const APPLICATIONS_PATH = "/applications";
+
+/** The board's own path. Fixed, like every other redirect target here. */
+const PIPELINE_PATH = "/pipeline";
+
+const DASHBOARD_PATH = "/dashboard";
+const ANALYTICS_PATH = "/analytics";
+
+/**
+ * Every first-party surface a whole application is read by.
+ *
+ * A creation adds a record to all four at once, and a full edit can change any
+ * field any of them reads — status, category, work term, deadline, next
+ * action, date applied. Naming the set once is what stops a page being added
+ * to one write's list and forgotten in another's.
+ *
+ * The detail and edit routes are deliberately not here: they are per-record,
+ * so their callers pass the identifier themselves.
+ */
+const APPLICATION_SURFACES = [
+  APPLICATIONS_PATH,
+  PIPELINE_PATH,
+  DASHBOARD_PATH,
+  ANALYTICS_PATH,
+] as const;
+
+/** Refreshes every surface that reads whole applications. */
+function revalidateApplicationSurfaces() {
+  for (const path of APPLICATION_SURFACES) revalidatePath(path);
+}
+
 function values(formData: FormData) {
   return Object.fromEntries(formData.entries());
 }
@@ -80,7 +112,10 @@ export async function createApplicationAction(
     };
   }
 
-  revalidatePath("/applications");
+  // A new application is a row on the list, a card in a column of the board, a
+  // possible next action or deadline on the dashboard, and a record in every
+  // analytics aggregate. Nothing about it is visible on only one of them.
+  revalidateApplicationSurfaces();
   return {
     status: "success",
     message: "Application added successfully.",
@@ -143,20 +178,16 @@ export async function updateApplicationAction(
     };
   }
 
-  revalidatePath("/applications");
+  // The full form can change any field these pages read — status moves the
+  // card to another column, category and source change the analytics
+  // groupings, a next action or deadline changes what the dashboard asks for.
+  // Refreshing all four unconditionally is both simpler and safer than
+  // working out which fields actually changed and which page cares.
+  revalidateApplicationSurfaces();
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/applications/${applicationId}/edit`);
   redirect(`/applications/${applicationId}?updated=1`);
 }
-
-/** Where an archive or restore always returns to. Never taken from the request. */
-const APPLICATIONS_PATH = "/applications";
-
-/** The board's own path. Fixed, like every other redirect target here. */
-const PIPELINE_PATH = "/pipeline";
-
-/** Refreshed after a status change only, for the reason given at each call. */
-const ANALYTICS_PATH = "/analytics";
 
 /**
  * Moves one application across the archive line.
@@ -206,7 +237,7 @@ async function setArchiveState(
   revalidatePath(APPLICATIONS_PATH);
   revalidatePath(PIPELINE_PATH);
   revalidatePath("/archive");
-  revalidatePath("/dashboard");
+  revalidatePath(DASHBOARD_PATH);
   revalidatePath(`/applications/${parsedId.data}`);
 
   redirect(`${APPLICATIONS_PATH}?archive=${outcome}`);
@@ -274,7 +305,7 @@ export async function deleteApplicationAction(
   // route no longer resolves. The active list and dashboard are unaffected,
   // because only an archived application can reach this point.
   revalidatePath(ARCHIVE_PATH);
-  revalidatePath("/analytics");
+  revalidatePath(ANALYTICS_PATH);
   revalidatePath(`/applications/${parsedId.data}`);
 
   redirect(`${ARCHIVE_PATH}?delete=deleted`);
@@ -322,7 +353,7 @@ async function applyQuickUpdate(
   // student just changed here.
   revalidatePath(APPLICATIONS_PATH);
   revalidatePath(PIPELINE_PATH);
-  revalidatePath("/dashboard");
+  revalidatePath(DASHBOARD_PATH);
   revalidatePath(`/applications/${applicationId}`);
   revalidatePath(`/applications/${applicationId}/edit`);
 
@@ -497,7 +528,7 @@ export async function moveApplicationStatusAction(
   // performance — is drawn from that history.
   revalidatePath(PIPELINE_PATH);
   revalidatePath(APPLICATIONS_PATH);
-  revalidatePath("/dashboard");
+  revalidatePath(DASHBOARD_PATH);
   revalidatePath(ANALYTICS_PATH);
   revalidatePath(`/applications/${parsedId.data}`);
   revalidatePath(`/applications/${parsedId.data}/edit`);

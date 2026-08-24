@@ -36,6 +36,18 @@ validated Server Action the detail page uses. A drag would have been a second
 way to do the one thing, at the cost of a dependency and a second write path.
 So the status menu is not a fallback behind a drag; it is the control.
 
+**The move menu offers destinations, not statuses.** It opens on a `Move to…`
+placeholder and leaves out the status the application is already at. Opening on
+the current status meant a student could press Move without choosing anything
+and get a write that changed nothing, no history event, and a notice saying the
+application had moved. `required` on the control is the browser's own
+constraint validation, so the refusal happens where the control is, with no
+client JavaScript and no pointless round trip — and without a read to detect
+the no-op, which would have cost a query on every move to catch a case the
+markup can simply not offer. Every other status stays available, so a move
+backward from Interview to Applied, or a skip straight to Offer, is one
+selection away.
+
 **No optimistic client state.** With no client component on the page there is
 nothing to roll back: the move posts, the board re-renders from the database,
 and the card is under a different heading. Failure is a redirect carrying one
@@ -85,6 +97,16 @@ says the stage), no status chip, no salary, no notes, no category label.
   and the write is the existing owner-scoped, active-only single-column update.
   `/pipeline` was added to the archive and quick-update revalidations too,
   since both change what the board shows.
+- Revalidation, finished across the writes that were already there. Creating
+  an application and saving the full edit form now refresh all four surfaces
+  that read whole applications — the list, the board, the dashboard and
+  analytics — and the edit also refreshes the record's own detail and edit
+  routes. A full edit can change any field any of those pages read, so which
+  ones actually changed is not worth inferring. The set is named once, as
+  `APPLICATION_SURFACES`, so a page cannot be added to one write's list and
+  forgotten in another's. No mutation semantics, validation, concurrency check
+  or history ownership changed: a rejected form, a stale version and a refused
+  write all still refresh nothing.
 - Analytics revalidation, on a status change only. A status change writes a
   status-history event, which is what every figure on the analytics page is
   drawn from, so both paths that change a status — the board's move and the

@@ -294,27 +294,21 @@ describe("a card leads with the role, then places it", () => {
 });
 
 describe("a card can be moved by keyboard alone", () => {
-  it("offers every status through a real form control", async () => {
-    await renderBoard({
-      rows: [
-        application({
-          company_name: "RBC",
-          original_job_title: "Business Analyst Intern",
-        }),
-      ],
+  const named = () =>
+    application({
+      company_name: "RBC",
+      original_job_title: "Business Analyst Intern",
     });
 
-    const menu = screen.getByLabelText(
+  const moveMenu = () =>
+    screen.getByLabelText(
       "Move Business Analyst Intern at RBC to another status",
     ) as HTMLSelectElement;
 
-    expect(menu.tagName).toBe("SELECT");
-    expect(
-      Array.from(menu.options).map((option) => option.value),
-    ).toEqual([...APPLICATION_STATUSES]);
-    // It opens on where the application already is, so submitting without
-    // choosing changes nothing.
-    expect(menu.value).toBe("Applied");
+  it("offers the move through a real form control", async () => {
+    await renderBoard({ rows: [named()] });
+
+    expect(moveMenu().tagName).toBe("SELECT");
     // Thirty cards is thirty "Move" buttons to somebody listening to them one
     // at a time, so each says which application it belongs to.
     expect(
@@ -322,6 +316,78 @@ describe("a card can be moved by keyboard alone", () => {
         name: "Move Business Analyst Intern at RBC",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("does not offer the status the application is already at", async () => {
+    await renderBoard({ rows: [named()] });
+
+    // Offering it is what let a student press Move without choosing anything
+    // and be told the application had moved when nothing had changed.
+    expect(
+      Array.from(moveMenu().options).map((option) => option.value),
+    ).not.toContain("Applied");
+  });
+
+  it("keeps every other status available, backward and skipped alike", async () => {
+    await renderBoard({ rows: [named()] });
+
+    const destinations = Array.from(moveMenu().options)
+      .map((option) => option.value)
+      .filter(Boolean);
+
+    expect(destinations).toEqual(
+      APPLICATION_STATUSES.filter((status) => status !== "Applied"),
+    );
+    expect(destinations).toHaveLength(APPLICATION_STATUSES.length - 1);
+    // Backward from Applied, and skipped straight past four stages.
+    expect(destinations).toContain("Interested");
+    expect(destinations).toContain("Offer");
+  });
+
+  it("opens on a placeholder rather than on a destination", async () => {
+    await renderBoard({ rows: [named()] });
+
+    const menu = moveMenu();
+    expect(menu.value).toBe("");
+    expect(menu.options[0].text).toBe("Move to…");
+    expect(menu.options[0].disabled).toBe(true);
+    expect(menu.options[0].selected).toBe(true);
+  });
+
+  it("refuses to submit until a real destination is chosen", async () => {
+    await renderBoard({ rows: [named()] });
+
+    const menu = moveMenu();
+    // The browser's own constraint validation, so this holds with no client
+    // JavaScript at all.
+    expect(menu.required).toBe(true);
+    expect(menu.checkValidity()).toBe(false);
+
+    menu.value = "Interview";
+    expect(menu.checkValidity()).toBe(true);
+  });
+
+  it("excludes whichever status each card is at, not a fixed one", async () => {
+    await renderBoard({
+      rows: [
+        application({ current_status: "Interested" }),
+        application({ current_status: "Withdrawn" }),
+      ],
+    });
+
+    const destinationsFor = (status: string) => {
+      const menu = within(cardsIn(status)[0]).getByRole(
+        "combobox",
+      ) as HTMLSelectElement;
+      return Array.from(menu.options)
+        .map((option) => option.value)
+        .filter(Boolean);
+    };
+
+    expect(destinationsFor("Interested")).not.toContain("Interested");
+    expect(destinationsFor("Interested")).toContain("Withdrawn");
+    expect(destinationsFor("Withdrawn")).not.toContain("Withdrawn");
+    expect(destinationsFor("Withdrawn")).toContain("Interested");
   });
 
   it("carries the application's id and the filters in view", async () => {
