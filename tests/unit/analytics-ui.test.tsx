@@ -1,10 +1,15 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  MetricBars,
-  type MetricRow,
-} from "@/components/analytics/metric-display";
-import type { ApplicationStatus } from "@/lib/applications/constants";
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  ApplicationStatus,
+  JobCategory,
+} from "@/lib/applications/constants";
 import { UNSPECIFIED_DATABASE_VALUE } from "@/lib/applications/constants";
 import type { ApplicationAnalyticsRow } from "@/lib/applications/types";
 
@@ -34,8 +39,10 @@ const { default: AnalyticsPage } = await import("@/app/(app)/analytics/page");
 
 type Seed = {
   id: string;
-  source: string;
+  source?: string;
+  category?: JobCategory;
   path: ApplicationStatus[];
+  dateApplied?: string | null;
   archived?: boolean;
 };
 
@@ -47,8 +54,9 @@ async function renderAnalytics(seeds: Seed[]) {
   const rows: ApplicationAnalyticsRow[] = seeds.map((seed) => ({
     id: seed.id,
     current_status: seed.path[seed.path.length - 1],
-    normalized_job_category: "Business Analysis",
-    application_source: seed.source,
+    normalized_job_category: seed.category ?? "Business Analysis",
+    application_source: seed.source ?? "LinkedIn",
+    date_applied: seed.dateApplied ?? null,
     archived_at: seed.archived ? "2026-08-20T10:00:00.000Z" : null,
   }));
   const history = seeds.flatMap((seed) =>
@@ -64,316 +72,627 @@ async function renderAnalytics(seeds: Seed[]) {
   return render(await AnalyticsPage());
 }
 
-/** The row a table renders for one label, whichever table it is in. */
-function rowFor(label: string): HTMLElement {
-  return screen.getAllByRole("rowheader", { name: new RegExp(label) })[0]
-    .closest("tr") as HTMLElement;
+function many(prefix: string, count: number, seed: Omit<Seed, "id">): Seed[] {
+  return Array.from({ length: count }, (_, index) => ({
+    ...seed,
+    id: `${prefix}${index}`,
+  }));
 }
 
 /**
- * Four submitted applications where a stage-to-stage denominator would give a
- * visibly different answer from a share of everything submitted: two got a
- * response, one of those interviewed. Share of submitted puts the interview at
- * 25%; stage-to-stage would put it at 50%.
+ * A date `days` before today, as `YYYY-MM-DD`.
+ *
+ * Relative rather than fixed, because the activity range is anchored to the
+ * real clock the page reads. Never fewer than two days back, so the value
+ * cannot land in tomorrow when the runner's UTC day is ahead of the page's
+ * timezone.
  */
-const MIXED: Seed[] = [
-  { id: "a1", source: "LinkedIn", path: ["Applied", "Screening", "Interview"] },
-  { id: "a2", source: "LinkedIn", path: ["Applied", "Rejected"] },
-  { id: "a3", source: "Referral", path: ["Applied"] },
-  { id: "a4", source: UNSPECIFIED_DATABASE_VALUE, path: ["Applied"] },
-];
+function daysAgo(days: number): string {
+  const day = new Date();
+  day.setUTCDate(day.getUTCDate() - Math.max(2, days));
+  return day.toISOString().slice(0, 10);
+}
 
-describe("the analytics page", () => {
+/**
+ * A believable search: 54 submitted, 9 responses, 4 interviews, 1 offer.
+ *
+ * The same numbers the funnel design was drawn against, so the page's
+ * stage-to-stage figures are 17%, 44% and 25% — all visibly different from a
+ * share of the submitted total, which is what a regression would produce.
+ *
+ * 42 of the 54 carry an application date and 12 do not, so the coverage
+ * sentence has something to disclose. Three role categories and three sources
+ * give both performance lenses a comparison to make.
+ */
+function search(): Seed[] {
+  const categories: JobCategory[] = [
+    "Business Analysis",
+    "Finance",
+    "Marketing",
+  ];
+
+  return [
+    ...many("n", 45, { source: "LinkedIn", path: ["Applied"] }).map(
+      (seed, index) => ({
+        ...seed,
+        category: categories[index % categories.length],
+        // 33 dated, 12 left without a date.
+        dateApplied: index < 33 ? daysAgo(2 + index * 2) : null,
+      }),
+    ),
+    ...many("r", 5, {
+      source: "Company website",
+      path: ["Applied", "Rejected"],
+    }).map((seed, index) => ({
+      ...seed,
+      category: categories[index % categories.length],
+      dateApplied: daysAgo(3 + index * 5),
+    })),
+    ...many("i", 3, {
+      source: "Company website",
+      path: ["Applied", "Interview", "Rejected"],
+    }).map((seed, index) => ({
+      ...seed,
+      category: categories[index % categories.length],
+      dateApplied: daysAgo(6 + index * 7),
+    })),
+    {
+      id: "o",
+      source: "Referral",
+      category: "Finance",
+      path: ["Applied", "Interview", "Offer", "Accepted"],
+      dateApplied: daysAgo(9),
+    },
+    { id: "saved", source: "LinkedIn", path: ["Interested"] },
+  ];
+}
+
+/** The funnel's four rows, in order, as their full text. */
+function funnelRows(): string[] {
+  const funnel = screen.getByRole("region", { name: "Your funnel" });
+  return within(funnel)
+    .getAllByRole("listitem")
+    .map((item) => item.textContent ?? "");
+}
+
+describe("the page's shape", () => {
   beforeEach(() => {
     listApplicationsForAnalytics.mockReset();
     listStatusHistory.mockReset();
   });
 
-  it("renders every section, in the order the page is structured", async () => {
-    await renderAnalytics(MIXED);
+  it("leads with the page title and one line saying what it is for", async () => {
+    await renderAnalytics(search());
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Analytics" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Understand what is converting in your search."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not repeat the word Analytics as an eyebrow above the heading", async () => {
+    await renderAnalytics(search());
+
+    expect(screen.getAllByText("Analytics")).toHaveLength(1);
+  });
+
+  it("renders the V2 hierarchy and nothing the dashboard already owns", async () => {
+    await renderAnalytics(search());
 
     const headings = screen
       .getAllByRole("heading", { level: 2 })
       .map((heading) => heading.textContent);
 
     expect(headings).toEqual([
-      "Search overview",
-      "How far applications got",
-      "Source performance",
-      "Current status",
-      "Categories",
+      "Your funnel",
+      "Where your funnel narrows",
+      "What works",
+      "Search activity",
     ]);
   });
 
-  it("names each section as a landmark rather than an anonymous card", async () => {
-    await renderAnalytics(MIXED);
+  it("no longer shows the sections the dashboard answers", async () => {
+    await renderAnalytics(search());
 
-    for (const name of [
+    for (const removed of [
       "Search overview",
-      "How far applications got",
-      "Source performance",
       "Current status",
       "Categories",
+      "Source performance",
+      "Applications saved",
+      "Active now",
+      "Not yet submitted",
+    ]) {
+      expect(screen.queryByText(removed)).toBeNull();
+    }
+  });
+
+  it("names each section as a landmark", async () => {
+    await renderAnalytics(search());
+
+    for (const name of [
+      "Your funnel",
+      "Where your funnel narrows",
+      "What works",
+      "Search activity",
     ]) {
       expect(screen.getByRole("region", { name })).toBeInTheDocument();
     }
   });
 
-  it("shows the search overview totals as readable numbers", async () => {
-    await renderAnalytics([
-      ...MIXED,
-      { id: "b1", source: "LinkedIn", path: ["Interested"] },
-    ]);
+  it("draws no more than the three agreed visualisations", async () => {
+    const { container } = await renderAnalytics(search());
 
-    const overview = screen.getByRole("region", { name: "Search overview" });
-
-    // Saved 5, submitted 4, active 2 (Applied ×2 plus the Interview), not yet
-    // submitted 1. Each is a number a reader can see, not one to infer.
-    for (const [label, value] of [
-      ["Applications saved", "5"],
-      ["Submitted", "4"],
-      ["Active now", "3"],
-      ["Not yet submitted", "1"],
-    ]) {
-      const tile = within(overview).getByText(label).closest("div");
-      expect(within(tile as HTMLElement).getByText(value)).toBeInTheDocument();
-    }
+    // One line chart, and it is the only SVG the page draws for data. Nothing
+    // here is a pie, a donut, a gauge, or a second line.
+    expect(container.querySelectorAll("svg polyline")).toHaveLength(1);
+    expect(container.querySelectorAll("path[d*='A']")).toHaveLength(0);
   });
 });
 
-describe("the conversion funnel", () => {
+describe("your funnel", () => {
   beforeEach(() => {
     listApplicationsForAnalytics.mockReset();
     listStatusHistory.mockReset();
   });
 
-  it("shows submitted as the visible 100% baseline", async () => {
-    await renderAnalytics(MIXED);
+  it("shows the four milestones with their counts, in order", async () => {
+    await renderAnalytics(search());
+    const rows = funnelRows();
 
-    const baseline = rowFor("Submitted");
-    expect(within(baseline).getByText("4")).toBeInTheDocument();
-    expect(within(baseline).getByText("100%")).toBeInTheDocument();
-  });
-
-  it("shows both the count and the share on every stage", async () => {
-    await renderAnalytics(MIXED);
-
-    for (const [stage, count, share] of [
-      ["Employer responded", "2", "50%"],
-      ["Moved forward", "1", "25%"],
-      ["Reached an interview", "1", "25%"],
-      ["Received an offer", "0", "0%"],
-    ]) {
-      const row = rowFor(stage);
-      expect(within(row).getByText(count)).toBeInTheDocument();
-      expect(within(row).getByText(share)).toBeInTheDocument();
+    expect(rows).toHaveLength(4);
+    for (const [index, [label, count]] of [
+      ["Submitted", "54"],
+      ["Employer response", "9"],
+      ["Interview", "4"],
+      ["Offer", "1"],
+    ].entries()) {
+      expect(rows[index]).toContain(label);
+      expect(rows[index]).toContain(count);
     }
   });
 
-  it("keeps every share out of submitted, never stage to stage", async () => {
-    await renderAnalytics(MIXED);
+  it("measures each step against the stage immediately above it", async () => {
+    await renderAnalytics(search());
+    const funnel = screen.getByRole("region", { name: "Your funnel" });
 
-    // One of the two responses interviewed. Stage-to-stage would read 50%;
-    // the canonical share of everything submitted is 25%.
-    const interview = rowFor("Reached an interview");
-    expect(within(interview).getByText("25%")).toBeInTheDocument();
-    expect(within(interview).queryByText("50%")).toBeNull();
+    // 9/54 = 17%, 4/9 = 44%, 1/4 = 25%. A share of submitted would have read
+    // 17%, 7% and 2% — the old funnel's answer.
+    expect(within(funnel).getByText("17% continued")).toBeInTheDocument();
+    expect(within(funnel).getByText("44% continued")).toBeInTheDocument();
+    expect(within(funnel).getByText("25% continued")).toBeInTheDocument();
+    expect(within(funnel).queryByText("7% continued")).toBeNull();
   });
 
-  it("says so plainly when nothing has been submitted yet", async () => {
-    await renderAnalytics([
-      { id: "a", source: "LinkedIn", path: ["Interested"] },
-      { id: "b", source: "Referral", path: ["Interested", "Preparing"] },
-    ]);
+  it("counts an interview that later became a rejection", async () => {
+    await renderAnalytics(search());
 
-    const funnel = screen.getByRole("region", {
-      name: "How far applications got",
+    // Three of the four interviews ended in rejection and are still interviews.
+    expect(funnelRows()[2]).toContain("Interview: 4 applications");
+  });
+
+  it("shows both search ratios", async () => {
+    await renderAnalytics(search());
+
+    // 54 / 4 = 13.5, one decimal. 54 / 1 = 54, an integer.
+    expect(screen.getByText("13.5")).toBeInTheDocument();
+    expect(screen.getByText("applications per interview")).toBeInTheDocument();
+    expect(screen.getByText("applications per offer")).toBeInTheDocument();
+  });
+
+  it("shows an em dash rather than zero when a ratio is undefined", async () => {
+    await renderAnalytics(many("n", 6, { path: ["Applied"] }));
+
+    const dashes = screen.getAllByText("—");
+    expect(dashes).toHaveLength(2);
+    // The two answers this must never give.
+    expect(screen.queryByText("∞")).toBeNull();
+    expect(screen.queryByText("NaN")).toBeNull();
+  });
+
+  it("omits a step's percentage when it has no denominator", async () => {
+    await renderAnalytics(many("n", 6, { path: ["Applied"] }));
+    const funnel = screen.getByRole("region", { name: "Your funnel" });
+
+    // Six submitted, nothing came back: the first step is a real 0% and the two
+    // below have no answer at all.
+    expect(within(funnel).getByText("0% continued")).toBeInTheDocument();
+    expect(within(funnel).getAllByText(/continued$/)).toHaveLength(1);
+  });
+
+  it("keeps the bars decorative, because every number is already text", async () => {
+    const { container } = await renderAnalytics(search());
+    const funnel = screen.getByRole("region", { name: "Your funnel" });
+
+    expect(
+      within(funnel).getAllByText(/continued$/).length,
+    ).toBeGreaterThan(0);
+    expect(container.querySelectorAll("li [aria-hidden='true']").length)
+      .toBeGreaterThan(0);
+  });
+});
+
+describe("where your funnel narrows", () => {
+  beforeEach(() => {
+    listApplicationsForAnalytics.mockReset();
+    listStatusHistory.mockReset();
+  });
+
+  it("names the lowest recorded step with its sample", async () => {
+    await renderAnalytics(search());
+    const narrowing = screen.getByRole("region", {
+      name: "Where your funnel narrows",
     });
 
     expect(
-      within(funnel).getByText(/Nothing has been submitted yet/),
+      within(narrowing).getByText("Submitted → employer response"),
     ).toBeInTheDocument();
-    // A low-data state, not an error and not encouragement.
-    expect(within(funnel).queryByRole("table")).toBeNull();
-    expect(screen.queryByText(/keep going|crushing|great work/i)).toBeNull();
+    expect(within(narrowing).getByText("17%")).toBeInTheDocument();
+    expect(within(narrowing).getByText("9 of 54 progressed")).toBeInTheDocument();
   });
 
-  it("reports real zeros when applications were submitted but nothing came back", async () => {
-    await renderAnalytics([
-      { id: "a", source: "LinkedIn", path: ["Applied"] },
-      { id: "b", source: "LinkedIn", path: ["Applied"] },
-    ]);
+  it("says it describes what happened, not why", async () => {
+    await renderAnalytics(search());
 
-    const responded = rowFor("Employer responded");
-    expect(within(responded).getByText("0")).toBeInTheDocument();
-    expect(within(responded).getByText("0%")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /describes what happened in your recorded search, not why an employer made a decision/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("is absent below five submitted applications", async () => {
+    await renderAnalytics(many("n", 3, { path: ["Applied"] }));
+
+    expect(
+      screen.queryByRole("region", { name: "Where your funnel narrows" }),
+    ).toBeNull();
+    // One quiet sentence, not a panel.
+    expect(
+      screen.getByText("More comparisons appear as your submitted history grows."),
+    ).toBeInTheDocument();
+    // The funnel's own counts are still there.
+    expect(screen.getByRole("region", { name: "Your funnel" })).toBeInTheDocument();
+  });
+
+  it("appears at exactly five submitted applications", async () => {
+    await renderAnalytics(many("n", 5, { path: ["Applied"] }));
+
+    expect(
+      screen.getByRole("region", { name: "Where your funnel narrows" }),
+    ).toBeInTheDocument();
   });
 });
 
-describe("source performance", () => {
+describe("what works", () => {
   beforeEach(() => {
     listApplicationsForAnalytics.mockReset();
     listStatusHistory.mockReset();
   });
 
-  it("lists each source with its counts and its rate", async () => {
-    await renderAnalytics(MIXED);
+  it("shows a composition per group with its sample size", async () => {
+    await renderAnalytics(search());
+    const works = screen.getByRole("region", { name: "What works" });
 
-    const linkedIn = rowFor("LinkedIn");
-    // Submitted 2, responses 2, interviews 1, offers 0.
-    expect(within(linkedIn).getAllByText("2")).toHaveLength(2);
-    expect(within(linkedIn).getByText("50% · 1 of 2")).toBeInTheDocument();
+    const linkedIn = within(works)
+      .getByText("LinkedIn")
+      .closest("li") as HTMLElement;
+    expect(within(linkedIn).getByText("n=45")).toBeInTheDocument();
+
+    const website = within(works)
+      .getByText("Company website")
+      .closest("li") as HTMLElement;
+    expect(within(website).getByText("n=8")).toBeInTheDocument();
   });
 
-  it("never shows a rate without the sample it came from", async () => {
+  it("exposes every milestone count as text, with no hover needed", async () => {
+    await renderAnalytics(search());
+    const works = screen.getByRole("region", { name: "What works" });
+    const website = within(works)
+      .getByText("Company website")
+      .closest("li") as HTMLElement;
+
+    // 8 submitted: 5 rejected without an interview, 3 interviewed.
+    expect(within(website).getByText("5")).toBeInTheDocument();
+    expect(within(website).getByText("3")).toBeInTheDocument();
+    expect(within(website).getAllByText("0").length).toBeGreaterThan(0);
+  });
+
+  it("names the four segments in a legend", async () => {
+    await renderAnalytics(search());
+    const works = screen.getByRole("region", { name: "What works" });
+
+    for (const label of [
+      "No recorded response",
+      "Response",
+      "Interview",
+      "Offer",
+    ]) {
+      expect(within(works).getAllByText(label).length).toBeGreaterThan(0);
+    }
+  });
+
+  it("switches lenses without a second chart", async () => {
     await renderAnalytics([
-      { id: "a", source: "Referral", path: ["Applied", "Interview"] },
-      ...Array.from({ length: 10 }, (_, index) => ({
-        id: `b${index}`,
+      ...many("f", 8, {
         source: "LinkedIn",
-        path: ["Applied"] as ApplicationStatus[],
-      })),
+        category: "Finance",
+        path: ["Applied"],
+      }),
+      ...many("m", 6, {
+        source: "Company website",
+        category: "Marketing",
+        path: ["Applied", "Interview"],
+      }),
     ]);
 
-    // The perfect rate is shown — and so is the single application behind it.
-    expect(screen.getAllByText("100% · 1 of 1").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("0% · 0 of 10").length).toBeGreaterThan(0);
+    const works = screen.getByRole("region", { name: "What works" });
+    expect(within(works).getByText("LinkedIn")).toBeInTheDocument();
+    expect(within(works).queryByText("Finance")).toBeNull();
+
+    fireEvent.click(within(works).getByRole("radio", { name: "Role type" }));
+
+    expect(within(works).getByText("Finance")).toBeInTheDocument();
+    expect(within(works).getByText("Marketing")).toBeInTheDocument();
+    // The same visualisation, re-plotted: the source rows are gone rather than
+    // a second chart having appeared below them.
+    expect(within(works).queryByText("LinkedIn")).toBeNull();
   });
 
-  it("orders by volume, so one lucky application never leads the table", async () => {
+  it("communicates the selected lens programmatically, not only in colour", async () => {
+    await renderAnalytics(search());
+    const works = screen.getByRole("region", { name: "What works" });
+
+    const source = within(works).getByRole("radio", { name: "Source" });
+    const role = within(works).getByRole("radio", { name: "Role type" });
+
+    expect(source).toHaveAttribute("aria-checked", "true");
+    expect(role).toHaveAttribute("aria-checked", "false");
+
+    fireEvent.click(role);
+
+    expect(role).toHaveAttribute("aria-checked", "true");
+    expect(source).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("marks a small sample without hiding it or warning about it", async () => {
+    await renderAnalytics(search());
+    const works = screen.getByRole("region", { name: "What works" });
+
+    const referral = within(works)
+      .getByText("Referral")
+      .closest("li") as HTMLElement;
+    expect(within(referral).getByText("small sample")).toBeInTheDocument();
+    expect(within(referral).getByText("n=1")).toBeInTheDocument();
+    // No alarm: the treatment is a muted label and nothing else.
+    expect(within(works).queryByRole("alert")).toBeNull();
+    expect(within(works).queryByText(/warning|caution|unreliable/i)).toBeNull();
+  });
+
+  it("falls back to role type when source cannot form a comparison", async () => {
     await renderAnalytics([
-      { id: "a", source: "Referral", path: ["Applied", "Interview"] },
-      ...Array.from({ length: 10 }, (_, index) => ({
-        id: `b${index}`,
-        source: "LinkedIn",
-        path: ["Applied"] as ApplicationStatus[],
-      })),
+      ...many("f", 5, {
+        source: UNSPECIFIED_DATABASE_VALUE,
+        category: "Finance",
+        path: ["Applied"],
+      }),
+      ...many("m", 4, {
+        source: UNSPECIFIED_DATABASE_VALUE,
+        category: "Marketing",
+        path: ["Applied", "Interview"],
+      }),
     ]);
 
-    const sources = screen.getByRole("region", { name: "Source performance" });
-    const names = within(sources)
-      .getAllByRole("rowheader")
-      .map((cell) => cell.textContent);
-
-    expect(names[0]).toContain("LinkedIn");
-    expect(names[1]).toContain("Referral");
+    const works = screen.getByRole("region", { name: "What works" });
+    expect(within(works).getByText("Finance")).toBeInTheDocument();
+    // A single unspecified bucket is not a comparison, so the control has
+    // nothing to switch between and is not drawn.
+    expect(within(works).queryByRole("radiogroup")).toBeNull();
   });
 
-  it("puts applications with no recorded source in their own bucket, last", async () => {
-    await renderAnalytics(MIXED);
+  it("omits the section entirely when neither lens can compare", async () => {
+    await renderAnalytics(
+      many("f", 6, {
+        source: UNSPECIFIED_DATABASE_VALUE,
+        category: "Finance",
+        path: ["Applied"],
+      }),
+    );
 
-    const sources = screen.getByRole("region", { name: "Source performance" });
-    const names = within(sources)
-      .getAllByRole("rowheader")
-      .map((cell) => cell.textContent);
-
-    expect(names.at(-1)).toContain(UNSPECIFIED_DATABASE_VALUE);
+    expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
+    // And no empty panel stands in for it.
+    expect(screen.queryByText(/no source data/i)).toBeNull();
   });
 
-  it("counts only submitted applications, so a saved job changes no rate", async () => {
-    await renderAnalytics([
-      { id: "a", source: "LinkedIn", path: ["Applied", "Interview"] },
-      { id: "b", source: "LinkedIn", path: ["Applied"] },
-      // Saved from LinkedIn and never sent: outside the denominator entirely.
-      { id: "c", source: "LinkedIn", path: ["Interested"] },
-      { id: "d", source: "LinkedIn", path: ["Interested", "Preparing"] },
-    ]);
+  it("orders groups by volume, never by rate", async () => {
+    await renderAnalytics(search());
+    const works = screen.getByRole("region", { name: "What works" });
 
-    expect(screen.getAllByText("50% · 1 of 2").length).toBeGreaterThan(0);
-  });
+    const labels = within(works)
+      .getAllByRole("listitem")
+      .map((item) => item.textContent ?? "")
+      .filter((text) => text.includes("n="));
 
-  it("does not crash, or invent a table, when nothing was submitted", async () => {
-    await renderAnalytics([
-      { id: "a", source: "LinkedIn", path: ["Interested"] },
-    ]);
-
-    const sources = screen.getByRole("region", { name: "Source performance" });
-    expect(
-      within(sources).getByText(/Nothing has been submitted yet/),
-    ).toBeInTheDocument();
-    expect(within(sources).queryByRole("table")).toBeNull();
+    expect(labels[0]).toContain("LinkedIn");
+    expect(labels.at(-1)).toContain("Referral");
   });
 
   it("names no source best or worst, and recommends nothing", async () => {
-    await renderAnalytics(MIXED);
+    await renderAnalytics(search());
 
     expect(
-      screen.queryByText(/best|worst|try |should |recommend|stop using/i),
+      screen.queryByText(/best|worst|top source|should |recommend|stop using/i),
     ).toBeNull();
   });
 });
 
-describe("current status and categories", () => {
+describe("search activity", () => {
   beforeEach(() => {
     listApplicationsForAnalytics.mockReset();
     listStatusHistory.mockReset();
   });
 
-  it("shows every status, including the empty ones", async () => {
-    await renderAnalytics(MIXED);
+  /** Dated submissions spread across two recent weeks, relative to today. */
+  function datedSearch(dates: string[]): Seed[] {
+    return dates.map((date, index) => ({
+      id: `d${index}`,
+      source: index % 2 === 0 ? "LinkedIn" : "Company website",
+      path: ["Applied"] as ApplicationStatus[],
+      dateApplied: date,
+    }));
+  }
 
-    const status = screen.getByRole("region", { name: "Current status" });
-    // All ten controlled statuses, in the enum's own order.
-    expect(within(status).getAllByRole("rowheader")).toHaveLength(10);
+  function recentDates(): string[] {
+    const today = new Date();
+    return Array.from({ length: 6 }, (_, index) => {
+      const day = new Date(today);
+      day.setUTCDate(day.getUTCDate() - index * 3);
+      return day.toISOString().slice(0, 10);
+    });
+  }
+
+  it("draws one line and exposes every weekly value as text", async () => {
+    const { container } = await renderAnalytics(datedSearch(recentDates()));
+    const activity = screen.getByRole("region", { name: "Search activity" });
+
+    expect(container.querySelectorAll("svg polyline")).toHaveLength(1);
+    expect(within(activity).getByText("Submitted applications by week"))
+      .toBeInTheDocument();
+    // Twelve weeks, each stated, so the drawing itself carries no unique
+    // information and is hidden from assistive technology.
     expect(
-      within(status).getAllByRole("rowheader").map((cell) => cell.textContent),
-    ).toEqual([
-      "Interested",
-      "Preparing",
-      "Applied",
-      "Screening",
-      "Assessment",
-      "Interview",
-      "Offer",
-      "Rejected",
-      "Withdrawn",
-      "Accepted",
+      within(activity).getAllByText(/^Week of .+: \d+ submitted/),
+    ).toHaveLength(12);
+    expect(container.querySelector("svg")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+  });
+
+  it("discloses incomplete date coverage quietly", async () => {
+    await renderAnalytics([
+      ...datedSearch(recentDates()),
+      ...many("u", 4, { path: ["Applied"], dateApplied: null }),
     ]);
+
+    expect(
+      screen.getByText(
+        "Based on 6 of 10 submitted applications with a recorded application date.",
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("reads current status from current state, not from history", async () => {
-    await renderAnalytics(MIXED);
+  it("says nothing about coverage when every submission has a date", async () => {
+    await renderAnalytics(datedSearch(recentDates()));
 
-    const status = screen.getByRole("region", { name: "Current status" });
-    // All four passed through Applied, but only a3 and a4 are still there:
-    // a1 is at Interview now and a2 is Rejected. History does not reach here.
-    const applied = within(status)
-      .getByRole("rowheader", { name: "Applied" })
-      .closest("tr") as HTMLElement;
-    const interview = within(status)
-      .getByRole("rowheader", { name: "Interview" })
-      .closest("tr") as HTMLElement;
-
-    expect(within(applied).getByText("2")).toBeInTheDocument();
-    expect(within(interview).getByText("1")).toBeInTheDocument();
+    expect(screen.queryByText(/^Based on \d+ of \d+/)).toBeNull();
   });
 
-  it("shows a raw count beside every category", async () => {
-    await renderAnalytics(MIXED);
+  it("omits the chart when there is not enough dated history", async () => {
+    await renderAnalytics(many("n", 8, { path: ["Applied"], dateApplied: null }));
 
-    const categories = screen.getByRole("region", { name: "Categories" });
-    const row = within(categories).getByRole("rowheader", {
-      name: "Business Analysis",
-    }).parentElement as HTMLElement;
+    expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
+    expect(
+      screen.getByText(
+        "More dated submissions are needed to show activity over time.",
+      ),
+    ).toBeInTheDocument();
+  });
 
-    expect(within(row).getByText("4")).toBeInTheDocument();
+  it("keeps the section free of goals, streaks and comparisons", async () => {
+    await renderAnalytics(datedSearch(recentDates()));
+
+    expect(
+      screen.queryByText(/goal|streak|score|target|last week|percentile/i),
+    ).toBeNull();
   });
 });
 
-describe("degenerate data", () => {
+describe("progressive disclosure", () => {
   beforeEach(() => {
     listApplicationsForAnalytics.mockReset();
     listStatusHistory.mockReset();
   });
 
-  it("keeps the existing empty state when nothing is saved at all", async () => {
+  it("shows a V2 empty state with nothing saved at all", async () => {
     await renderAnalytics([]);
 
-    expect(screen.getByText("Nothing to measure yet")).toBeInTheDocument();
+    expect(screen.getByText("No search history yet.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Add application" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("region")).toBeNull();
   });
 
-  it("reports a failed read rather than showing zeros", async () => {
+  it("says there is no submitted history when nothing has been sent", async () => {
+    await renderAnalytics([
+      { id: "a", path: ["Interested"] },
+      { id: "b", path: ["Interested", "Preparing"] },
+    ]);
+
+    expect(screen.getByText("No submitted history yet.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Your funnel and performance comparisons appear after applications have been submitted/,
+      ),
+    ).toBeInTheDocument();
+    // Not a call to action, and not a judgement.
+    expect(screen.queryByText(/behind|keep going|start applying/i)).toBeNull();
+  });
+
+  it("shows counts and defined ratios at one to four submitted", async () => {
+    await renderAnalytics([
+      { id: "a", path: ["Applied", "Interview"] },
+      ...many("n", 2, { path: ["Applied"] }),
+    ]);
+
+    // 3 submitted over 1 interview, and the funnel still draws its counts.
+    expect(funnelRows()[0]).toContain("Submitted: 3 applications");
+    expect(funnelRows()[2]).toContain("Interview: 1 application");
+    expect(
+      screen.queryByRole("region", { name: "Where your funnel narrows" }),
+    ).toBeNull();
+  });
+
+  it("leaves no section rendered as an empty box", async () => {
+    await renderAnalytics(many("n", 3, { path: ["Applied"] }));
+
+    // Only the funnel earns a section at this size, and exactly one sentence
+    // explains the rest. A quiet paragraph per absent section would be the
+    // empty-state grid this design avoids, drawn in text instead of boxes.
+    expect(screen.getAllByRole("region")).toHaveLength(1);
+    expect(screen.getAllByText(/More .+ (appear|are needed)/)).toHaveLength(1);
+    expect(
+      screen.getByText("More comparisons appear as your submitted history grows."),
+    ).toBeInTheDocument();
+  });
+
+  it("withholds the performance comparison below five submitted", async () => {
+    // Two sources, so the lens would qualify on group count alone — but n=2
+    // against n=1 is two coin flips side by side, and drawing them invites a
+    // reader to prefer one.
+    await renderAnalytics([
+      { id: "a", source: "LinkedIn", path: ["Applied", "Interview"] },
+      { id: "b", source: "LinkedIn", path: ["Applied"] },
+      { id: "c", source: "Referral", path: ["Applied"] },
+    ]);
+
+    expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
+    // The funnel's own facts are still there. It is the conclusions that wait.
+    expect(funnelRows()[0]).toContain("Submitted: 3 applications");
+  });
+});
+
+describe("failed reads", () => {
+  beforeEach(() => {
+    listApplicationsForAnalytics.mockReset();
+    listStatusHistory.mockReset();
+  });
+
+  it("reports a failure rather than showing an empty funnel", async () => {
     listApplicationsForAnalytics.mockResolvedValue({
       data: null,
       error: { code: "PGRST301" },
@@ -382,112 +701,25 @@ describe("degenerate data", () => {
 
     render(await AnalyticsPage());
 
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("Analytics could not be loaded")).toBeInTheDocument();
+    expect(screen.getByText(/Refresh the page to try again/)).toBeInTheDocument();
+    // Zeros would be a claim about the search that is only true when the query
+    // succeeded.
+    expect(screen.queryByRole("region", { name: "Your funnel" })).toBeNull();
+  });
+
+  it("exposes no database detail to the student", async () => {
+    listApplicationsForAnalytics.mockResolvedValue({ data: [], error: null });
+    listStatusHistory.mockResolvedValue({
+      data: null,
+      error: { code: "PGRST301" },
+    });
+
+    render(await AnalyticsPage());
+
     expect(
-      screen.getByText("Analytics could not be loaded"),
-    ).toBeInTheDocument();
-  });
-
-  it("counts an archived application in the history it belongs to", async () => {
-    await renderAnalytics([
-      {
-        id: "a",
-        source: "Referral",
-        path: ["Applied", "Interview", "Rejected"],
-        archived: true,
-      },
-    ]);
-
-    // Archived, and still part of what happened: it is submitted, it reached
-    // an interview, and its source carries that interview.
-    expect(rowFor("Reached an interview")).toBeInTheDocument();
-    expect(screen.getAllByText("100% · 1 of 1").length).toBeGreaterThan(0);
-  });
-});
-
-/**
- * The bar occupies a real column, so the header row has to account for it.
- *
- * A body row with more cells than the header row describes is how a table
- * stops being navigable: every cell past the last header has no header at all,
- * whatever it contains. These assert the shape directly rather than through the
- * page, because the shape is the component's own contract and both of its
- * column layouts have to hold it.
- */
-describe("metric bars column structure", () => {
-  const rows: MetricRow[] = [
-    { label: "Applied", valueLabel: "7", detailLabel: "70%", percent: 70 },
-    { label: "Interview", valueLabel: "2", detailLabel: "20%", percent: 20 },
-  ];
-
-  function columnCounts(container: HTMLElement) {
-    const headers = container.querySelectorAll("thead th").length;
-    const bodyRows = [...container.querySelectorAll("tbody tr")].map(
-      (row) => row.querySelectorAll("th, td").length,
-    );
-
-    return { headers, bodyRows };
-  }
-
-  it("heads every column when there is no detail column", () => {
-    const { container } = render(
-      <MetricBars
-        caption="Number of applications at each current status"
-        rows={rows}
-        valueHeading="Applications"
-      />,
-    );
-
-    // Name, value, bar.
-    const { headers, bodyRows } = columnCounts(container);
-    expect(headers).toBe(3);
-    expect(bodyRows).toEqual([3, 3]);
-  });
-
-  it("heads every column when a detail column is present", () => {
-    const { container } = render(
-      <MetricBars
-        caption="Applications that ever reached each stage"
-        detailHeading="Share of submitted applications"
-        rows={rows}
-        valueHeading="Applications"
-      />,
-    );
-
-    // Name, value, detail, bar.
-    const { headers, bodyRows } = columnCounts(container);
-    expect(headers).toBe(4);
-    expect(bodyRows).toEqual([4, 4]);
-  });
-
-  it("names the bar's column rather than leaving a blank header", () => {
-    const { container } = render(
-      <MetricBars
-        caption="Number of applications at each current status"
-        rows={rows}
-        valueHeading="Applications"
-      />,
-    );
-
-    const headers = [...container.querySelectorAll("thead th")].map(
-      (cell) => cell.textContent,
-    );
-
-    expect(headers).toEqual(["Name", "Applications", "Shown as a bar"]);
-  });
-
-  it("keeps the bar itself decorative", () => {
-    const { container } = render(
-      <MetricBars
-        caption="Number of applications at each current status"
-        rows={rows}
-        valueHeading="Applications"
-      />,
-    );
-
-    // The column is real; what sits in it is not announced, because every
-    // number it draws is already text in a cell to its left.
-    const bars = container.querySelectorAll("tbody [aria-hidden='true']");
-    expect(bars).toHaveLength(rows.length);
-    expect(screen.getByRole("cell", { name: "7" })).toBeInTheDocument();
+      screen.queryByText(/database|connection|PGRST|supabase|query/i),
+    ).toBeNull();
   });
 });

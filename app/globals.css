@@ -95,6 +95,23 @@
   */
   --rail-track: #8d8373;
 
+  /*
+    The neutral an analytics chart uses for "did not progress to the next
+    recorded milestone".
+
+    Its own token rather than `--border-strong`, because the two have different
+    jobs: a border separates surfaces and may be nearly invisible doing it,
+    while this is a data segment a reader has to be able to see and tell apart
+    from the accent beside it. Tuned per theme for that reason — the value that
+    reads as a warm greige on ivory is far too dark to sit on graphite, and the
+    graphite value would disappear on ivory.
+
+    Deliberately not derived from the accent: the absence of progress is not a
+    quieter shade of progress, and keeping it neutral is what lets the accent
+    ramp mean "further along" and nothing else.
+  */
+  --chart-neutral: #c6bfb2;
+
   --accent: var(--accent-light);
   --accent-hover: var(--accent-hover-light);
   --accent-soft: var(--accent-soft-light);
@@ -157,6 +174,8 @@
 
   --rail-track: #6d7480;
 
+  --chart-neutral: #5c636d;
+
 
   --accent: var(--accent-dark);
   --accent-hover: var(--accent-hover-dark);
@@ -214,6 +233,8 @@
     --border-strong: #3a3f46;
 
     --rail-track: #6d7480;
+
+    --chart-neutral: #5c636d;
 
 
     --accent: var(--accent-dark);
@@ -275,6 +296,7 @@
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-rail-track: var(--rail-track);
+  --color-chart-neutral: var(--chart-neutral);
 
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);

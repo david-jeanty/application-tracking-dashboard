@@ -130,3 +130,24 @@ export function dateOnlyFromTimestamp(
 
   return todayInTimeZone(instant, timeZone);
 }
+
+/**
+ * `Jun 2` — a calendar day without its year.
+ *
+ * For axis labels, where the year is already established by the range and
+ * repeating it twelve times would crowd out the days. Formatted in UTC from the
+ * value's own parts, like every other formatter here, so the label can never
+ * name a different day than the value it came from.
+ */
+export function formatMonthDay(value: string, locale = "en-CA"): string {
+  if (!isDateOnly(value)) {
+    throw new Error("Date-only formatting requires a valid YYYY-MM-DD value.");
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat(locale, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
