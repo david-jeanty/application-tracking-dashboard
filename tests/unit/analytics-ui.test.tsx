@@ -254,6 +254,26 @@ describe("your funnel", () => {
     }
   });
 
+  it("announces each milestone once, as a phrase rather than a bare number", async () => {
+    await renderAnalytics(search());
+    const funnel = screen.getByRole("region", { name: "Your funnel" });
+    const submitted = within(funnel).getAllByRole("listitem")[0];
+
+    // The count is drawn in its own column and repeated in the label's
+    // sr-only text. Announcing both would read the number twice — once with
+    // nothing attached to it — so the visible one is hidden from assistive
+    // technology and the sentence carries it.
+    const visible = submitted.querySelector(".tabular-nums");
+    expect(visible?.textContent).toBe("54");
+    expect(visible).toHaveAttribute("aria-hidden", "true");
+
+    const announced = Array.from(submitted.querySelectorAll(".sr-only"))
+      .map((node) => node.textContent ?? "")
+      .join("");
+    expect(announced.replace(/\s+/g, " ").trim()).toBe(", 54 applications");
+    expect(submitted.textContent).toContain("Submitted, 54 applications");
+  });
+
   it("measures each step against the stage immediately above it", async () => {
     await renderAnalytics(search());
     const funnel = screen.getByRole("region", { name: "Your funnel" });
@@ -270,7 +290,7 @@ describe("your funnel", () => {
     await renderAnalytics(search());
 
     // Three of the four interviews ended in rejection and are still interviews.
-    expect(funnelRows()[2]).toContain("Interview: 4 applications");
+    expect(funnelRows()[2]).toContain("Interview, 4 applications");
   });
 
   it("shows both search ratios", async () => {
@@ -364,6 +384,34 @@ describe("where your funnel narrows", () => {
       screen.getByRole("region", { name: "Where your funnel narrows" }),
     ).toBeInTheDocument();
   });
+
+  it("still draws every step's rate when no step is eligible to be named", async () => {
+    // 80 submitted, 1 interview, 0 offers: `Interview → offer` is 0 of 1.
+    await renderAnalytics([
+      ...many("n", 79, { path: ["Applied"] }),
+      { id: "i", path: ["Applied", "Interview"] },
+    ]);
+
+    const funnel = screen.getByRole("region", { name: "Your funnel" });
+    // The funnel is unchanged by the eligibility rule — 1/80, 1/1 and 0/1 are
+    // all still drawn, because a rate the student can see the denominator of
+    // is not a claim about anything.
+    expect(within(funnel).getByText("1% continued")).toBeInTheDocument();
+    expect(within(funnel).getByText("100% continued")).toBeInTheDocument();
+    expect(within(funnel).getByText("0% continued")).toBeInTheDocument();
+
+    // What the page will not do is single that 0-of-1 out as the answer. The
+    // narrowest *observed* rate is the one nobody can measure; the narrowest
+    // rate with enough behind it to be worth a sentence is 1 of 80.
+    const narrowing = screen.getByRole("region", {
+      name: "Where your funnel narrows",
+    });
+    expect(within(narrowing).getByText("Submitted → employer response"))
+      .toBeInTheDocument();
+    expect(within(narrowing).getByText("1 of 80 progressed")).toBeInTheDocument();
+    expect(within(narrowing).queryByText("Interview → offer")).toBeNull();
+    expect(within(narrowing).queryByText("0 of 1 progressed")).toBeNull();
+  });
 });
 
 describe("what works", () => {
@@ -455,6 +503,120 @@ describe("what works", () => {
 
     expect(role).toHaveAttribute("aria-checked", "true");
     expect(source).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("moves between lenses with the arrow keys", async () => {
+    await renderAnalytics(search());
+    const works = screen.getByRole("region", { name: "What works" });
+    const source = within(works).getByRole("radio", { name: "Source" });
+    const role = within(works).getByRole("radio", { name: "Role type" });
+
+    // Roving tabindex: the group costs one tab stop, not one per option.
+    expect(source).toHaveAttribute("tabindex", "0");
+    expect(role).toHaveAttribute("tabindex", "-1");
+
+    source.focus();
+    fireEvent.keyDown(source, { key: "ArrowRight" });
+
+    // Selection follows focus, and the chart follows selection.
+    expect(role).toHaveAttribute("aria-checked", "true");
+    expect(source).toHaveAttribute("aria-checked", "false");
+    expect(role).toHaveAttribute("tabindex", "0");
+    expect(role).toHaveFocus();
+    expect(within(works).getByText("Marketing")).toBeInTheDocument();
+
+    // Down is a synonym for right, so the control works in either mental model.
+    fireEvent.keyDown(role, { key: "ArrowLeft" });
+    expect(source).toHaveAttribute("aria-checked", "true");
+    expect(source).toHaveFocus();
+
+    fireEvent.keyDown(source, { key: "ArrowDown" });
+    expect(role).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.keyDown(role, { key: "ArrowUp" });
+    expect(source).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("wraps at both ends rather than dead-ending", async () => {
+    await renderAnalytics(search());
+    const works = screen.getByRole("region", { name: "What works" });
+    const source = within(works).getByRole("radio", { name: "Source" });
+    const role = within(works).getByRole("radio", { name: "Role type" });
+
+    // Left from the first option is the last option, not nothing.
+    source.focus();
+    fireEvent.keyDown(source, { key: "ArrowLeft" });
+    expect(role).toHaveAttribute("aria-checked", "true");
+    expect(role).toHaveFocus();
+
+    fireEvent.keyDown(role, { key: "ArrowRight" });
+    expect(source).toHaveAttribute("aria-checked", "true");
+    expect(source).toHaveFocus();
+  });
+
+  it("leaves keys it does not own to the page", async () => {
+    await renderAnalytics(search());
+    const works = screen.getByRole("region", { name: "What works" });
+    const source = within(works).getByRole("radio", { name: "Source" });
+
+    source.focus();
+    const tab = fireEvent.keyDown(source, { key: "Tab" });
+    // Not swallowed: Tab still moves out of the group.
+    expect(tab).toBe(true);
+    expect(source).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("does not qualify Source when Not specified is the only other group", async () => {
+    await renderAnalytics([
+      ...many("l", 6, {
+        source: "LinkedIn",
+        category: "Finance",
+        path: ["Applied"],
+      }),
+      ...many("u", 5, {
+        source: UNSPECIFIED_DATABASE_VALUE,
+        category: "Marketing",
+        path: ["Applied", "Interview"],
+      }),
+    ]);
+
+    const works = screen.getByRole("region", { name: "What works" });
+    // One named source and a residue bucket is one source, so the lens with an
+    // actual comparison in it is the one that shows — and there is nothing to
+    // switch to.
+    expect(within(works).getByText("Finance")).toBeInTheDocument();
+    expect(within(works).getByText("Marketing")).toBeInTheDocument();
+    expect(within(works).queryByText("LinkedIn")).toBeNull();
+    expect(within(works).queryByRole("radiogroup")).toBeNull();
+  });
+
+  it("qualifies Source at two named groups, and still draws Not specified", async () => {
+    await renderAnalytics([
+      ...many("l", 6, {
+        source: "LinkedIn",
+        category: "Finance",
+        path: ["Applied"],
+      }),
+      ...many("r", 5, {
+        source: "Referral",
+        category: "Finance",
+        path: ["Applied", "Interview"],
+      }),
+      ...many("u", 4, {
+        source: UNSPECIFIED_DATABASE_VALUE,
+        category: "Finance",
+        path: ["Applied"],
+      }),
+    ]);
+
+    const works = screen.getByRole("region", { name: "What works" });
+    expect(within(works).getByText("LinkedIn")).toBeInTheDocument();
+    expect(within(works).getByText("Referral")).toBeInTheDocument();
+    // Residue is not a source, but once the comparison stands on its own it is
+    // still part of what the student sent, and hiding it would lose applications.
+    expect(within(works).getByText("Not specified")).toBeInTheDocument();
+    // Role type is one category here, so Source is the only lens.
+    expect(within(works).queryByRole("radiogroup")).toBeNull();
   });
 
   it("marks a small sample without hiding it or warning about it", async () => {
@@ -650,8 +812,8 @@ describe("progressive disclosure", () => {
     ]);
 
     // 3 submitted over 1 interview, and the funnel still draws its counts.
-    expect(funnelRows()[0]).toContain("Submitted: 3 applications");
-    expect(funnelRows()[2]).toContain("Interview: 1 application");
+    expect(funnelRows()[0]).toContain("Submitted, 3 applications");
+    expect(funnelRows()[2]).toContain("Interview, 1 application");
     expect(
       screen.queryByRole("region", { name: "Where your funnel narrows" }),
     ).toBeNull();
@@ -682,7 +844,7 @@ describe("progressive disclosure", () => {
 
     expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
     // The funnel's own facts are still there. It is the conclusions that wait.
-    expect(funnelRows()[0]).toContain("Submitted: 3 applications");
+    expect(funnelRows()[0]).toContain("Submitted, 3 applications");
   });
 });
 
