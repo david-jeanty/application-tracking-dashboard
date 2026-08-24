@@ -91,14 +91,24 @@ export type ActivitySummary = {
 export const ACTIVITY_WEEKS = 12;
 
 /**
- * How many dated submissions the range needs before a line is drawn.
+ * How much dated history the range needs before a line is drawn.
  *
- * Five applications across at least two distinct weeks. One point is not a
- * trend and a single spike joined to eleven zeroes looks like a chart of
- * nothing; below this the page says so in one sentence instead of drawing a
- * shape that implies more than it knows.
+ * Two applications, in at least two distinct weeks.
+ *
+ * The bar is low on purpose, because this chart is not making a claim. It
+ * reports which weeks a student recorded applications in — a history, not a
+ * trend, and certainly not a rate. Two points a fortnight apart are a true
+ * picture of a fortnight; withholding them would hide the student's own record
+ * from them in the name of a statistical standard the chart never invokes.
+ *
+ * What the two rules do rule out is a drawing that would read as history and
+ * is not. A single point cannot be joined to anything, and everything in one
+ * week is one point however many applications sit under it: eleven zeroes and
+ * a spike is a shape that implies a fortnight of nothing, when what actually
+ * happened is that the search started on Tuesday. So the second rule is the
+ * load-bearing one, and it is about distinct weeks rather than volume.
  */
-export const ACTIVITY_MINIMUM_APPLICATIONS = 5;
+export const ACTIVITY_MINIMUM_APPLICATIONS = 2;
 export const ACTIVITY_MINIMUM_WEEKS = 2;
 
 /**

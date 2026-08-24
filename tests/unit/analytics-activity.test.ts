@@ -290,7 +290,21 @@ describe("coverage", () => {
 });
 
 describe("the low-data rule", () => {
-  it("refuses a line from a single week of activity", () => {
+  it("refuses a line from a single dated submission", () => {
+    // One point cannot be joined to anything, so there is no line to draw.
+    const summary = summarize([
+      { id: "a", path: ["Applied"], dateApplied: "2026-08-17" },
+    ]);
+
+    expect(summary.inRange).toBe(1);
+    expect(summary.inRange).toBeLessThan(ACTIVITY_MINIMUM_APPLICATIONS);
+    expect(summary.hasEnoughHistory).toBe(false);
+  });
+
+  it("refuses a line from a single week however busy that week was", () => {
+    // Volume is not the rule; distinct weeks are. Nine applications on one
+    // Monday is still one point, and eleven zeroes beside it would read as a
+    // quiet term rather than as a search that started this week.
     const summary = summarize(
       Array.from({ length: 9 }, (_, index) => ({
         id: `a${index}`,
@@ -304,33 +318,41 @@ describe("the low-data rule", () => {
     expect(summary.hasEnoughHistory).toBe(false);
   });
 
-  it("refuses a line from too few applications", () => {
+  it("refuses a line from four applications inside one week", () => {
+    const summary = summarize([
+      { id: "a", path: ["Applied"], dateApplied: "2026-08-17" },
+      { id: "b", path: ["Applied"], dateApplied: "2026-08-18" },
+      { id: "c", path: ["Applied"], dateApplied: "2026-08-19" },
+      { id: "d", path: ["Applied"], dateApplied: "2026-08-20" },
+    ]);
+
+    expect(summary.activeWeeks).toBe(1);
+    expect(summary.hasEnoughHistory).toBe(false);
+  });
+
+  it("draws the line at exactly two applications in two weeks", () => {
+    // The floor, and it is deliberately low: two points a fortnight apart are
+    // a true picture of a fortnight. The chart reports which weeks a student
+    // recorded applications in and claims nothing else.
     const summary = summarize([
       { id: "a", path: ["Applied"], dateApplied: "2026-08-17" },
       { id: "b", path: ["Applied"], dateApplied: "2026-08-10" },
     ]);
 
-    expect(summary.activeWeeks).toBe(ACTIVITY_MINIMUM_WEEKS);
-    expect(summary.inRange).toBeLessThan(ACTIVITY_MINIMUM_APPLICATIONS);
-    expect(summary.hasEnoughHistory).toBe(false);
-  });
-
-  it("draws the line once both thresholds are met", () => {
-    const summary = summarize([
-      ...Array.from({ length: 3 }, (_, index) => ({
-        id: `a${index}`,
-        path: ["Applied"] as ApplicationStatus[],
-        dateApplied: "2026-08-17",
-      })),
-      ...Array.from({ length: 2 }, (_, index) => ({
-        id: `b${index}`,
-        path: ["Applied"] as ApplicationStatus[],
-        dateApplied: "2026-08-10",
-      })),
-    ]);
-
     expect(summary.inRange).toBe(ACTIVITY_MINIMUM_APPLICATIONS);
     expect(summary.activeWeeks).toBe(ACTIVITY_MINIMUM_WEEKS);
+    expect(summary.hasEnoughHistory).toBe(true);
+  });
+
+  it("draws the line for three applications across two weeks", () => {
+    const summary = summarize([
+      { id: "a", path: ["Applied"], dateApplied: "2026-08-17" },
+      { id: "b", path: ["Applied"], dateApplied: "2026-08-19" },
+      { id: "c", path: ["Applied"], dateApplied: "2026-08-10" },
+    ]);
+
+    expect(summary.inRange).toBe(3);
+    expect(summary.activeWeeks).toBe(2);
     expect(summary.hasEnoughHistory).toBe(true);
   });
 

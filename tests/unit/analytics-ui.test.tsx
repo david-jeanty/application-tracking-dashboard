@@ -369,12 +369,10 @@ describe("where your funnel narrows", () => {
     expect(
       screen.queryByRole("region", { name: "Where your funnel narrows" }),
     ).toBeNull();
-    // One quiet sentence, not a panel.
-    expect(
-      screen.getByText("More comparisons appear as your submitted history grows."),
-    ).toBeInTheDocument();
-    // The funnel's own counts are still there.
+    // The funnel's own counts are still there. Withholding the conclusion is
+    // not a reason to withhold the record it was drawn from.
     expect(screen.getByRole("region", { name: "Your funnel" })).toBeInTheDocument();
+    expect(funnelRows()[0]).toContain("Submitted, 3 applications");
   });
 
   it("appears at exactly five submitted applications", async () => {
@@ -756,11 +754,27 @@ describe("search activity", () => {
     await renderAnalytics(many("n", 8, { path: ["Applied"], dateApplied: null }));
 
     expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
+    // Eight applications from one source and one category, none of them dated,
+    // so nothing here draws a comparison or a line. The narrowing callout does
+    // draw — 0 of 8 clears both its thresholds — so the funnel is not the whole
+    // page and no sentence stands in for what is missing.
     expect(
-      screen.getByText(
-        "More dated submissions are needed to show activity over time.",
-      ),
+      screen.getByRole("region", { name: "Where your funnel narrows" }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/^More breakdowns appear/)).toBeNull();
+  });
+
+  it("says nothing about the missing chart when the page grew anyway", async () => {
+    // A comparison rendered, so the absent line explains itself. A note here
+    // would be the page apologising for a section beside a section.
+    await renderAnalytics([
+      ...many("l", 4, { source: "LinkedIn", path: ["Applied"] }),
+      ...many("c", 3, { source: "Company website", path: ["Applied"] }),
+    ]);
+
+    expect(screen.getByRole("region", { name: "What works" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
+    expect(screen.queryByText(/^More breakdowns appear/)).toBeNull();
   });
 
   it("keeps the section free of goals, streaks and comparisons", async () => {
@@ -822,28 +836,149 @@ describe("progressive disclosure", () => {
   it("leaves no section rendered as an empty box", async () => {
     await renderAnalytics(many("n", 3, { path: ["Applied"] }));
 
-    // Only the funnel earns a section at this size, and exactly one sentence
-    // explains the rest. A quiet paragraph per absent section would be the
-    // empty-state grid this design avoids, drawn in text instead of boxes.
+    // Only the funnel earns a section here, and exactly one sentence covers
+    // the rest. A quiet paragraph per absent section would be the empty-state
+    // grid this design avoids, drawn in text instead of boxes.
     expect(screen.getAllByRole("region")).toHaveLength(1);
-    expect(screen.getAllByText(/More .+ (appear|are needed)/)).toHaveLength(1);
+    expect(screen.getAllByText(/^More breakdowns appear/)).toHaveLength(1);
+  });
+
+  it("keeps the low-data copy free of encouragement and verdicts", async () => {
+    await renderAnalytics(many("n", 3, { path: ["Applied"] }));
+
     expect(
-      screen.getByText("More comparisons appear as your submitted history grows."),
+      screen.queryByText(
+        /keep applying|getting started|not enough data|build more history|improve your/i,
+      ),
+    ).toBeNull();
+  });
+
+  it("shows the performance comparison at three submitted applications", async () => {
+    // The production case this correction exists for. Two named sources at
+    // n=2 and n=1 is a real comparison of the student's own records; the chart
+    // labels both as small samples and claims nothing beyond them.
+    await renderAnalytics([
+      { id: "a", source: "LinkedIn", path: ["Applied"] },
+      { id: "b", source: "LinkedIn", path: ["Applied", "Rejected"] },
+      { id: "c", source: "Company website", path: ["Applied"] },
+    ]);
+
+    expect(funnelRows()[0]).toContain("Submitted, 3 applications");
+    expect(funnelRows()[1]).toContain("Employer response, 1 application");
+
+    const works = screen.getByRole("region", { name: "What works" });
+    const linkedIn = within(works)
+      .getByText("LinkedIn")
+      .closest("li") as HTMLElement;
+    const website = within(works)
+      .getByText("Company website")
+      .closest("li") as HTMLElement;
+
+    expect(within(linkedIn).getByText("n=2")).toBeInTheDocument();
+    expect(within(website).getByText("n=1")).toBeInTheDocument();
+    expect(within(linkedIn).getByText("small sample")).toBeInTheDocument();
+    expect(within(website).getByText("small sample")).toBeInTheDocument();
+
+    // The conclusion still waits for a sample, and no note stands in for it.
+    expect(
+      screen.queryByRole("region", { name: "Where your funnel narrows" }),
+    ).toBeNull();
+    expect(screen.queryByText(/^More breakdowns appear/)).toBeNull();
+  });
+
+  it("shows the activity line at three submitted applications", async () => {
+    await renderAnalytics([
+      { id: "a", path: ["Applied"], dateApplied: daysAgo(2) },
+      { id: "b", path: ["Applied"], dateApplied: daysAgo(3) },
+      // Seven days earlier than `a`, so this always lands in the week before.
+      { id: "c", path: ["Applied"], dateApplied: daysAgo(9) },
+    ]);
+
+    const activity = screen.getByRole("region", { name: "Search activity" });
+    expect(
+      within(activity).getByText("Submitted applications by week"),
+    ).toBeInTheDocument();
+    expect(within(activity).getByText("· Last 12 weeks")).toBeInTheDocument();
+  });
+
+  it("shows the activity line at two dated applications in two weeks", async () => {
+    await renderAnalytics([
+      { id: "a", path: ["Applied"], dateApplied: daysAgo(2) },
+      { id: "b", path: ["Applied"], dateApplied: daysAgo(9) },
+    ]);
+
+    expect(
+      screen.getByRole("region", { name: "Search activity" }),
     ).toBeInTheDocument();
   });
 
-  it("withholds the performance comparison below five submitted", async () => {
-    // Two sources, so the lens would qualify on group count alone — but n=2
-    // against n=1 is two coin flips side by side, and drawing them invites a
-    // reader to prefer one.
-    await renderAnalytics([
-      { id: "a", source: "LinkedIn", path: ["Applied", "Interview"] },
-      { id: "b", source: "LinkedIn", path: ["Applied"] },
-      { id: "c", source: "Referral", path: ["Applied"] },
-    ]);
+  it("omits the activity line when every date sits in one week", async () => {
+    // Four applications, one week: still one point, and eleven zeroes beside
+    // it would read as a quiet term rather than as a search that started
+    // on Tuesday.
+    await renderAnalytics(
+      many("n", 4, { path: ["Applied"], dateApplied: daysAgo(2) }),
+    );
+
+    expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Your funnel" })).toBeInTheDocument();
+  });
+
+  it("draws a funnel and no conclusions from a single submission", async () => {
+    await renderAnalytics([{ id: "a", path: ["Applied"] }]);
+
+    expect(funnelRows()[0]).toContain("Submitted, 1 application");
+    expect(
+      screen.queryByRole("region", { name: "Where your funnel narrows" }),
+    ).toBeNull();
+    expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
+    // The one defined step is drawn — 0 of 1 is a fact whose denominator the
+    // student can see. The two below it have no denominator and are silent
+    // rather than reported as zero, and both ratios are em dashes rather than
+    // an invented 0 or ∞.
+    const funnel = screen.getByRole("region", { name: "Your funnel" });
+    expect(within(funnel).getAllByText(/continued$/)).toHaveLength(1);
+    expect(within(funnel).getByText("0% continued")).toBeInTheDocument();
+    expect(screen.getAllByText("—")).toHaveLength(2);
+  });
+
+  it("says nothing more will appear once a narrowing callout has", async () => {
+    // Six submitted from one source, one category, all dated in the same week:
+    // no comparison, no line. But 0 of 6 clears both narrowing thresholds, so
+    // the funnel is not the whole page and the sentence would be telling a
+    // student that more will appear directly underneath something that just
+    // did.
+    await renderAnalytics(
+      many("n", 6, {
+        source: "LinkedIn",
+        category: "Finance",
+        path: ["Applied"],
+        dateApplied: daysAgo(2),
+      }),
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Where your funnel narrows" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
+    expect(screen.queryByText(/^More breakdowns appear/)).toBeNull();
+  });
+
+  it("omits What works at three submitted with nothing to compare", async () => {
+    // One named source, one role category: two rows of the same thing is not
+    // a comparison, and the section is absent rather than drawn empty.
+    await renderAnalytics(
+      many("n", 3, {
+        source: "LinkedIn",
+        category: "Finance",
+        path: ["Applied"],
+      }),
+    );
 
     expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
-    // The funnel's own facts are still there. It is the conclusions that wait.
+    expect(screen.getByRole("region", { name: "Your funnel" })).toBeInTheDocument();
     expect(funnelRows()[0]).toContain("Submitted, 3 applications");
   });
 });
