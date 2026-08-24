@@ -1,86 +1,266 @@
 import { describe, expect, it } from "vitest";
-import { summarizeTrackedApplications } from "@/lib/applications/dashboard";
+import { buildDashboard } from "@/lib/dashboard/summary";
+import type { ApplicationListItem, ApplicationTimelineEvent } from "@/lib/applications/types";
 
-/** A successful read of `count` rows, matching the repository's shape. */
-function succeeded(count: number) {
-  return { data: Array.from({ length: count }, (_, index) => index), error: null };
+const TODAY = "2026-08-26";
+const ZONE = "America/Toronto";
+
+function application(
+  overrides: Partial<ApplicationListItem> = {},
+): ApplicationListItem {
+  return {
+    id: "app-1",
+    company_name: "RBC",
+    original_job_title: "Business Analyst Intern",
+    normalized_job_category: "Business Analysis",
+    current_status: "Applied",
+    location: "Toronto, ON",
+    work_arrangement: "Hybrid",
+    work_term_season: "Winter 2027",
+    date_applied: "2026-08-24",
+    application_deadline: null,
+    next_action: null,
+    next_action_due_date: null,
+    created_at: "2026-08-24T12:00:00.000Z",
+    archived_at: null,
+    ...overrides,
+  };
 }
 
-describe("summarizeTrackedApplications", () => {
-  it("keeps the first-application state when the read succeeds with no rows", () => {
-    expect(summarizeTrackedApplications(succeeded(0))).toEqual({
-      kind: "first-application",
-    });
+function timelineEvent(
+  overrides: Partial<ApplicationTimelineEvent> = {},
+): ApplicationTimelineEvent {
+  return {
+    application_id: "app-1",
+    previous_status: null,
+    new_status: "Applied",
+    changed_at: "2026-08-24T16:00:00.000Z",
+    ...overrides,
+  };
+}
+
+const ok = <Row,>(data: Row[]) => ({ data, error: null });
+
+describe("a failed read is never reported as zeros", () => {
+  it("reports unavailable when the applications read errors", () => {
+    expect(
+      buildDashboard(
+        { data: null, error: { code: "42501" } },
+        ok([]),
+        TODAY,
+        ZONE,
+      ),
+    ).toEqual({ kind: "unavailable" });
   });
 
-  it("switches to the returning-user state at the first application", () => {
-    expect(summarizeTrackedApplications(succeeded(1))).toEqual({
-      kind: "tracking",
-      count: 1,
-      description: "1 application currently tracked",
-    });
+  it("reports unavailable when the timeline read errors", () => {
+    expect(
+      buildDashboard(
+        ok([application()]),
+        { data: null, error: { code: "57014" } },
+        TODAY,
+        ZONE,
+      ),
+    ).toEqual({ kind: "unavailable" });
   });
 
-  it("pluralizes beyond one application", () => {
-    expect(summarizeTrackedApplications(succeeded(3))).toMatchObject({
-      kind: "tracking",
-      description: "3 applications currently tracked",
-    });
-    expect(summarizeTrackedApplications(succeeded(12))).toMatchObject({
-      description: "12 applications currently tracked",
-    });
+  it("reports unavailable even when an error arrives alongside rows", () => {
+    // Never let a partial result be presented as a complete picture.
+    expect(
+      buildDashboard(
+        { data: [application()], error: { code: "57014" } },
+        ok([]),
+        TODAY,
+        ZONE,
+      ),
+    ).toEqual({ kind: "unavailable" });
   });
 
-  describe("a failed read is never reported as an empty tracker", () => {
-    it("reports unavailable when the query returns an error", () => {
-      expect(
-        summarizeTrackedApplications({
-          data: null,
-          error: { code: "42501", message: "permission denied" },
+  it("reports unavailable when rows are missing without an error", () => {
+    expect(
+      buildDashboard({ data: null, error: null }, ok([]), TODAY, ZONE),
+    ).toEqual({ kind: "unavailable" });
+  });
+
+  it("never says the student is caught up when the read failed", () => {
+    // "Nothing needs your attention" is a claim about their data. It is only
+    // true when the query actually succeeded.
+    const result = buildDashboard(
+      { data: null, error: { code: "42501" } },
+      ok([]),
+      TODAY,
+      ZONE,
+    );
+
+    expect(result.kind).not.toBe("ready");
+  });
+});
+
+describe("an empty tracker", () => {
+  it("is reported as empty rather than as a dashboard full of zeros", () => {
+    expect(buildDashboard(ok([]), ok([]), TODAY, ZONE)).toEqual({ kind: "empty" });
+  });
+});
+
+describe("the search summary uses the shared analytics definitions", () => {
+  const applications = [
+    application({ id: "a", current_status: "Interview" }),
+    application({ id: "b", current_status: "Rejected" }),
+    application({ id: "c", current_status: "Interested" }),
+    application({
+      id: "d",
+      current_status: "Offer",
+      archived_at: "2026-08-20T10:00:00.000Z",
+    }),
+  ];
+  const timeline = [
+    timelineEvent({ application_id: "a", new_status: "Applied" }),
+    timelineEvent({
+      application_id: "a",
+      previous_status: "Applied",
+      new_status: "Interview",
+    }),
+    timelineEvent({ application_id: "b", new_status: "Applied" }),
+    timelineEvent({
+      application_id: "b",
+      previous_status: "Applied",
+      new_status: "Interview",
+    }),
+    timelineEvent({
+      application_id: "b",
+      previous_status: "Interview",
+      new_status: "Rejected",
+    }),
+    timelineEvent({ application_id: "c", new_status: "Interested" }),
+    timelineEvent({ application_id: "d", new_status: "Applied" }),
+    timelineEvent({
+      application_id: "d",
+      previous_status: "Applied",
+      new_status: "Offer",
+    }),
+  ];
+
+  const built = buildDashboard(ok(applications), ok(timeline), TODAY, ZONE);
+  const summary = built.kind === "ready" ? built.search : null;
+
+  it("counts submitted from history, so a saved-only application is excluded", () => {
+    expect(summary?.submitted).toBe(3);
+  });
+
+  it("counts active from current status", () => {
+    expect(summary?.active).toBe(1);
+  });
+
+  it("counts an interview that later became a rejection", () => {
+    // This is the whole reason the history table exists, and the definition
+    // is the analytics one rather than a second copy. Three, not two: the
+    // shared INTERVIEW_STATUSES set treats reaching Offer as having reached
+    // an interview, so the archived offer counts here too.
+    expect(summary?.interviews).toBe(3);
+  });
+
+  it("counts an offer on an archived application", () => {
+    // Historical metrics include archived records, matching analytics. A role
+    // a student tidied away still happened.
+    expect(summary?.offers).toBe(1);
+  });
+});
+
+describe("the working sections use the active population", () => {
+  it("keeps an archived application out of attention and the pipeline", () => {
+    const built = buildDashboard(
+      ok([
+        application({
+          id: "archived",
+          current_status: "Applied",
+          archived_at: "2026-08-01T10:00:00.000Z",
+          next_action: "Follow up",
+          next_action_due_date: "2026-08-01",
         }),
-      ).toEqual({ kind: "unavailable" });
-    });
+      ]),
+      ok([timelineEvent({ application_id: "archived" })]),
+      TODAY,
+      ZONE,
+    );
 
-    it("reports unavailable even when an error arrives alongside rows", () => {
-      // Never let a partial result be counted as the whole tracker.
-      expect(
-        summarizeTrackedApplications({
-          data: [1, 2, 3],
-          error: { code: "57014" },
+    expect(built.kind).toBe("ready");
+    if (built.kind !== "ready") return;
+
+    expect(built.attention).toEqual([]);
+    expect(built.pipeline.every((stage) => stage.count === 0)).toBe(true);
+  });
+
+  it("keeps that same archived application in the historical sections", () => {
+    const built = buildDashboard(
+      ok([
+        application({
+          id: "archived",
+          current_status: "Applied",
+          archived_at: "2026-08-01T10:00:00.000Z",
         }),
-      ).toEqual({ kind: "unavailable" });
-    });
+      ]),
+      ok([timelineEvent({ application_id: "archived" })]),
+      TODAY,
+      ZONE,
+    );
 
-    it("reports unavailable when rows are missing without an error", () => {
-      // A successful read always returns an array, so a null one is an
-      // inconsistent result — not evidence that the student has nothing saved.
-      expect(
-        summarizeTrackedApplications({ data: null, error: null }),
-      ).toEqual({ kind: "unavailable" });
-    });
+    if (built.kind !== "ready") throw new Error("expected a ready dashboard");
 
-    it("never carries a count or description on the unavailable state", () => {
-      const summary = summarizeTrackedApplications({
-        data: null,
-        error: new Error("connection reset"),
-      });
+    expect(built.search.submitted).toBe(1);
+    expect(built.activity).toHaveLength(1);
+  });
+});
 
-      expect(summary).not.toHaveProperty("count");
-      expect(summary).not.toHaveProperty("description");
-    });
+describe("timestamps are converted to calendar days once, in the given zone", () => {
+  it("places a late-evening event on the local day, not the UTC one", () => {
+    // 02:30 UTC is the previous evening in Toronto. Getting this wrong would
+    // put an event a day into the future and skew "this week".
+    const built = buildDashboard(
+      ok([application()]),
+      ok([timelineEvent({ changed_at: "2026-08-25T02:30:00.000Z" })]),
+      TODAY,
+      ZONE,
+    );
 
-    it("exposes nothing from the underlying error object", () => {
-      const summary = summarizeTrackedApplications({
-        data: null,
-        error: {
-          code: "42501",
-          message: 'permission denied for table "applications"',
-          hint: "check RLS policy",
-        },
-      });
+    if (built.kind !== "ready") throw new Error("expected a ready dashboard");
+    expect(built.activity[0].day).toBe("2026-08-24");
+  });
+});
 
-      // The student-facing copy is chosen by the page, not derived from this.
-      expect(JSON.stringify(summary)).not.toMatch(/permission denied|42501|RLS/);
-    });
+describe("the whole dashboard comes together", () => {
+  const built = buildDashboard(
+    ok([
+      application({
+        id: "overdue",
+        company_name: "KPMG",
+        next_action: "Follow up with recruiter",
+        next_action_due_date: "2026-08-24",
+      }),
+      application({ id: "quiet", company_name: "BMO", current_status: "Screening" }),
+    ]),
+    ok([
+      timelineEvent({ application_id: "overdue", changed_at: "2026-08-25T16:00:00.000Z" }),
+      timelineEvent({ application_id: "quiet", changed_at: "2026-07-20T16:00:00.000Z" }),
+    ]),
+    TODAY,
+    ZONE,
+  );
+
+  it("surfaces the overdue follow-up first and the quiet application after", () => {
+    if (built.kind !== "ready") throw new Error("expected a ready dashboard");
+
+    expect(built.attention.map((item) => [item.companyName, item.reason])).toEqual([
+      ["KPMG", "overdue-action"],
+      ["BMO", "stale"],
+    ]);
+  });
+
+  it("reports the pipeline, the week, and recent activity together", () => {
+    if (built.kind !== "ready") throw new Error("expected a ready dashboard");
+
+    expect(built.pipeline.find((stage) => stage.status === "Applied")?.count).toBe(1);
+    expect(built.week.weekStart).toBe("2026-08-24");
+    expect(built.week.submitted).toBe(1);
+    expect(built.activity).toHaveLength(2);
   });
 });

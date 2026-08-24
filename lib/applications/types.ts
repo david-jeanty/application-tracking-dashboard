@@ -66,6 +66,22 @@ export type ApplicationStatusEvent = {
   new_status: ApplicationStatus;
 };
 
+/**
+ * One status event with the moment it happened.
+ *
+ * `previous_status` is null for exactly one event per application — the
+ * creation event a trigger writes, guaranteed unique by a partial index. That
+ * makes it a reliable marker for "this application was saved" rather than
+ * "this application moved", which is what lets recent activity show one entry
+ * per real moment instead of two for a creation.
+ */
+export type ApplicationTimelineEvent = {
+  application_id: string;
+  previous_status: ApplicationStatus | null;
+  new_status: ApplicationStatus;
+  changed_at: string;
+};
+
 export type ApplicationFormValues = {
   companyName: string;
   originalJobTitle: string;

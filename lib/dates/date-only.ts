@@ -67,3 +67,66 @@ export function formatDateOnly(
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
+
+/**
+ * Whole calendar days from `from` to `to`, negative when `to` is earlier.
+ *
+ * Both sides are built at UTC midnight from their own year/month/day, so the
+ * subtraction is between two fixed noon-free instants that differ by an exact
+ * multiple of 24 hours. Nothing here ever sees a local zone, which is what
+ * makes the result stable across daylight-saving boundaries — parsing either
+ * string with `new Date("2026-03-08")` and diffing in local time is precisely
+ * the bug this avoids.
+ */
+export function differenceInCalendarDays(from: string, to: string): number {
+  if (!isDateOnly(from) || !isDateOnly(to)) {
+    throw new Error("Date-only differences require valid YYYY-MM-DD values.");
+  }
+
+  const utc = (value: string) => {
+    const [year, month, day] = value.split("-").map(Number);
+    return Date.UTC(year, month - 1, day);
+  };
+
+  return Math.round((utc(to) - utc(from)) / 86_400_000);
+}
+
+/**
+ * The Monday of the calendar week containing `value`.
+ *
+ * Monday rather than Sunday: a student's search week runs with the working
+ * week, and "applications this week" resetting mid-weekend would read as a
+ * loss. Computed in UTC for the same reason as the difference above.
+ */
+export function startOfWeek(value: string): string {
+  if (!isDateOnly(value)) {
+    throw new Error("Week boundaries require a valid YYYY-MM-DD value.");
+  }
+
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  // getUTCDay is 0 for Sunday, so Sunday is six days into its Monday week.
+  const daysSinceMonday = (date.getUTCDay() + 6) % 7;
+  date.setUTCDate(date.getUTCDate() - daysSinceMonday);
+
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * The calendar day a timestamp falls on, in the given zone.
+ *
+ * Timestamps and date-only values are different concepts, and this is the one
+ * sanctioned bridge between them: an instant becomes a calendar day only by
+ * naming the zone that decides which day it was.
+ */
+export function dateOnlyFromTimestamp(
+  timestamp: string,
+  timeZone: string,
+): string {
+  const instant = new Date(timestamp);
+  if (Number.isNaN(instant.getTime())) {
+    throw new Error("A calendar day requires a valid timestamp.");
+  }
+
+  return todayInTimeZone(instant, timeZone);
+}

@@ -5,7 +5,7 @@ import {
   setApplicationArchiveState,
 } from "@/lib/applications/repository";
 import { toArchiveNotice } from "@/lib/applications/archive-notice";
-import { summarizeTrackedApplications } from "@/lib/applications/dashboard";
+import { pipelineSnapshot } from "@/lib/dashboard/calculate";
 import type { ApplicationRecord } from "@/lib/applications/types";
 
 const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -256,21 +256,29 @@ describe("archived rows move between the two lists", () => {
   });
 });
 
-describe("the dashboard count follows the active list", () => {
-  it("counts only what the active read returned", () => {
-    expect(summarizeTrackedApplications({ data: [1, 2, 3], error: null })).toMatchObject({
-      kind: "tracking",
-      count: 3,
-      description: "3 applications currently tracked",
-    });
+describe("the dashboard pipeline follows the archive line", () => {
+  const applied = (archivedAt: string | null) => ({
+    current_status: "Applied" as const,
+    archived_at: archivedAt,
   });
 
-  it("drops to the first-application state once everything is archived", () => {
-    // The dashboard reads the active list, so archiving the last application
-    // leaves it with no rows rather than a stale count.
-    expect(summarizeTrackedApplications({ data: [], error: null })).toEqual({
-      kind: "first-application",
-    });
+  it("counts only applications that are still active", () => {
+    const stages = pipelineSnapshot([
+      applied(null),
+      applied(null),
+      applied("2026-08-10T10:00:00.000Z"),
+    ]);
+
+    expect(stages.find((stage) => stage.status === "Applied")?.count).toBe(2);
+  });
+
+  it("empties once everything is archived", () => {
+    // The snapshot answers "where is everything right now", and an archived
+    // application is nowhere — so archiving the last one leaves honest zeros
+    // rather than a stale count.
+    const stages = pipelineSnapshot([applied("2026-08-10T10:00:00.000Z")]);
+
+    expect(stages.every((stage) => stage.count === 0)).toBe(true);
   });
 });
 
