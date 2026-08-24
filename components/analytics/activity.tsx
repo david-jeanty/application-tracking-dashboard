@@ -1,5 +1,5 @@
 import { SectionHeading } from "@/components/analytics/section";
-import type { ActivitySummary } from "@/lib/analytics/activity";
+import { ACTIVITY_WEEKS, type ActivitySummary } from "@/lib/analytics/activity";
 import { formatMonthDay } from "@/lib/dates/date-only";
 
 /**
@@ -48,8 +48,18 @@ export function SearchActivity({ activity }: { activity: ActivitySummary }) {
     <section aria-labelledby="analytics-activity">
       <SectionHeading id="analytics-activity">Search activity</SectionHeading>
 
+      {/*
+        The window is part of what the line means. Without it the chart reads as
+        the whole search, and a flat stretch at the left edge looks like a
+        quiet month rather than the edge of the view. The range is stated where
+        the chart is described rather than offered as a control: one window,
+        chosen once, is the entire feature.
+      */}
       <p className="pt-5 text-[14px] text-foreground-secondary">
-        Submitted applications by week
+        Submitted applications by week{" "}
+        <span className="text-foreground-muted">
+          · Last {ACTIVITY_WEEKS} weeks
+        </span>
       </p>
 
       <div className="mt-4 max-w-3xl">

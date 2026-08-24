@@ -65,7 +65,20 @@ export function Funnel({ funnel }: { funnel: FunnelSummary }) {
                 }`}
               >
                 <div className="min-w-0 shrink-0 basis-11 text-right sm:basis-14">
-                  <span className="block text-[22px] font-medium leading-none tabular-nums tracking-tight text-foreground sm:text-[26px]">
+                  {/*
+                    Hidden from assistive technology, not from the page. The
+                    count sits in its own column to the left of the label
+                    because that is how the funnel reads by eye, but announced
+                    in that order it arrives as a bare number ahead of the thing
+                    it counts, and then a second time in the label's own
+                    sentence. So the visual column stays exactly as drawn and
+                    the sr-only text below carries the number once, in a phrase
+                    that says what it is: "Submitted, 54 applications".
+                  */}
+                  <span
+                    aria-hidden="true"
+                    className="block text-[22px] font-medium leading-none tabular-nums tracking-tight text-foreground sm:text-[26px]"
+                  >
                     {milestone.count}
                   </span>
                 </div>
@@ -73,7 +86,7 @@ export function Funnel({ funnel }: { funnel: FunnelSummary }) {
                   <p className="text-[13px] leading-none text-foreground-secondary">
                     {milestone.label}
                     <span className="sr-only">
-                      : {milestone.count}{" "}
+                      , {milestone.count}{" "}
                       {milestone.count === 1 ? "application" : "applications"}
                     </span>
                   </p>
