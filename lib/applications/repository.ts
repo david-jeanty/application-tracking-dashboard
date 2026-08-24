@@ -39,16 +39,23 @@ const APPLICATION_SUMMARY_COLUMNS =
   "id,company_name,company_domain,original_job_title,normalized_job_category,current_status,location,work_arrangement,work_term_season,date_applied,application_deadline,next_action,next_action_due_date,created_at,archived_at";
 
 /**
- * The analytics projection: the five columns the metrics actually read.
+ * The analytics projection: the six columns the metrics actually read.
  *
  * Deliberately not `APPLICATION_SUMMARY_COLUMNS`. Analytics needs
- * `application_source`, which no list surface renders, and needs none of the
- * dates, titles, or branding every list surface does. Selecting its own
- * columns keeps that widening out of the shared list contract and keeps this
- * read the smaller of the two.
+ * `application_source`, which no list surface renders, and needs almost none
+ * of the titles or branding every list surface does. Selecting its own columns
+ * keeps that widening out of the shared list contract and keeps this read the
+ * smaller of the two.
+ *
+ * `date_applied` is the one date here, and it is the *student's* record of
+ * when they applied — a `date` column they filled in, not a timestamp any
+ * trigger generated. Search activity is drawn from it for exactly that reason:
+ * it is the only application date in this system that claims to be when
+ * something really happened. See `lib/analytics/activity.ts` for why status
+ * history's `changed_at` is not an acceptable substitute for it.
  */
 const APPLICATION_ANALYTICS_COLUMNS =
-  "id,current_status,normalized_job_category,application_source,archived_at";
+  "id,current_status,normalized_job_category,application_source,date_applied,archived_at";
 
 /**
  * Every application the user has saved, projected for analytics.

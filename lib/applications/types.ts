@@ -77,7 +77,7 @@ export type ApplicationListItem = {
  * `list_jobs` tool — a column none of them asked for. The same reasoning
  * already keeps `listStatusHistory` and `listStatusTimeline` apart.
  *
- * It is smaller than the list projection, not larger: five columns, none of
+ * It is smaller than the list projection, not larger: six columns, none of
  * them long free text.
  */
 export type ApplicationAnalyticsRow = {
@@ -89,6 +89,13 @@ export type ApplicationAnalyticsRow = {
    * `lib/analytics/sources.ts` for what the analytics grouping makes of that.
    */
   application_source: string;
+  /**
+   * The date-only day the student says they applied, or null when they never
+   * recorded one. Null is meaningful and is never filled in from `created_at`,
+   * `updated_at`, or a status-history timestamp: search activity would rather
+   * describe fewer applications honestly than all of them approximately.
+   */
+  date_applied: string | null;
   archived_at: string | null;
 };
 

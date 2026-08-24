@@ -140,6 +140,9 @@ describe("every list read is owner-scoped and excludes archived rows", () => {
 
     const columns = String(recorder.find("select")[0].args[0]).split(",");
     expect(columns).toContain("application_source");
+    // The student's own record of when they applied, which search activity is
+    // drawn from. A short existing column, not a schema change.
+    expect(columns).toContain("date_applied");
     expect(columns).not.toContain("job_description");
     expect(columns).not.toContain("notes");
     expect(columns).not.toContain("company_name");
