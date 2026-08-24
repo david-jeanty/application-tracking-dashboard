@@ -1,8 +1,7 @@
-import { ArrowRight, CalendarClock, CheckCircle2 } from "lucide-react";
+import type { ReactNode } from "react";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { CompanyLogo } from "@/components/branding/company-logo";
-import { ButtonLink } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { STATUS_PARAM } from "@/lib/applications/search-params";
 import type { AttentionItem, AttentionReason } from "@/lib/dashboard/attention";
 import {
@@ -15,203 +14,117 @@ import {
 import { formatDateOnly } from "@/lib/dates/date-only";
 
 /**
- * What each attention reason is called, and how it is toned.
+ * A section heading and the rule under it.
  *
- * Five priority tiers collapse to three labels, because the tiers exist to
- * rank the list and the labels exist to name the kind of thing an entry is. A
- * student does not need to know that a deadline tomorrow outranks a follow-up
- * due Friday; they need to know which is which.
- *
- * The label is the accessible carrier: every entry states its reason and its
- * timing in words, so colour is a second signal for people who can use it
- * rather than the only one. Several tiers deliberately share a tone — the
- * distinction between them lives in the text, not the swatch.
+ * The rule is the whole visual container. Nothing on this page sits in a card:
+ * a heading, a hairline, and the space beneath it are what separate one part
+ * of the search from the next, which is the same structure the applications
+ * list uses for its column header.
  */
-const reasonPresentation: Record<
-  AttentionReason,
-  { label: string; className: string }
-> = {
-  "overdue-action": {
-    label: "Overdue",
-    className: "border-danger/30 bg-danger-soft text-danger",
-  },
-  "deadline-critical": {
-    label: "Deadline",
-    className: "border-danger/30 bg-danger-soft text-danger",
-  },
-  "action-due-now": {
-    label: "Next action",
-    className: "border-warning/30 bg-warning-soft text-warning",
-  },
-  "deadline-important": {
-    label: "Deadline",
-    className: "border-warning/30 bg-warning-soft text-warning",
-  },
-  "action-due-soon": {
-    label: "Next action",
-    className: "border-warning/30 bg-warning-soft text-warning",
-  },
-};
-
 function SectionHeading({
+  action,
   children,
   id,
 }: {
-  children: React.ReactNode;
+  action?: ReactNode;
+  children: ReactNode;
   id: string;
 }) {
   return (
-    <h2 className="text-base font-semibold text-foreground" id={id}>
-      {children}
-    </h2>
+    <div className="flex items-baseline justify-between gap-4 border-b border-border pb-2">
+      <h2 className="text-[17px] font-medium text-foreground" id={id}>
+        {children}
+      </h2>
+      {action}
+    </div>
   );
 }
 
-/**
- * One headline number for the search summary.
- *
- * Smaller than the analytics `StatTile` on purpose. Four of these sit above the
- * section a student actually came for, so they report rather than dominate.
- */
-export function SummaryTile({
-  context,
-  label,
-  value,
+/** The quiet inline link a section header can carry. */
+export function SectionLink({
+  children,
+  href,
 }: {
-  context: string;
-  label: string;
-  value: number;
+  children: ReactNode;
+  href: string;
 }) {
   return (
-    <Card className="p-4">
-      <p className="text-sm font-medium text-foreground-secondary">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
-        {value}
-      </p>
-      <p className="mt-1 text-xs leading-5 text-foreground-secondary">{context}</p>
-    </Card>
+    <Link
+      className="inline-flex shrink-0 items-center gap-1 rounded-control text-[13px] text-accent hover:text-accent-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+      href={href}
+    >
+      {children}
+      <ArrowRight aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
+    </Link>
   );
 }
 
 /**
- * What needs doing now, most urgent first.
+ * The four numbers that say how the search stands.
  *
- * Each row is a link to the application, because every entry here is a prompt
- * to go and do something and the row is the largest, easiest target for that.
- * The reason and the timing are both text; nothing about an entry is knowable
- * only from its colour.
+ * A description list, not four cards. The number carries the weight and the
+ * label stays quiet underneath it, so the row reads as one summary rather than
+ * as four competing tiles. `tabular-nums` keeps a 3-digit count from shifting
+ * its neighbours — a serious search runs to three digits, and the row has to
+ * hold its shape when it does.
  */
-export function NeedsAttention({ items }: { items: AttentionItem[] }) {
-  if (items.length === 0) {
-    return (
-      <Card className="flex items-start gap-3 p-5">
-        <span className="grid size-9 shrink-0 place-items-center rounded-record bg-success-soft text-success">
-          <CheckCircle2 aria-hidden="true" className="size-5" />
-        </span>
-        <div>
-          <p className="font-semibold text-foreground">You&rsquo;re caught up.</p>
-          <p className="mt-1 text-sm leading-6 text-foreground-secondary">
-            Nothing you noted is due, and no application you are still working
-            on is about to close.
-          </p>
-        </div>
-      </Card>
-    );
-  }
-
+export function SearchSummaryMetrics({
+  metrics,
+}: {
+  metrics: { label: string; value: number }[];
+}) {
   return (
-    <Card className="divide-y divide-border">
-      <ul>
-        {items.map((item) => {
-          const presentation = reasonPresentation[item.reason];
-
-          return (
-            <li className="border-b border-border last:border-b-0" key={item.applicationId}>
-              <Link
-                className="flex flex-col gap-2 p-4 hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus sm:flex-row sm:items-center sm:justify-between sm:gap-4"
-                href={`/applications/${item.applicationId}`}
-              >
-                <div className="flex min-w-0 items-start gap-3">
-                  <CompanyLogo
-                    companyName={item.companyName}
-                    domain={item.companyDomain}
-                  />
-                  <div className="min-w-0">
-                    <p className="font-semibold text-foreground">
-                      {item.companyName}
-                    </p>
-                    <p className="mt-0.5 truncate text-sm text-foreground-secondary">
-                      {item.detail || item.jobTitle}
-                    </p>
-                    {/*
-                      Only deadlines carry a note, and it says why the deadline
-                      still applies: how long the application has sat, and that
-                      it has not been submitted. Stated, never advised — the
-                      dashboard does not tell a student what to do about it.
-                    */}
-                    {item.note ? (
-                      <p className="mt-0.5 truncate text-xs text-foreground-muted">
-                        {item.note}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-                  <span
-                    className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${presentation.className}`}
-                  >
-                    {presentation.label}
-                  </span>
-                  <span className="text-sm font-medium text-foreground">
-                    {item.timing}
-                  </span>
-                  <ArrowRight
-                    aria-hidden="true"
-                    className="size-4 shrink-0 text-foreground-muted"
-                  />
-                </div>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-6 pt-5 sm:flex sm:flex-wrap sm:gap-x-16">
+      {metrics.map((metric) => (
+        /*
+          The term precedes its description in the DOM, which is what a
+          description list means and what a screen reader reads. The visual
+          order — number first, label under it — is produced by reversing the
+          column, so the markup and the design can each be right.
+        */
+        <div className="flex flex-col-reverse gap-2" key={metric.label}>
+          <dt className="text-[13px] text-foreground-secondary">
+            {metric.label}
+          </dt>
+          <dd className="text-[30px] font-medium leading-none tabular-nums tracking-tight text-foreground">
+            {metric.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
 /**
- * Where active applications currently sit.
+ * Where active applications sit right now.
  *
- * A list of links rather than a drawn funnel. Five counts do not need a chart,
- * and each row has somewhere useful to go: the applications list with the
- * status filter that already exists, so this introduces no second filtering
- * vocabulary. The arrows are decorative and hidden from assistive technology —
- * the reading order already carries the progression.
+ * An aggregate distribution, deliberately not a journey. The stages are laid
+ * out as equal columns with no arrows and no connectors between them, because
+ * connected nodes would read as one application moving along a path — which is
+ * what the lifecycle rail on a record means, and this is a different claim
+ * about a different population.
+ *
+ * Each stage stays a link, because filtering the applications list by status
+ * is genuinely useful and the URL parameter already exists.
  */
 export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
   const total = stages.reduce((sum, stage) => sum + stage.count, 0);
 
   return (
-    <Card className="p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <SectionHeading id="dashboard-pipeline">Pipeline snapshot</SectionHeading>
-        <p className="text-sm text-foreground-secondary">
-          {total} active {total === 1 ? "application" : "applications"} in
-          progress
-        </p>
-      </div>
+    <section aria-labelledby="dashboard-pipeline">
+      <SectionHeading id="dashboard-pipeline">Pipeline</SectionHeading>
 
-      <ul className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-stretch">
-        {stages.map((stage, index) => (
-          <li className="flex items-center gap-2 sm:flex-1" key={stage.status}>
+      <ul className="grid grid-cols-5 gap-x-2 pt-5 sm:gap-x-6">
+        {stages.map((stage) => (
+          <li key={stage.status}>
             <Link
-              className="flex flex-1 items-center justify-between gap-3 rounded-record border border-border px-3 py-2.5 hover:border-border-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:flex-col sm:items-start sm:gap-1"
+              className="group block rounded-control focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
               href={`/applications?${STATUS_PARAM}=${encodeURIComponent(stage.status)}`}
             >
-              <span className="text-sm font-medium text-foreground-secondary">
+              <span className="block text-[11px] leading-tight text-foreground-secondary group-hover:text-accent sm:text-[13px]">
                 {stage.status}
               </span>
-              <span className="text-xl font-semibold tabular-nums text-foreground">
+              <span className="mt-1.5 block text-[22px] font-medium tabular-nums leading-none text-foreground sm:text-[26px]">
                 {stage.count}
                 <span className="sr-only">
                   {" "}
@@ -219,65 +132,57 @@ export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
                 </span>
               </span>
             </Link>
-            {index < stages.length - 1 ? (
-              <ArrowRight
-                aria-hidden="true"
-                className="hidden size-4 shrink-0 self-center text-foreground-muted sm:block"
-              />
-            ) : null}
           </li>
         ))}
       </ul>
-    </Card>
-  );
-}
 
-/**
- * This week's activity, stated and not scored.
- *
- * No target, no streak, no comparison with last week. A quiet week in a job
- * search is usually a fact about employers, and turning it into a number a
- * student is failing to hit would make this the section they avoid.
- */
-export function ThisWeek({
-  week,
-  weekStartLabel,
-}: {
-  week: WeekSummary;
-  weekStartLabel: string;
-}) {
-  const metrics = [
-    { label: "Applications submitted", value: week.submitted },
-    { label: "Status changes", value: week.statusChanges },
-    { label: "Interviews reached", value: week.interviews },
-  ];
+      {/*
+        The same counts again as relative width. Every number above is already
+        readable text, so this adds impression rather than information and is
+        hidden from assistive technology — and it is one element, so it adds no
+        tab stop. The opacity step follows pipeline order, which is what lets a
+        segment be matched to the stage above it.
 
-  return (
-    <Card className="p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <SectionHeading id="dashboard-week">This week</SectionHeading>
-        <p className="text-sm text-foreground-secondary">Since {weekStartLabel}</p>
+        Segments divide the track by ratio — `flexGrow` on a zero basis —
+        rather than each claiming a percentage of it. A percentage width would
+        be a share of the *whole* track, so the gaps between segments would push
+        the row past 100% and the last stage would be squeezed or clipped. Grow
+        factors are shares of whatever space is left after the gaps, which is
+        the quantity actually being divided.
+
+        A student with nothing active divides by nothing, so the track is drawn
+        empty rather than guarded against after the fact.
+      */}
+      <div aria-hidden="true" className="mt-5 flex h-1.5 gap-0.5">
+        {total === 0 ? (
+          <span className="h-full w-full bg-border" />
+        ) : (
+          stages.map((stage, index) =>
+            stage.count === 0 ? null : (
+              <span
+                className="h-full bg-accent"
+                key={stage.status}
+                style={{
+                  flexBasis: 0,
+                  flexGrow: stage.count,
+                  opacity: 1 - index * 0.15,
+                }}
+              />
+            ),
+          )
+        )}
       </div>
-      <dl className="mt-4 grid gap-4 sm:grid-cols-3">
-        {metrics.map((metric) => (
-          <div key={metric.label}>
-            <dt className="text-sm text-foreground-secondary">{metric.label}</dt>
-            <dd className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
-              {metric.value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </Card>
+    </section>
   );
 }
 
 /**
- * The last few things that actually happened.
+ * What actually happened, newest first.
  *
- * Grouped by day, newest first, with each entry naming the company and what
- * changed. Every row is a real recorded event — a creation or a status change —
- * so nothing here is inferred or reconstructed.
+ * A ledger: a day heading, then the events under it, separated by space rather
+ * than boxed. Every row is a recorded event — a creation or a real status
+ * change — and the role is shown under the employer so two applications at one
+ * company can be told apart.
  */
 export function RecentActivity({
   entries,
@@ -286,82 +191,226 @@ export function RecentActivity({
   entries: ActivityEntry[];
   today: string;
 }) {
-  if (entries.length === 0) {
-    return (
-      <Card className="p-5">
-        <SectionHeading id="dashboard-activity">Recent activity</SectionHeading>
-        <p className="mt-2 text-sm leading-6 text-foreground-secondary">
+  return (
+    <section aria-labelledby="dashboard-activity">
+      <SectionHeading id="dashboard-activity">Recent activity</SectionHeading>
+
+      {entries.length === 0 ? (
+        <p className="pt-5 text-[14px] text-foreground-secondary">
           Nothing has changed yet. Saving an application or moving its status
           will show up here.
         </p>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="p-5">
-      <SectionHeading id="dashboard-activity">Recent activity</SectionHeading>
-      <div className="mt-4 space-y-4">
-        {groupActivityByDay(entries).map((group) => (
-          <section key={group.day}>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
-              {activityDayLabel(group.day, today, formatDateOnly)}
-            </h3>
-            <ul className="mt-1.5 space-y-1.5">
-              {group.entries.map((entry) => (
-                <li
-                  className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
-                  key={`${entry.applicationId}-${entry.changedAt}`}
-                >
-                  {/*
-                    The domain arrives on the entry itself, joined in memory
-                    from the applications the dashboard already read. No row
-                    here causes a query.
-                  */}
-                  <CompanyLogo
-                    companyName={entry.companyName}
-                    domain={entry.companyDomain}
-                  />
-                  <Link
-                    className="rounded-sm font-medium text-accent-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                    href={`/applications/${entry.applicationId}`}
+      ) : (
+        <div className="pt-5">
+          {groupActivityByDay(entries).map((group) => (
+            <section className="mb-5 last:mb-0" key={group.day}>
+              <h3 className="text-[12px] text-foreground-muted">
+                {activityDayLabel(group.day, today, formatDateOnly)}
+              </h3>
+              <ul className="mt-2.5">
+                {group.entries.map((entry) => (
+                  <li
+                    className="relative flex items-start gap-3 py-2.5"
+                    key={`${entry.applicationId}-${entry.changedAt}`}
                   >
-                    {entry.companyName}
-                  </Link>
-                  <span className="text-foreground-secondary">{entry.description}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
-      </div>
-    </Card>
+                    {/*
+                      The domain arrives on the entry itself, joined in memory
+                      from the applications the dashboard already read. No row
+                      here causes a query.
+                    */}
+                    <CompanyLogo
+                      companyName={entry.companyName}
+                      domain={entry.companyDomain}
+                    />
+                    <div className="min-w-0">
+                      {/*
+                        The link stretches over the row so the whole entry is
+                        clickable, while its accessible name stays the employer
+                        and role rather than the whole block of text.
+                      */}
+                      <p className="text-[14px] font-medium leading-snug text-foreground">
+                        <Link
+                          className="after:absolute after:inset-0 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                          href={`/applications/${entry.applicationId}`}
+                        >
+                          {entry.companyName}
+                        </Link>
+                      </p>
+                      <p className="mt-0.5 truncate text-[13px] text-foreground-secondary">
+                        {entry.jobTitle}
+                      </p>
+                      <p className="mt-0.5 text-[12px] text-foreground-muted">
+                        {entry.description}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
-/** The handoff to the page that answers a different question. */
-export function AnalyticsLink() {
+/**
+ * The week so far, stated and not scored.
+ *
+ * One flat row. No target, no streak, no comparison with last week: a quiet
+ * week in a job search is usually a fact about employers, and turning it into
+ * a number a student is failing to hit would make this the section they avoid.
+ */
+export function ThisWeek({
+  week,
+  weekStartLabel,
+}: {
+  week: WeekSummary;
+  weekStartLabel: string;
+}) {
+  // The noun agrees with the number. "1 interviews reached" is the kind of
+  // seam that makes a page read as generated rather than written.
+  const metrics = [
+    { label: "submitted", value: week.submitted },
+    {
+      label: week.statusChanges === 1 ? "status change" : "status changes",
+      value: week.statusChanges,
+    },
+    {
+      label: week.interviews === 1 ? "interview reached" : "interviews reached",
+      value: week.interviews,
+    },
+  ];
+
   return (
-    <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-record bg-accent-soft text-accent">
-          <CalendarClock aria-hidden="true" className="size-5" />
-        </span>
-        <div>
-          <h2 className="font-semibold text-foreground">
-            How is the search going overall?
-          </h2>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-foreground-secondary">
-            This page is about today. Analytics covers the whole search —
-            response rates, how far applications got, and what you have applied
-            to.
-          </p>
-        </div>
-      </div>
-      <ButtonLink className="shrink-0" href="/analytics" variant="secondary">
-        View full analytics
-        <ArrowRight aria-hidden="true" className="size-4" />
-      </ButtonLink>
-    </Card>
+    <section aria-labelledby="dashboard-week">
+      <SectionHeading
+        action={<SectionLink href="/analytics">View analytics</SectionLink>}
+        id="dashboard-week"
+      >
+        This week
+      </SectionHeading>
+
+      <dl className="flex flex-wrap gap-x-8 gap-y-3 pt-5">
+        {metrics.map((metric) => (
+          <div className="flex items-baseline gap-1.5" key={metric.label}>
+            <dd className="text-[20px] font-medium tabular-nums leading-none text-foreground">
+              {metric.value}
+            </dd>
+            <dt className="text-[14px] text-foreground-secondary">
+              {metric.label}
+            </dt>
+          </div>
+        ))}
+      </dl>
+
+      <p className="mt-3 text-[12px] text-foreground-muted">
+        Since {weekStartLabel}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * Which reasons are urgent enough to say so in colour.
+ *
+ * Only the two that describe something already missed or landing within a day.
+ * The rest state their timing in ordinary text — a deadline next Thursday is
+ * information, not an alarm, and colouring every row would leave nothing for
+ * the rows that genuinely need it.
+ */
+const URGENT_REASONS: readonly AttentionReason[] = [
+  "overdue-action",
+  "deadline-critical",
+];
+
+/**
+ * Dates the student recorded, and postings about to close.
+ *
+ * A conditional section, rendered only when there is something in it — the
+ * page has no empty state for this, because a dashboard that congratulates
+ * somebody for having nothing due is a dashboard that has made itself the
+ * point. When there is nothing, the page simply ends above.
+ *
+ * Nothing here is inferred. Every row is either an action the student wrote
+ * down or a deadline on an application they have not sent yet.
+ */
+export function Upcoming({ items }: { items: AttentionItem[] }) {
+  return (
+    <section aria-labelledby="dashboard-upcoming">
+      <SectionHeading id="dashboard-upcoming">Upcoming</SectionHeading>
+
+      <ul className="pt-2">
+        {items.map((item) => {
+          const urgent = URGENT_REASONS.includes(item.reason);
+
+          return (
+            <li
+              className="relative flex items-start gap-3 border-b border-border py-4 last:border-b-0"
+              key={item.applicationId}
+            >
+              <CompanyLogo
+                companyName={item.companyName}
+                domain={item.companyDomain}
+              />
+              {/*
+                No wrapping. The date column is the one fixed landmark in this
+                list, so it stays at the top right of every row at every width
+                — a row whose date drops underneath because its text happened
+                to be shorter makes the column impossible to scan.
+              */}
+              <div className="flex min-w-0 flex-1 items-start justify-between gap-x-4">
+                <div className="min-w-0">
+                  <p className="text-[14px] font-medium leading-snug text-foreground">
+                    <Link
+                      className="after:absolute after:inset-0 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                      href={`/applications/${item.applicationId}`}
+                    >
+                      {item.companyName}
+                    </Link>
+                  </p>
+                  <p className="mt-0.5 truncate text-[13px] text-foreground-secondary">
+                    {item.jobTitle}
+                  </p>
+                  <p className="mt-0.5 truncate text-[13px] text-foreground">
+                    {item.detail}
+                  </p>
+                  {/*
+                    Only deadlines carry a note, and it says why the deadline
+                    still applies: how long the application has sat, and that
+                    it has not been submitted. Stated, never advised.
+                  */}
+                  {item.note ? (
+                    <p className="mt-0.5 truncate text-[12px] text-foreground-muted">
+                      {item.note}
+                    </p>
+                  ) : null}
+                </div>
+                {/*
+                  The date is what a student scans for, so it leads. The phrase
+                  underneath appears only when something is overdue or lands
+                  within a day, and it carries the urgency in words — the
+                  colour repeats it rather than being the only signal.
+                */}
+                <div className="shrink-0 text-right">
+                  <p className="text-[13px] tabular-nums text-foreground">
+                    {item.date ? formatDateOnly(item.date) : null}
+                  </p>
+                  {urgent ? (
+                    <p className="mt-0.5 text-[12px] text-danger">
+                      {item.timing}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 text-[12px] text-foreground-muted">
+                      {item.timing}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

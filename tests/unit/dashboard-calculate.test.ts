@@ -205,8 +205,18 @@ describe("this week", () => {
 
 describe("recent activity", () => {
   const applications = [
-    { id: "app-1", company_name: "KPMG", company_domain: "kpmg.com" },
-    { id: "app-2", company_name: "BMO", company_domain: null },
+    {
+      id: "app-1",
+      company_name: "KPMG",
+      company_domain: "kpmg.com",
+      original_job_title: "Audit Intern",
+    },
+    {
+      id: "app-2",
+      company_name: "BMO",
+      company_domain: null,
+      original_job_title: "Data Analyst Intern",
+    },
   ];
 
   it("describes a creation as saved, with the status it started at", () => {
@@ -271,7 +281,12 @@ describe("recent activity", () => {
 
   it("keeps archived applications, because they still happened", () => {
     const entries = recentActivity([event({ application_id: "app-2" })], [
-      { id: "app-2", company_name: "BMO", company_domain: null },
+      {
+        id: "app-2",
+        company_name: "BMO",
+        company_domain: null,
+        original_job_title: "Data Analyst Intern",
+      },
     ]);
 
     expect(entries[0].companyName).toBe("BMO");
@@ -304,6 +319,7 @@ describe("activity day grouping and labels", () => {
     applicationId: "app-1",
     companyName: "KPMG",
     companyDomain: null,
+    jobTitle: "Program Manager Intern",
     description: "Moved to Interview",
     status: "Interview" as const,
     day,

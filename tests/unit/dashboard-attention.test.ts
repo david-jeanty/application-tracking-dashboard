@@ -103,6 +103,7 @@ describe("overdue next actions", () => {
     expect(item).toMatchObject({
       reason: "overdue-action",
       detail: "Follow up with recruiter",
+      date: "2026-08-22",
       timing: "Overdue by 2 days",
     });
   });
@@ -212,7 +213,11 @@ describe("a deadline is only an action before the application is submitted", () 
 
     expect(item).toMatchObject({
       reason: "deadline-critical",
-      detail: "Marketing Intern",
+      // The role is carried separately as `jobTitle`; `detail` names what the
+      // row is about, in the slot a recorded action occupies on an action row.
+      jobTitle: "Marketing Intern",
+      detail: "Application deadline",
+      date: "2026-08-25",
       timing: "Deadline tomorrow",
       note: "Still Interested",
     });

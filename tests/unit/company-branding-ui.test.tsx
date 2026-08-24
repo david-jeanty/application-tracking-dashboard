@@ -2,7 +2,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArchivedApplicationsList } from "@/components/applications/archived-list";
 import {
-  NeedsAttention,
+  Upcoming,
   RecentActivity,
 } from "@/components/dashboard/dashboard-sections";
 import { LOGO_DEV_HOST } from "@/lib/branding/logo";
@@ -194,7 +194,7 @@ describe("company branding across the product", () => {
     });
   });
 
-  describe("dashboard needs attention", () => {
+  describe("dashboard upcoming", () => {
     const item = (overrides: Partial<AttentionItem> = {}): AttentionItem => ({
       applicationId: "11111111-1111-4111-8111-111111111111",
       companyName: "KPMG",
@@ -203,13 +203,14 @@ describe("company branding across the product", () => {
       status: "Applied",
       reason: "overdue-action",
       detail: "Follow up with recruiter",
+      date: "2026-08-22",
       timing: "Overdue by 2 days",
       daysFromToday: -2,
       ...overrides,
     });
 
     it("shows the mark without changing what the section says", () => {
-      const { container } = render(<NeedsAttention items={[item()]} />);
+      const { container } = render(<Upcoming items={[item()]} />);
 
       expect(logoSources(container)[0]).toContain(
         `https://${LOGO_DEV_HOST}/kpmg.com?`,
@@ -222,7 +223,7 @@ describe("company branding across the product", () => {
 
     it("keeps every entry when none of them has a domain", () => {
       const { container } = render(
-        <NeedsAttention
+        <Upcoming
           items={[
             item({ companyDomain: null }),
             item({
@@ -240,11 +241,13 @@ describe("company branding across the product", () => {
       expect(screen.getByText("BMO")).toBeInTheDocument();
     });
 
-    it("renders the caught-up card unchanged when nothing is due", () => {
-      const { container } = render(<NeedsAttention items={[]} />);
+    it("renders no marks when there is nothing upcoming", () => {
+      // The page omits the section entirely at zero items; rendering it with
+      // none still asks Logo.dev for nothing.
+      const { container } = render(<Upcoming items={[]} />);
 
       expect(logoSources(container)).toHaveLength(0);
-      expect(screen.getByText(/caught up/i)).toBeInTheDocument();
+      expect(container.querySelectorAll("li")).toHaveLength(0);
     });
   });
 
@@ -253,6 +256,7 @@ describe("company branding across the product", () => {
       applicationId: "11111111-1111-4111-8111-111111111111",
       companyName: "Microsoft",
       companyDomain: "microsoft.com",
+      jobTitle: "Program Manager Intern",
       description: "Moved to Interview",
       status: "Interview",
       day: "2026-08-26",
