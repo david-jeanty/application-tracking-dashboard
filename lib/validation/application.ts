@@ -4,6 +4,10 @@ import {
   JOB_CATEGORIES,
   WORK_ARRANGEMENTS,
 } from "@/lib/applications/constants";
+import {
+  MAXIMUM_DOMAIN_INPUT_LENGTH,
+  normalizeCompanyDomain,
+} from "@/lib/branding/domain";
 import { isDateOnly } from "@/lib/dates/date-only";
 
 const blankToUndefined = (value: unknown) =>
@@ -57,8 +61,41 @@ const optionalUrl = z.preprocess(
     .optional(),
 );
 
+/**
+ * The employer's website, stored as a bare hostname.
+ *
+ * The schema is where normalization happens, which means it happens for every
+ * write: the form, the MCP `save_job` tool, and the MCP `update_job` tool all
+ * arrive here, and all three store `shopify.com` whether the input was
+ * `Shopify.com`, `www.shopify.com`, or `https://www.shopify.com/careers`.
+ * Nothing downstream re-parses, and nothing downstream can be handed raw text.
+ *
+ * Blank is `undefined`, like every other optional field. Anything that is not
+ * a plausible domain is a validation error rather than a silently dropped
+ * value, so a student who mistypes is told instead of quietly getting no logo.
+ */
+const optionalCompanyDomain = z.preprocess(
+  blankToUndefined,
+  z
+    .string()
+    .trim()
+    .max(
+      MAXIMUM_DOMAIN_INPUT_LENGTH,
+      `Company website must be ${MAXIMUM_DOMAIN_INPUT_LENGTH.toLocaleString("en-US")} characters or fewer.`,
+    )
+    .refine(
+      (value) => normalizeCompanyDomain(value) !== undefined,
+      "Enter a company domain such as shopify.com.",
+    )
+    // Safe by construction: `refine` above already rejected anything that does
+    // not normalize, so this call cannot return undefined.
+    .transform((value) => normalizeCompanyDomain(value) as string)
+    .optional(),
+);
+
 export const applicationCreationSchema = z.object({
   companyName: requiredText("Company name", 160),
+  companyDomain: optionalCompanyDomain,
   originalJobTitle: requiredText("Original job title", 200),
   normalizedJobCategory: z.enum(JOB_CATEGORIES, {
     error: "Select a normalized category.",

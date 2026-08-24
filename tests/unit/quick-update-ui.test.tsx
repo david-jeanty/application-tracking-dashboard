@@ -25,6 +25,7 @@ function application(
   return {
     id: "11111111-1111-4111-8111-111111111111",
     company_name: "RBC",
+    company_domain: null,
     original_job_title: "Business Analyst Intern",
     normalized_job_category: "Business Analysis",
     classification_confidence: null,

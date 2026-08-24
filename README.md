@@ -157,6 +157,30 @@ Open [http://localhost:3000](http://localhost:3000).
 `http://localhost:3000`, and add `http://localhost:3000/auth/callback` as an
 allowed redirect URL in your Supabase project's auth settings.
 
+### Company logos (optional)
+
+JobTrack can show an employer's logo beside its name, using
+[Logo.dev](https://www.logo.dev). It's an enhancement and nothing depends on
+it: leave it unconfigured and every screen works exactly as it does now, with a
+letter in a small rounded box standing in for each logo.
+
+To turn it on, set `NEXT_PUBLIC_LOGO_DEV_TOKEN` to a Logo.dev **publishable**
+key (it starts with `pk_`) in `.env.local`, and in the same variable on Vercel
+for a deployment. That value is served to the browser, which is what a
+publishable key is for. Never put a Logo.dev secret or Brand API key in this
+application — JobTrack only ever uses the Logo API's plain image URLs, and
+never calls the Search or Brand APIs.
+
+A logo appears only where an application has a **company website** saved
+(`shopify.com`, `rbc.com`). That field is optional on the add and edit forms,
+and an AI assistant can fill it in through `save_job` or `update_job` when it
+already knows the domain. JobTrack never guesses one. Applications saved before
+this existed simply keep the lettermark until you add a domain.
+
+Logo.dev's Community plan covers a project this size. On the free tier,
+commercial use asks for an attribution link back to Logo.dev; a personal
+project like this one doesn't.
+
 Useful commands:
 
 ```bash

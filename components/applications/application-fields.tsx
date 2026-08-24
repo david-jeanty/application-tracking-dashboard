@@ -15,12 +15,19 @@ const textareaClassName =
 function Field({
   children,
   error,
+  hint,
   id,
   label,
   required = false,
 }: {
   children: ReactNode;
   error?: string[];
+  /**
+   * One short line under the control, for a field whose purpose is not
+   * obvious from its label. It is associated with the input through
+   * `aria-describedby`, so it is read rather than merely seen.
+   */
+  hint?: string;
   id: string;
   label: string;
   required?: boolean;
@@ -36,6 +43,11 @@ function Field({
         ) : null}
       </label>
       <div className="mt-1.5">{children}</div>
+      {hint ? (
+        <p className="mt-1.5 text-sm text-slate-500" id={`${id}-hint`}>
+          {hint}
+        </p>
+      ) : null}
       {error?.length ? (
         <p className="mt-1.5 text-sm text-red-700" id={`${id}-error`}>
           {error[0]}
@@ -56,6 +68,12 @@ export function ApplicationFields({
 }) {
   const describedBy = (name: string) =>
     errors[name]?.length ? `${name}-error` : undefined;
+
+  /** A hinted field is described by its hint, and by its error when it has one. */
+  const describedByWithHint = (name: string) =>
+    [`${name}-hint`, errors[name]?.length ? `${name}-error` : null]
+      .filter(Boolean)
+      .join(" ");
 
   return (
     <>
@@ -201,6 +219,23 @@ export function ApplicationFields({
                 </option>
               ))}
             </select>
+          </Field>
+          <Field
+            error={errors.companyDomain}
+            hint="Optional. Used to display the company logo."
+            id="companyDomain"
+            label="Company website"
+          >
+            <Input
+              aria-describedby={describedByWithHint("companyDomain")}
+              aria-invalid={Boolean(errors.companyDomain)}
+              autoComplete="off"
+              defaultValue={defaultValues?.companyDomain}
+              id="companyDomain"
+              maxLength={2048}
+              name="companyDomain"
+              placeholder="shopify.com"
+            />
           </Field>
           <Field
             error={errors.applicationUrl}

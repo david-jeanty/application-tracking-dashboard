@@ -1,6 +1,7 @@
 import { Archive, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { ApplicationStatusLabel } from "@/components/applications/application-status";
+import { CompanyLogo } from "@/components/branding/company-logo";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { restoreApplicationAction } from "@/lib/applications/actions";
@@ -75,18 +76,24 @@ export function ArchivedApplicationsList({
         {applications.map((application) => (
           <Card className="p-4" key={application.id}>
             <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="font-semibold text-slate-950">
-                  <Link
-                    className="rounded-sm text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                    href={`/applications/${application.id}`}
-                  >
-                    {application.company_name}
-                  </Link>
-                </h3>
-                <p className="mt-1 text-sm text-slate-700">
-                  {application.original_job_title}
-                </p>
+              <div className="flex min-w-0 items-start gap-3">
+                <CompanyLogo
+                  companyName={application.company_name}
+                  domain={application.company_domain}
+                />
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-slate-950">
+                    <Link
+                      className="rounded-sm text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                      href={`/applications/${application.id}`}
+                    >
+                      {application.company_name}
+                    </Link>
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-700">
+                    {application.original_job_title}
+                  </p>
+                </div>
               </div>
               <ApplicationStatusLabel status={application.current_status} />
             </div>
@@ -127,17 +134,25 @@ export function ArchivedApplicationsList({
               {applications.map((application) => (
                 <tr className="align-top hover:bg-slate-50/70" key={application.id}>
                   <td className="px-4 py-4">
-                    <p className="font-semibold text-slate-950">
-                      <Link
-                        className="rounded-sm text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                        href={`/applications/${application.id}`}
-                      >
-                        {application.company_name}
-                      </Link>
-                    </p>
-                    <p className="mt-1 text-slate-600">
-                      {application.original_job_title}
-                    </p>
+                    <div className="flex items-start gap-3">
+                      <CompanyLogo
+                        companyName={application.company_name}
+                        domain={application.company_domain}
+                      />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-950">
+                          <Link
+                            className="rounded-sm text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                            href={`/applications/${application.id}`}
+                          >
+                            {application.company_name}
+                          </Link>
+                        </p>
+                        <p className="mt-1 text-slate-600">
+                          {application.original_job_title}
+                        </p>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-4 py-4">
                     <ApplicationStatusLabel status={application.current_status} />

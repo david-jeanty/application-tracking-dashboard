@@ -1,5 +1,6 @@
 import { ArrowRight, CalendarClock, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
+import { CompanyLogo } from "@/components/branding/company-logo";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { STATUS_PARAM } from "@/lib/applications/search-params";
@@ -130,24 +131,30 @@ export function NeedsAttention({ items }: { items: AttentionItem[] }) {
                 className="flex flex-col gap-2 p-4 hover:bg-slate-50/70 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                 href={`/applications/${item.applicationId}`}
               >
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-950">
-                    {item.companyName}
-                  </p>
-                  <p className="mt-0.5 truncate text-sm text-slate-600">
-                    {item.detail || item.jobTitle}
-                  </p>
-                  {/*
-                    Only deadlines carry a note, and it says why the deadline
-                    still applies: how long the application has sat, and that
-                    it has not been submitted. Stated, never advised — the
-                    dashboard does not tell a student what to do about it.
-                  */}
-                  {item.note ? (
-                    <p className="mt-0.5 truncate text-xs text-slate-500">
-                      {item.note}
+                <div className="flex min-w-0 items-start gap-3">
+                  <CompanyLogo
+                    companyName={item.companyName}
+                    domain={item.companyDomain}
+                  />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-950">
+                      {item.companyName}
                     </p>
-                  ) : null}
+                    <p className="mt-0.5 truncate text-sm text-slate-600">
+                      {item.detail || item.jobTitle}
+                    </p>
+                    {/*
+                      Only deadlines carry a note, and it says why the deadline
+                      still applies: how long the application has sat, and that
+                      it has not been submitted. Stated, never advised — the
+                      dashboard does not tell a student what to do about it.
+                    */}
+                    {item.note ? (
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        {item.note}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                   <span
@@ -306,6 +313,15 @@ export function RecentActivity({
                   className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
                   key={`${entry.applicationId}-${entry.changedAt}`}
                 >
+                  {/*
+                    The domain arrives on the entry itself, joined in memory
+                    from the applications the dashboard already read. No row
+                    here causes a query.
+                  */}
+                  <CompanyLogo
+                    companyName={entry.companyName}
+                    domain={entry.companyDomain}
+                  />
                   <Link
                     className="rounded-sm font-medium text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                     href={`/applications/${entry.applicationId}`}

@@ -11,6 +11,7 @@ function application(
   return {
     id: "app-1",
     company_name: "RBC",
+    company_domain: null,
     original_job_title: "Business Analyst Intern",
     normalized_job_category: "Business Analysis",
     current_status: "Applied",

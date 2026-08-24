@@ -18,6 +18,7 @@ function record(overrides: Partial<ApplicationRecord> = {}): ApplicationRecord {
   return {
     id: APPLICATION_ID,
     company_name: "RBC",
+    company_domain: null,
     original_job_title: "Business Analyst",
     normalized_job_category: "Business Analysis",
     classification_confidence: null,

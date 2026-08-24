@@ -139,9 +139,20 @@ All four tools exist: `save_job`, `list_jobs`, `get_job`, and `update_job`.
 | `category` | no | Defaults to `Other` |
 | `deadline`, `date_applied` | no | `YYYY-MM-DD` |
 | `work_term`, `duration` | no | e.g. `Summer 2027`, `4 months` |
+| `company_domain` | no | The employer's own domain, e.g. `shopify.com` |
 
 `work_term_season` is a required column that a posting rarely states, so it
 falls back to the same `Not specified` sentinel the web form uses.
+
+`company_domain` is brand metadata used to show the employer's logo, and
+nothing else. Claude supplies it when it already knows the domain; JobTrack
+never infers one, keeps no employer-to-domain table, and calls no model to
+guess. It is deliberately not the posting URL (`job_url` holds that), a
+recruiter's email domain, a LinkedIn link, or the applicant-tracking host a
+posting happens to be served from. Whatever arrives is normalized to a bare
+lowercase hostname by the same helper the web form uses, so
+`https://www.shopify.com/careers` is stored as `shopify.com`, and anything that
+is not a plausible domain is rejected rather than stored.
 
 ### `list_jobs`
 
@@ -158,7 +169,9 @@ lists, reads the short records, and picks the application the student meant.
 
 Each record carries `application_id`, `company`, `job_title`, `status`,
 `work_term`, `location`, `deadline`, `date_applied`, and `archived` — and
-nothing else. `job_description` and `notes` are absent from the query's
+nothing else. `company_domain` is deliberately absent: this tool exists so
+Claude can tell one saved application from another, and a brand domain is not
+something anyone chooses between applications by. It is on `get_job` instead. `job_description` and `notes` are absent from the query's
 projection, not filtered out afterwards, so a list response cannot carry a
 50,000-character posting however many applications match.
 
@@ -176,7 +189,8 @@ that silently guesses is worse than one that shows the options. An oversized
 ### `get_job`
 
 Takes `application_id` and nothing else. Returns the whole stored application:
-`company`, `job_title`, `status`, `category`, `work_arrangement`, `location`,
+`company`, `company_domain`, `job_title`, `status`, `category`,
+`work_arrangement`, `location`,
 `work_term`, `duration`, `job_url`, `source`, `job_description`, `deadline`,
 `date_applied`, `salary`, `notes`, `next_action`, `next_action_due_date`,
 `archived`, `created_at`, and `updated_at`.
@@ -192,9 +206,9 @@ id returns, because the read is owner-scoped and RLS applies again underneath.
 ### `update_job`
 
 Takes `application_id` plus any subset of the fields the web edit form owns:
-`company`, `job_title`, `location`, `status`, `category`, `work_arrangement`,
-`job_description`, `job_url`, `source`, `deadline`, `date_applied`,
-`work_term`, `duration`, `salary`, `notes`, `next_action`,
+`company`, `company_domain`, `job_title`, `location`, `status`, `category`,
+`work_arrangement`, `job_description`, `job_url`, `source`, `deadline`,
+`date_applied`, `work_term`, `duration`, `salary`, `notes`, `next_action`,
 `next_action_due_date`.
 
 An omitted field keeps its stored value. An empty string clears a field that

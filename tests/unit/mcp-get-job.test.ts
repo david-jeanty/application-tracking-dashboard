@@ -10,6 +10,7 @@ function record(overrides: Partial<ApplicationRecord> = {}): ApplicationRecord {
   return {
     id: APPLICATION_ID,
     company_name: "RBC",
+    company_domain: "rbc.com",
     original_job_title: "Business Analyst",
     normalized_job_category: "Business Analysis",
     classification_confidence: null,
@@ -85,6 +86,7 @@ describe("get_job returns the complete useful record", () => {
     expect(outcome.outcome === "found" && outcome.job).toEqual({
       application_id: APPLICATION_ID,
       company: "RBC",
+      company_domain: "rbc.com",
       job_title: "Business Analyst",
       status: "Applied",
       category: "Business Analysis",

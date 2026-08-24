@@ -2,8 +2,9 @@
 
 ## Source of truth
 
-`supabase/migrations/20260724000100_initial_schema.sql` is the schema source of
-truth. Do not reproduce the schema manually in the Supabase Dashboard.
+The `supabase/migrations/` directory is the schema source of truth, applied in
+filename order, starting with `20260724000100_initial_schema.sql`. Do not
+reproduce the schema manually in the Supabase Dashboard.
 
 ## Tables
 
@@ -24,6 +25,19 @@ classifier ran.
 
 Salary is optional text with a 100-character limit. It is display-only and
 excluded from analytics.
+
+`applications.company_domain` (`20260824000100_add_company_domain.sql`) is
+optional text holding the employer's canonical domain — `shopify.com`,
+`rbc.com` — used only to look up a company logo. The application normalizes
+input to a bare lowercase hostname before writing, so the column never holds a
+scheme, a path, or a `www.` prefix; the database's own check is the 253-
+character DNS limit. It is nullable with no default and no backfill: every
+application saved before the column existed holds null and renders a local
+lettermark instead. Nothing infers a domain from a company name.
+
+That column needed no row-level-security change. Policies on `applications`
+are owner predicates on `user_id` and apply to the whole row whatever its
+columns, and the table grants are likewise table-wide.
 
 Ticket 2.1 keeps the deployed schema unchanged even though its form treats
 location and application source as optional. Blank values for those two

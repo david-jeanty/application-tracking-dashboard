@@ -27,7 +27,7 @@ import type {
 } from "@/lib/validation/application";
 
 const APPLICATION_DETAIL_COLUMNS =
-  "id,company_name,original_job_title,normalized_job_category,classification_confidence,location,work_arrangement,application_url,application_source,job_description,application_deadline,date_applied,current_status,work_term_season,work_term_duration,salary,notes,next_action,next_action_due_date,created_at,updated_at,archived_at";
+  "id,company_name,company_domain,original_job_title,normalized_job_category,classification_confidence,location,work_arrangement,application_url,application_source,job_description,application_deadline,date_applied,current_status,work_term_season,work_term_duration,salary,notes,next_action,next_action_due_date,created_at,updated_at,archived_at";
 
 /**
  * The one projection every list read uses. Long free-text columns are absent
@@ -35,7 +35,7 @@ const APPLICATION_DETAIL_COLUMNS =
  * accidentally ship a 50,000-character job description in a list response.
  */
 const APPLICATION_SUMMARY_COLUMNS =
-  "id,company_name,original_job_title,normalized_job_category,current_status,location,work_arrangement,work_term_season,date_applied,application_deadline,next_action,next_action_due_date,created_at,archived_at";
+  "id,company_name,company_domain,original_job_title,normalized_job_category,current_status,location,work_arrangement,work_term_season,date_applied,application_deadline,next_action,next_action_due_date,created_at,archived_at";
 
 export async function createApplication(
   supabase: SupabaseClient,

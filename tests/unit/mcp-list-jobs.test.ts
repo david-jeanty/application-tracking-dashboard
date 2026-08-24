@@ -16,6 +16,7 @@ function summaryRow(
   return {
     id: "11111111-1111-4111-8111-111111111111",
     company_name: "RBC",
+    company_domain: "rbc.com",
     original_job_title: "Business Analyst",
     normalized_job_category: "Business Analysis",
     current_status: "Applied",

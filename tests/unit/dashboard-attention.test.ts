@@ -33,6 +33,7 @@ function application(
   return {
     id: "app-1",
     company_name: "RBC",
+    company_domain: null,
     original_job_title: "Business Analyst Intern",
     current_status: "Applied",
     next_action: null,

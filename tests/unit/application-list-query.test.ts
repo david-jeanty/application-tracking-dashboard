@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import {
+  getApplicationById,
   listActiveApplications,
   listActiveWorkTermSeasons,
   listApplications,
@@ -9,6 +10,7 @@ import {
 } from "@/lib/applications/repository";
 
 const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const APPLICATION = "11111111-1111-4111-8111-111111111111";
 
 type Call = { method: string; args: unknown[] };
 
@@ -34,6 +36,8 @@ function recordingClient(rows: unknown[] = []) {
     builder[method] = record(method);
   }
   builder.returns = () => Promise.resolve({ data: rows, error: null });
+  builder.maybeSingle = () =>
+    Promise.resolve({ data: rows[0] ?? null, error: null });
 
   const client = {
     from: (table: string) => {
@@ -109,6 +113,29 @@ describe("every list read is owner-scoped and excludes archived rows", () => {
     const columns = String(recorder.find("select")[0].args[0]);
     expect(columns).not.toContain("job_description");
     expect(columns).not.toContain("notes");
+  });
+
+  it("carries the company domain in the list projection", async () => {
+    // Every list surface renders the employer's mark — the applications list,
+    // the archive, needs attention, and recent activity — so the domain has to
+    // arrive with the row rather than through a second read per application.
+    const recorder = recordingClient();
+
+    await listActiveApplications(recorder.client, USER);
+
+    expect(String(recorder.find("select")[0].args[0]).split(",")).toContain(
+      "company_domain",
+    );
+  });
+
+  it("carries the company domain in the detail projection", async () => {
+    const recorder = recordingClient();
+
+    await getApplicationById(recorder.client, USER, APPLICATION);
+
+    expect(String(recorder.find("select")[0].args[0]).split(",")).toContain(
+      "company_domain",
+    );
   });
 });
 
