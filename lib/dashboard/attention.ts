@@ -67,8 +67,10 @@ export type AttentionItem = {
   jobTitle: string;
   status: ApplicationStatus;
   reason: AttentionReason;
-  /** What the student committed to, or the role a deadline belongs to. */
+  /** What this row is about: the recorded action, or the deadline itself. */
   detail: string;
+  /** The date this row turns on, for display beside the row. */
+  date: string;
   /** The urgency, in words. Never conveyed by colour alone. */
   timing: string;
   /** Why a deadline still applies — how long it has sat, and at what status. */
@@ -142,6 +144,7 @@ function classify(
     ...base,
     reason,
     detail: action ?? "",
+    date: actionDue ?? "",
     timing: describeDue(days, "Due"),
     daysFromToday: days,
   });
@@ -169,9 +172,11 @@ function classify(
   ): AttentionItem => ({
     ...base,
     reason,
-    // The role, not a restatement of "Application deadline" — the timing line
-    // already says that, and the title is what identifies which posting.
-    detail: application.original_job_title,
+    // What the row is about, in the same slot the recorded action occupies on
+    // an action row. The role is carried separately as `jobTitle`, so naming
+    // the deadline here identifies the row rather than repeating the title.
+    detail: "Application deadline",
+    date: deadline ?? "",
     timing: describeDue(days, "Deadline"),
     note,
     daysFromToday: days,

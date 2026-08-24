@@ -1,16 +1,14 @@
 import type { Metadata } from "next";
-import { AlertCircle, ArrowRight, ClipboardCheck, Sparkles } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { redirect } from "next/navigation";
 import {
-  AnalyticsLink,
-  NeedsAttention,
   PipelineSnapshot,
   RecentActivity,
-  SummaryTile,
+  SearchSummaryMetrics,
   ThisWeek,
+  Upcoming,
 } from "@/components/dashboard/dashboard-sections";
 import { ButtonLink } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   listApplications,
   listStatusTimeline,
@@ -22,17 +20,24 @@ import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-function DashboardHeader() {
+/**
+ * The page title, with today's date sitting quietly opposite it.
+ *
+ * The date is there because every section below is relative to it — "this
+ * week", "tomorrow", "overdue by two days" all resolve against one day, and
+ * saying which one costs a line of grey text. It is text on the page, not a
+ * badge.
+ */
+function DashboardHeader({ today }: { today: string }) {
   return (
-    <header>
-      <p className="text-sm font-semibold text-accent">Your workspace</p>
-      <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+    <div className="flex items-baseline justify-between gap-4">
+      <h1 className="text-[34px] font-medium leading-tight tracking-tight text-foreground sm:text-[38px]">
         Dashboard
       </h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary sm:text-base">
-        What needs your attention today, and how the search is moving.
+      <p className="shrink-0 text-[13px] text-foreground-muted">
+        {formatDateOnly(today)}
       </p>
-    </header>
+    </div>
   );
 }
 
@@ -47,7 +52,7 @@ export default async function DashboardPage() {
   // Both reads are owner-scoped by the server-derived user id, with row-level
   // security applying again underneath. Every application is read, archived
   // ones included, because the search summary uses the analytics definitions —
-  // the sections that answer "what do I do now" filter to active records
+  // the sections that describe what is in flight filter to active records
   // themselves rather than making a second, narrower query.
   const [applications, timeline] = await Promise.all([
     listApplications(supabase, user.id, { archiveState: "all" }),
@@ -66,143 +71,99 @@ export default async function DashboardPage() {
 
   if (dashboard.kind === "unavailable") {
     return (
-      <div className="space-y-6">
-        <DashboardHeader />
+      <div className="space-y-8">
+        <DashboardHeader today={today} />
         {/*
-          A failed read is never reported as zeros. "Nothing needs your
-          attention" is a claim about the student's data, and it is only true
-          when the query actually succeeded. No database detail is shown.
+          A failed read is never reported as zeros. Four zeros would be a claim
+          about the student's search, and it is only true when the query
+          actually succeeded. No database detail is shown.
         */}
-        <Card className="flex gap-3 border-warning/30 bg-warning-soft p-5 text-warning">
-          <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
+        <div
+          className="flex gap-3 border border-warning/30 bg-warning-soft p-4 text-warning"
+          role="alert"
+        >
+          <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           <div>
-            <h2 className="font-semibold">
-              Couldn&rsquo;t load your dashboard
+            <h2 className="text-[15px] font-medium">
+              Your dashboard could not be loaded
             </h2>
-            <p className="mt-1 text-sm leading-6">
+            <p className="mt-1 text-[13px] leading-6">
               Your applications are still safe. Refresh the page to try again.
             </p>
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
 
   if (dashboard.kind === "empty") {
     return (
-      <div className="space-y-6">
-        <DashboardHeader />
-        <Card className="px-6 py-12 text-center">
-          <span className="mx-auto grid size-12 place-items-center rounded-surface bg-accent-soft text-accent">
-            <ClipboardCheck aria-hidden="true" className="size-6" />
-          </span>
-          <h2 className="mt-4 text-lg font-semibold text-foreground">
-            Ready for your first application
-          </h2>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-foreground-secondary">
-            Save one and this page starts answering what needs your attention —
-            follow-ups, deadlines, and applications that have gone quiet.
+      <div className="space-y-8">
+        <DashboardHeader today={today} />
+        <section aria-labelledby="dashboard-empty">
+          <div className="border-b border-border pb-2">
+            <h2
+              className="text-[17px] font-medium text-foreground"
+              id="dashboard-empty"
+            >
+              Your search
+            </h2>
+          </div>
+          <p className="pt-6 text-[16px] text-foreground">No applications yet.</p>
+          <p className="mt-1.5 max-w-md text-[14px] leading-6 text-foreground-secondary">
+            Save your first application and JobTrack will show your search
+            overview, pipeline, recent activity, and upcoming dates here.
           </p>
           <div className="mt-5">
-            <ButtonLink href="/applications">Add your first application</ButtonLink>
+            <ButtonLink href="/applications">Add application</ButtonLink>
           </div>
-        </Card>
-        <AssistantCard />
+        </section>
       </div>
     );
   }
 
+  const { search } = dashboard;
+
   return (
-    <div className="space-y-6">
-      <DashboardHeader />
+    <div className="space-y-10">
+      <DashboardHeader today={today} />
 
       <section aria-labelledby="dashboard-summary">
-        <h2 className="sr-only" id="dashboard-summary">
-          Search summary
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <SummaryTile
-            context="Sent to an employer at some point"
-            label="Submitted"
-            value={dashboard.search.submitted}
-          />
-          <SummaryTile
-            context="Applied, screening, assessment, or interview"
-            label="Active"
-            value={dashboard.search.active}
-          />
-          <SummaryTile
-            context="Ever reached an interview"
-            label="Interviews"
-            value={dashboard.search.interviews}
-          />
-          <SummaryTile
-            context="Whether or not you took them"
-            label="Offers"
-            value={dashboard.search.offers}
-          />
-        </div>
-      </section>
-
-      <section aria-labelledby="dashboard-attention">
-        <h2
-          className="text-base font-semibold text-foreground"
-          id="dashboard-attention"
-        >
-          Needs attention
-        </h2>
-        <div className="mt-3">
-          <NeedsAttention items={dashboard.attention} />
-        </div>
-      </section>
-
-      <section aria-labelledby="dashboard-pipeline">
-        <PipelineSnapshot stages={dashboard.pipeline} />
-      </section>
-
-      {/* items-start so the shorter card keeps its own height instead of
-          stretching into a tall box holding three numbers. */}
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-        <section aria-labelledby="dashboard-week">
-          <ThisWeek
-            week={dashboard.week}
-            weekStartLabel={formatDateOnly(dashboard.week.weekStart)}
-          />
-        </section>
-        <section aria-labelledby="dashboard-activity">
-          <RecentActivity entries={dashboard.activity} today={today} />
-        </section>
-      </div>
-
-      <AnalyticsLink />
-      <AssistantCard />
-    </div>
-  );
-}
-
-/** The optional MCP connection, kept below the working sections. */
-function AssistantCard() {
-  return (
-    <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-record bg-accent-soft text-accent">
-          <Sparkles aria-hidden="true" className="size-5" />
-        </span>
-        <div>
-          <h2 className="font-semibold text-foreground">
-            Use JobTrack with your AI assistant
+        <div className="border-b border-border pb-2">
+          <h2
+            className="text-[17px] font-medium text-foreground"
+            id="dashboard-summary"
+          >
+            Your search
           </h2>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-foreground-secondary">
-            Already using an assistant to read job postings? Let it save and
-            update applications for you instead of retyping them. Optional, and
-            JobTrack never charges you for AI.
-          </p>
         </div>
-      </div>
-      <ButtonLink className="shrink-0" href="/settings" variant="secondary">
-        Set up the connection
-        <ArrowRight aria-hidden="true" className="size-4" />
-      </ButtonLink>
-    </Card>
+        <SearchSummaryMetrics
+          metrics={[
+            { label: "Applications", value: search.applications },
+            { label: "Submitted", value: search.submitted },
+            { label: "Interviews", value: search.interviews },
+            { label: "Offers", value: search.offers },
+          ]}
+        />
+      </section>
+
+      <PipelineSnapshot stages={dashboard.pipeline} />
+
+      <RecentActivity entries={dashboard.activity} today={today} />
+
+      <ThisWeek
+        week={dashboard.week}
+        weekStartLabel={formatDateOnly(dashboard.week.weekStart)}
+      />
+
+      {/*
+        Conditional, and the page simply ends above it when there is nothing.
+        A dashboard that congratulates somebody for having nothing due has made
+        itself the point; this section is a utility, not the reason to visit.
+      */}
+      {dashboard.attention.length > 0 ? (
+        <Upcoming items={dashboard.attention} />
+      ) : null}
+    </div>
   );
 }

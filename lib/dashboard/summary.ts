@@ -24,6 +24,11 @@ export type DashboardRead<Row> = {
 };
 
 export type SearchSummary = {
+  /**
+   * Everything saved, archived records included — the canonical analytics
+   * `totalSaved`, read rather than recounted, so the two pages agree.
+   */
+  applications: number;
   /** Ever sent to an employer, from history. */
   submitted: number;
   /** Waiting on somebody right now, from current status. */
@@ -120,6 +125,7 @@ export function buildDashboard(
   return {
     kind: "ready",
     search: {
+      applications: analytics.totalSaved,
       submitted: analytics.everSubmitted,
       active: analytics.activeNow,
       interviews: reached(analytics.conversions, "Reached an interview"),

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { buildDashboard } from "@/lib/dashboard/summary";
 import type { ApplicationListItem, ApplicationTimelineEvent } from "@/lib/applications/types";
@@ -144,6 +145,12 @@ describe("the search summary uses the shared analytics definitions", () => {
   const built = buildDashboard(ok(applications), ok(timeline), TODAY, ZONE);
   const summary = built.kind === "ready" ? built.search : null;
 
+  it("takes the total from the canonical analytics count, archived included", () => {
+    // Read rather than recounted, so the dashboard and the analytics page can
+    // never disagree about how many applications the student has saved.
+    expect(summary?.applications).toBe(4);
+  });
+
   it("counts submitted from history, so a saved-only application is excluded", () => {
     expect(summary?.submitted).toBe(3);
   });
@@ -286,5 +293,59 @@ describe("the whole dashboard comes together", () => {
     expect(built.week.weekStart).toBe("2026-08-24");
     expect(built.week.submitted).toBe(1);
     expect(built.activity).toHaveLength(3);
+  });
+});
+
+
+describe("the dashboard page contract", () => {
+  const page = readFileSync("app/(app)/dashboard/page.tsx", "utf8");
+  const sections = readFileSync(
+    "components/dashboard/dashboard-sections.tsx",
+    "utf8",
+  );
+
+  it("renders Upcoming only when there is something in it", () => {
+    // The section is a utility, not the page's purpose. At zero items the
+    // dashboard simply ends after This week.
+    expect(page).toContain("dashboard.attention.length > 0");
+  });
+
+  it("keeps no caught-up empty state", () => {
+    expect(page).not.toMatch(/caught up/i);
+    expect(sections).not.toMatch(/caught up/i);
+  });
+
+  it("carries no AI assistant promotion", () => {
+    // MCP onboarding belongs in Settings. The dashboard is a workspace, not a
+    // marketing surface.
+    expect(page).not.toMatch(/AI assistant|Set up the connection|Sparkles/i);
+    expect(sections).not.toMatch(/AI assistant|Set up the connection/i);
+  });
+
+  it("carries no large analytics call to action", () => {
+    expect(page).not.toMatch(/How is the search going overall|View full analytics/);
+    expect(sections).not.toMatch(/How is the search going overall/);
+  });
+
+  it("links to analytics from This week instead", () => {
+    expect(sections).toContain('href="/analytics"');
+    expect(sections).toContain("View analytics");
+  });
+
+  it("does not send the student to the unfinished pipeline page", () => {
+    // `/pipeline` is still a Phase 4 placeholder, so nothing here offers it.
+    expect(page).not.toContain('href="/pipeline"');
+    expect(sections).not.toContain('href="/pipeline"');
+  });
+
+  it("says nothing about applications going quiet in the empty state", () => {
+    expect(page).not.toMatch(/gone quiet|no response|stale/i);
+  });
+
+  it("wraps no section in a card", () => {
+    // Sections are separated by a heading and a rule, which is the language
+    // the applications list already uses.
+    expect(page).not.toMatch(/from "@\/components\/ui\/card"/);
+    expect(sections).not.toMatch(/from "@\/components\/ui\/card"/);
   });
 });

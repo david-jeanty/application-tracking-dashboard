@@ -161,6 +161,12 @@ export type ActivityEntry = {
   companyName: string;
   /** The employer's domain, for the same mark the rest of the product shows. */
   companyDomain: string | null;
+  /**
+   * The role, so two applications at one employer can be told apart. It comes
+   * from the same in-memory lookup as the company name — no extra read, and
+   * nothing about which events qualify changes.
+   */
+  jobTitle: string;
   /** "Saved as Applied" or "Moved to Interview". */
   description: string;
   status: ApplicationStatus;
@@ -174,6 +180,7 @@ export type ActivityApplication = {
   id: string;
   company_name: string;
   company_domain: string | null;
+  original_job_title: string;
 };
 
 /**
@@ -219,6 +226,7 @@ export function recentActivity(
           applicationId: event.application_id,
           companyName: company.company_name,
           companyDomain: company.company_domain,
+          jobTitle: company.original_job_title,
           description:
             event.previous_status === null
               ? `Saved as ${event.new_status}`
