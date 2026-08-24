@@ -6,6 +6,7 @@ import {
   toRatio,
 } from "@/lib/analytics/definitions";
 import {
+  NARROWING_MINIMUM_DENOMINATOR,
   NARROWING_MINIMUM_SUBMITTED,
   summarizeFunnel,
   type FunnelMilestoneKey,
@@ -325,13 +326,16 @@ describe("where the funnel narrows", () => {
   it("can name a later step when that one is narrower", () => {
     const summary = funnelOf([
       ...repeat("r", 10, ["Applied", "Rejected"]),
-      application("i", ["Applied", "Interview"]),
+      ...repeat("i", 9, ["Applied", "Interview"]),
+      application("o", ["Applied", "Interview", "Offer"]),
     ]);
 
-    // 11 submitted, 11 responses (100%), 1 interview of 11 (9%), 0 offers of 1
-    // (0%). The offer step is the narrowest.
+    // 20 submitted, 20 responses (100%), 10 interviews of 20 (50%), 1 offer of
+    // 10 (10%). The offer step is the narrowest, and ten interviews is enough
+    // to say so.
     expect(summary.narrowing?.transition.from).toBe("interview");
-    expect(summary.narrowing?.percent).toBe(0);
+    expect(summary.narrowing?.percent).toBe(10);
+    expect(summary.narrowing?.transition.denominator).toBe(10);
   });
 
   it("ignores undefined steps rather than treating them as zero", () => {
@@ -370,17 +374,18 @@ describe("where the funnel narrows", () => {
 
   it("breaks an exact tie on funnel order, taking the earlier step", () => {
     const summary = funnelOf([
-      ...repeat("s", 4, ["Applied"]),
-      ...repeat("r", 2, ["Applied", "Rejected"]),
-      ...repeat("o", 2, ["Applied", "Interview", "Offer"]),
+      ...repeat("s", 10, ["Applied"]),
+      ...repeat("r", 5, ["Applied", "Rejected"]),
+      ...repeat("o", 5, ["Applied", "Interview", "Offer"]),
     ]);
 
-    // 8 submitted, 4 responses, 2 interviews, 2 offers.
-    //   Submitted → response  4/8 = exactly one half
-    //   Response  → interview 2/4 = exactly one half
-    //   Interview → offer     2/2 = one
-    // The first two are genuinely equal, so the answer must be stable rather
-    // than whichever the iteration happened to see last.
+    // 20 submitted, 10 responses, 5 interviews, 5 offers.
+    //   Submitted → response  10/20 = exactly one half
+    //   Response  → interview  5/10 = exactly one half
+    //   Interview → offer       5/5  = one
+    // The first two are genuinely equal, and both have enough behind them to
+    // be eligible, so the answer must be stable rather than whichever the
+    // iteration happened to see last.
     expect(summary.transitions[0].percent).toBe(50);
     expect(summary.transitions[1].percent).toBe(50);
     expect(summary.narrowing?.transition.from).toBe("submitted");
@@ -388,18 +393,82 @@ describe("where the funnel narrows", () => {
 
   it("separates two steps that round to the same percentage", () => {
     const summary = funnelOf([
-      ...repeat("s", 11, ["Applied"]),
-      ...repeat("r", 1, ["Applied", "Rejected"]),
-      ...repeat("i", 1, ["Applied", "Interview"]),
+      ...repeat("s", 71, ["Applied"]),
+      ...repeat("r", 11, ["Applied", "Rejected"]),
+      ...repeat("i", 2, ["Applied", "Interview"]),
     ]);
 
-    // 13 submitted, 2 responses, 1 interview, 0 offers.
-    //   Submitted → response  2/13 = 15.38% → 15%
-    //   Response  → interview 1/2  = 50%
-    //   Interview → offer     0/1  = 0%
-    // The offer step is narrowest on the exact value, and comparison happens
-    // on that value rather than on the rounded label.
-    expect(summary.narrowing?.transition.from).toBe("interview");
+    // 84 submitted, 13 responses, 2 interviews, 0 offers.
+    //   Submitted → response  13/84 = 15.476% → 15%
+    //   Response  → interview  2/13 = 15.385% → 15%
+    //   Interview → offer       0/2 = 0%, on two observations
+    // The two eligible steps print the same label, so the comparison has to
+    // happen on the exact value or the tie-break would decide it wrongly.
+    expect(summary.transitions[0].percent).toBe(15);
+    expect(summary.transitions[1].percent).toBe(15);
+    expect(summary.narrowing?.transition.from).toBe("employerResponse");
+    expect(summary.narrowing?.percent).toBe(15);
+  });
+
+  it("does not name a step measured against a handful of observations", () => {
+    const summary = funnelOf([
+      ...repeat("s", 79, ["Applied"]),
+      application("i", ["Applied", "Interview"]),
+    ]);
+
+    // 80 submitted, 1 response, 1 interview, 0 offers.
+    //   Submitted → response   1/80 = 1%
+    //   Response  → interview  1/1  = 100%
+    //   Interview → offer      0/1  = 0%
+    // Zero of one is the narrowest number on the page and the least it is
+    // possible to know. Eighty submitted applications say something about the
+    // first step; a single interview says nothing about the last.
+    expect(summary.narrowing?.transition.from).toBe("submitted");
+    expect(summary.narrowing?.transition.denominator).toBe(80);
+
+    // And the funnel is untouched by the rule: every step still reports its
+    // own rate, denominator visible, including the 0 of 1.
+    expect(summary.transitions[2].percent).toBe(0);
+    expect(summary.transitions[2].reached).toBe(0);
+    expect(summary.transitions[2].denominator).toBe(1);
+  });
+
+  it("lets a later step qualify at exactly the denominator floor", () => {
+    const summary = funnelOf([
+      ...repeat("s", 20, ["Applied"]),
+      ...repeat("r", 5, ["Applied", "Rejected"]),
+    ]);
+
+    // 25 submitted, 5 responses, 0 interviews.
+    //   Submitted → response  5/25 = 20%
+    //   Response  → interview 0/5  = 0%, on exactly five observations
+    // Five is the floor, not something above it, so this step is eligible and
+    // it is narrower.
+    expect(summary.transitions[1].denominator).toBe(
+      NARROWING_MINIMUM_DENOMINATOR,
+    );
+    expect(summary.narrowing?.transition.from).toBe("employerResponse");
     expect(summary.narrowing?.percent).toBe(0);
+  });
+
+  it("is null when every defined step is below the denominator floor", () => {
+    const summary = funnelOf([
+      ...repeat("s", 4, ["Applied"]),
+      application("i", ["Applied", "Interview"]),
+    ]);
+
+    // Five submitted clears the global threshold, so the callout is allowed to
+    // exist — but the first step's denominator is 5 and it is the only one
+    // that qualifies. Removing that one leaves nothing to say.
+    expect(summary.submitted).toBe(5);
+    expect(summary.narrowing?.transition.from).toBe("submitted");
+
+    // Drop below the floor on every step and the callout goes away entirely
+    // rather than falling back to the least-supported number.
+    const thin = funnelOf([
+      ...repeat("s", 3, ["Applied"]),
+      application("i", ["Applied", "Interview"]),
+    ]);
+    expect(thin.narrowing).toBeNull();
   });
 });
