@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AnalyticsHistoryEvent } from "@/lib/analytics/calculate";
 import {
   MAXIMUM_NAMED_GROUPS,
+  MINIMUM_COMPARABLE_GROUPS,
   MILESTONE_BUCKETS,
   SMALL_SAMPLE_THRESHOLD,
   summarizePerformance,
@@ -587,5 +588,71 @@ describe("nothing to compare", () => {
 
   it("returns no rows when nothing was submitted", () => {
     expect(summarize([{ id: "a", path: ["Interested"] }]).rows).toEqual([]);
+  });
+});
+
+describe("what counts as a comparison", () => {
+  it("does not count Not specified as a source", () => {
+    const summary = summarize([
+      ...many("l", 6, { source: "LinkedIn", path: ["Applied"] }),
+      ...many("u", 5, {
+        source: UNSPECIFIED_DATABASE_VALUE,
+        path: ["Applied"],
+      }),
+    ]);
+
+    // Two rows, one source. "LinkedIn versus the applications where I did not
+    // write down a source" is not a finding about sources — the second group
+    // is defined by the absence of the very thing being compared.
+    expect(summary.rows).toHaveLength(2);
+    expect(summary.comparableGroups).toBe(1);
+    expect(summary.comparableGroups).toBeLessThan(MINIMUM_COMPARABLE_GROUPS);
+  });
+
+  it("counts two named sources as a comparison, residue included on the chart", () => {
+    const summary = summarize([
+      ...many("l", 6, { source: "LinkedIn", path: ["Applied"] }),
+      ...many("r", 5, { source: "Referral", path: ["Applied"] }),
+      ...many("u", 4, {
+        source: UNSPECIFIED_DATABASE_VALUE,
+        path: ["Applied"],
+      }),
+    ]);
+
+    expect(summary.comparableGroups).toBe(2);
+    // The residue still draws: it is not a source, but it is applications the
+    // student sent, and dropping it would quietly shrink the chart's total.
+    expect(summary.rows.map((row) => row.label)).toContain("Not specified");
+  });
+
+  it("counts every category as comparable under the role lens", () => {
+    const summary = summarize(
+      [
+        ...many("f", 5, { category: "Finance", path: ["Applied"] }),
+        ...many("m", 4, { category: "Marketing", path: ["Applied"] }),
+      ],
+      "role",
+    );
+
+    // A role category is always a real answer — the field is a fixed list with
+    // no empty option, so there is no residue bucket to discount here.
+    expect(summary.comparableGroups).toBe(2);
+  });
+
+  it("counts a named source it had to hide for space", () => {
+    const summary = summarize(
+      Array.from({ length: MAXIMUM_NAMED_GROUPS + 1 }, (_, index) =>
+        many(`s${index}`, MAXIMUM_NAMED_GROUPS + 2 - index, {
+          source: `Source ${index}`,
+          path: ["Applied"],
+        }),
+      ).flat(),
+    );
+
+    // The chart draws five and folds the rest into a sentence. That is a
+    // decision about how much fits on a screen, not about how many sources the
+    // student used, so the comparison is as real as the count of sources.
+    expect(summary.rows).toHaveLength(MAXIMUM_NAMED_GROUPS);
+    expect(summary.comparableGroups).toBe(MAXIMUM_NAMED_GROUPS + 1);
   });
 });
