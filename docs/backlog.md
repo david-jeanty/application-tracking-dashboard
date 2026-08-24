@@ -7,7 +7,9 @@ This file records ideas without silently expanding the approved phase.
 - Phase 2: application CRUD, archive/permanent delete distinction, search,
   filters, status, next actions, deadlines, source and work-term data
 - Phase 3: shared analytics and accessible charts
-- Phase 4: persistent pipeline with keyboard status alternative
+- Phase 4: persistent pipeline with keyboard status alternative (built; the
+  status menu is the only way to move a card, not a fallback behind a drag —
+  see the implementation log for why no drag-and-drop dependency was added)
 - Phase 5: MCP server (`/api/mcp`) with `create_application`,
   `get_application`, `list_applications`, `update_application`,
   `add_application_note`, authenticated with a manual API key for V1

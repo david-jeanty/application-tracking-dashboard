@@ -1,5 +1,149 @@
 # Implementation log
 
+## 2026-08-24 — Phase 4: the pipeline board
+
+### Scope
+
+`/pipeline` stops being a placeholder. Every active application, grouped under
+the exact status it is at, with a control on each card that moves it to another
+status without leaving the board.
+
+No schema change, no new dependency, no new mutation, and no MCP change. The
+board reads through `listActiveApplications` and writes through
+`setApplicationStatus` — the same two functions the applications list and the
+detail page's quick update already use.
+
+### Decisions
+
+**The columns are the ten exact statuses, not the five lifecycle stages.** The
+rail is a coarse summary drawn over the statuses, and summarising is the wrong
+job here: a five-column board could not express moving an application from
+Screening to Assessment at all. The rail keeps its place on the list and the
+detail page, where progress is read rather than changed.
+
+**Terminal statuses get columns like every other.** An application that was
+rejected but never archived is still one of the student's records. Dropping it
+would leave the board disagreeing with the count printed above it. Archived
+records stay off the board entirely, which is the working-set rule the
+applications list already applies.
+
+**No drag-and-drop dependency.** Phase 4 was the phase to evaluate one, and the
+evaluation says no. A drag needs a library, a pointer, and then a keyboard
+alternative built anyway — and that alternative is the whole feature: a native
+`select` of the ten statuses and a submit button, which every student reaches
+by keyboard, works with no client JavaScript, and posts through the same
+validated Server Action the detail page uses. A drag would have been a second
+way to do the one thing, at the cost of a dependency and a second write path.
+So the status menu is not a fallback behind a drag; it is the control.
+
+**The move menu offers destinations, not statuses.** It opens on a `Move to…`
+placeholder and leaves out the status the application is already at. Opening on
+the current status meant a student could press Move without choosing anything
+and get a write that changed nothing, no history event, and a notice saying the
+application had moved. `required` on the control is the browser's own
+constraint validation, so the refusal happens where the control is, with no
+client JavaScript and no pointless round trip — and without a read to detect
+the no-op, which would have cost a query on every move to catch a case the
+markup can simply not offer. Every other status stays available, so a move
+backward from Interview to Applied, or a skip straight to Offer, is one
+selection away.
+
+**No optimistic client state.** With no client component on the page there is
+nothing to roll back: the move posts, the board re-renders from the database,
+and the card is under a different heading. Failure is a redirect carrying one
+fixed message — missing, somebody else's, archived, an invalid status, and a
+database error are indistinguishable in it, so a response never confirms that
+another student's application exists.
+
+**Three filters, not four.** Search, work term and role category all narrow
+*which* applications the board is about. Status is the one it does not offer,
+because status is what the columns *are*: filtering by it would leave a board
+of one column, which is the applications list with extra steps.
+`parsePipelineFilters` therefore cannot produce one, and a bookmarked list URL
+carrying `?status=` opens the whole board.
+
+**One composition for every width.** The columns sit side by side and scroll
+horizontally where there is room, and stack into the phone's reading order
+where there is not — rather than two markups where a screen reader would meet
+every application twice. Every status is a column at every width, empty ones
+included: a student counting ten headings on a phone should see the same ten,
+in the same order, as on a desktop, and a list that shortened as the search
+moved would be harder to trust than ten honest zeros. An empty column carries
+a quiet `None` rather than nothing at all, so it reads as empty instead of as
+something that failed to load.
+
+**The card leads with the role.** Role, then employer, then where it is —
+location and work term, when the record has them — and then, separately, the
+one thing coming up on it. The placement line and the next item answer
+different questions, so the next item is not a fallback for the placement
+line: a card must not lose its location the moment a follow-up is recorded.
+Nothing else is on the card. No lifecycle rail (the column heading already
+says the stage), no status chip, no salary, no notes, no category label.
+
+### What changed
+
+- `lib/pipeline/board.ts` — the grouping. Pure, and total: every application
+  lands in exactly one column, and `total` counts the records read rather than
+  the entries the grouping produced.
+- `lib/applications/context-date.ts` — the "which date does a compact view
+  show" rule, lifted out of the applications list unchanged so the list and the
+  board cannot drift about it.
+- `lib/applications/search-params.ts` — `parsePipelineFilters` and
+  `toPipelineUrl`. The redirect target is a fixed internal path with every
+  parameter re-encoded, so a filter value carrying its own `&` becomes text in
+  a query value rather than a second parameter.
+- `lib/applications/actions.ts` — `moveApplicationStatusAction`. Identity comes
+  from the session, the status goes through the existing `quickStatusSchema`,
+  and the write is the existing owner-scoped, active-only single-column update.
+  `/pipeline` was added to the archive and quick-update revalidations too,
+  since both change what the board shows.
+- Revalidation, finished across the writes that were already there. Creating
+  an application and saving the full edit form now refresh all four surfaces
+  that read whole applications — the list, the board, the dashboard and
+  analytics — and the edit also refreshes the record's own detail and edit
+  routes. A full edit can change any field any of those pages read, so which
+  ones actually changed is not worth inferring. The set is named once, as
+  `APPLICATION_SURFACES`, so a page cannot be added to one write's list and
+  forgotten in another's. No mutation semantics, validation, concurrency check
+  or history ownership changed: a rejected form, a stale version and a refused
+  write all still refresh nothing.
+- Analytics revalidation, on a status change only. A status change writes a
+  status-history event, which is what every figure on the analytics page is
+  drawn from, so both paths that change a status — the board's move and the
+  detail page's quick update — now refresh `/analytics`. Saving or clearing a
+  next action does not: it writes two columns no analytics read selects and
+  produces no history event, so the page cannot have changed.
+- `components/pipeline/` — the board, the card, and the filter form.
+- `app/(app)/pipeline/page.tsx` — the page, streaming the board inside a
+  `Suspense` boundary keyed on the applied filters. Its empty state offers
+  `/applications`, because that is where this app's add-application panel
+  lives; there is no `/applications/new` route to send anybody to.
+- `components/app-shell/placeholder-page.tsx` — deleted. The pipeline was its
+  last caller, so every route in the shell now shows real data.
+
+### Verification
+
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run test`: passed. The new suites cover the grouping, the filter parsing
+  and URL rebuilding, the move action's authorisation and failure equivalence,
+  which paths a move refreshes, and what the board renders at every status.
+- `npm run build`: passed, with `/pipeline` now a dynamic route rather than a
+  prerendered placeholder.
+- Visual review against fixtures of 45, 6 and 2 applications, through a
+  temporary harness that rendered the real components inside the real shell and
+  was removed before this commit. Checked at 1440 (light and dark), 834 and
+  390, on two accents; with every status represented and with several statuses
+  empty; with long role names, several roles at one employer, records missing
+  a location or a work term, and cards carrying next actions and deadlines.
+  The board's ten columns hold 256px at every desktop width and never
+  compress, the last column is fully reachable at the end of the scroll, and
+  no width produced horizontal overflow outside the board's own scroller —
+  including with a card focused. The one change the review prompted: the move
+  control was a bordered, card-wide bar that read as the loudest thing in a
+  column, so it lost its border and fill and is now only as wide as its widest
+  status, with the border returning on hover and focus.
+
 ## 2026-08-24 — Phase 3B: analytics visualisation and source performance
 
 ### Scope

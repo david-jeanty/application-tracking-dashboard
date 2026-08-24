@@ -35,3 +35,11 @@ export type QuickUpdateOutcome =
   | "next-action"
   | "next-action-cleared"
   | "error";
+
+/**
+ * What the pipeline board reports after a card was moved to another status.
+ *
+ * Lives here for the same reason as `ArchiveOutcome`: a `"use server"` module
+ * may only export async functions.
+ */
+export type PipelineMoveOutcome = "moved" | "error";

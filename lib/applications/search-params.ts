@@ -7,7 +7,7 @@ import {
 import type { ActiveApplicationFilters } from "@/lib/applications/repository";
 
 /**
- * The query parameters the applications list reads.
+ * The query parameters the applications list and the pipeline board read.
  *
  * Named with the same vocabulary the MCP tools use, so a student reading a
  * bookmarked URL and a student reading a Claude transcript see the same words
@@ -118,4 +118,60 @@ export function describeActiveFilters(
   if (filters.category) described.push(`in ${filters.category}`);
 
   return described;
+}
+
+/**
+ * Reads the pipeline board's filters out of a URL.
+ *
+ * The same parser as the list's, minus status. Status is what the board's
+ * columns *are*: filtering it away would leave a board of one column, which is
+ * the applications list with extra steps. Search, work term and role category
+ * all narrow *which* applications the board is about, which is a different
+ * question from where each one stands, so all three are kept.
+ *
+ * Sharing `ActiveApplicationFilters` rather than a pipeline-specific type is
+ * deliberate: the board reads through the same owner-scoped, archive-safe
+ * `listActiveApplications` the list uses, so it must not be able to describe a
+ * filter that read would not accept — and the category filter it produces is
+ * the same equality match on `normalized_job_category` the list already sends.
+ */
+export function parsePipelineFilters(
+  params: RawSearchParams,
+): ActiveApplicationFilters {
+  const { search, workTermSeason, category } = parseApplicationFilters(params);
+
+  return {
+    ...(search ? { search } : {}),
+    ...(workTermSeason ? { workTermSeason } : {}),
+    ...(category ? { category } : {}),
+  };
+}
+
+/** The parameter the board reports a completed move through. */
+export const MOVE_PARAM = "move";
+
+/**
+ * Rebuilds a pipeline URL from filters that have already been parsed.
+ *
+ * The path is a fixed internal one and every parameter is re-encoded here, so
+ * a filter value carrying its own `&` or `?` becomes text in a query value
+ * rather than a second parameter. That is what lets the move action send a
+ * student back to the board they were looking at without a request-supplied
+ * string ever reaching the redirect intact.
+ */
+export function toPipelineUrl(
+  filters: ActiveApplicationFilters,
+  notice?: string,
+): string {
+  const params = new URLSearchParams();
+
+  if (filters.search) params.set(SEARCH_PARAM, filters.search);
+  if (filters.workTermSeason) {
+    params.set(WORK_TERM_PARAM, filters.workTermSeason);
+  }
+  if (filters.category) params.set(CATEGORY_PARAM, filters.category);
+  if (notice) params.set(MOVE_PARAM, notice);
+
+  const query = params.toString();
+  return query ? `/pipeline?${query}` : "/pipeline";
 }
