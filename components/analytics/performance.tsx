@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import {
   MILESTONE_BUCKETS,
   MILESTONE_BUCKET_LABELS,
@@ -67,7 +67,6 @@ export function WhatWorks({
   initialLens: PerformanceLens;
 }) {
   const [lens, setLens] = useState<PerformanceLens>(initialLens);
-  const groupId = useId();
 
   const active =
     lenses.find((summary) => summary.lens === lens) ?? lenses[0];
@@ -91,39 +90,11 @@ export function WhatWorks({
         <Legend />
 
         {/*
-          A radio group rather than tabs: the rows below are one chart being
-          re-plotted, not two panels. Arrow keys and the space bar work because
-          these are real buttons in a labelled group, and the selected one is
-          announced through `aria-checked` rather than only shown in colour.
           Rendered only when there is a second lens to switch to — a control
           with one option is furniture.
         */}
         {lenses.length > 1 ? (
-          <div
-            aria-labelledby={groupId}
-            className="flex shrink-0 gap-0.5 rounded-record border border-border bg-surface-muted p-0.5"
-            role="radiogroup"
-          >
-            <span className="sr-only" id={groupId}>
-              Compare by
-            </span>
-            {lenses.map((summary) => (
-              <button
-                aria-checked={summary.lens === active.lens}
-                className={`min-h-8 rounded-control px-3 text-[13px] transition-colors ${
-                  summary.lens === active.lens
-                    ? "bg-accent-soft font-medium text-accent"
-                    : "text-foreground-secondary hover:text-foreground"
-                }`}
-                key={summary.lens}
-                onClick={() => setLens(summary.lens)}
-                role="radio"
-                type="button"
-              >
-                {LENS_LABELS[summary.lens]}
-              </button>
-            ))}
-          </div>
+          <LensPicker active={active.lens} lenses={lenses} onSelect={setLens} />
         ) : null}
       </div>
 
@@ -135,6 +106,105 @@ export function WhatWorks({
 
       <Remainder summary={active} />
     </>
+  );
+}
+
+/**
+ * The Source / Role type control, as a real radio group.
+ *
+ * `role="radio"` on a button buys the *announcement* and nothing else: a
+ * browser gives arrow-key behaviour to native radio inputs, not to anything
+ * merely labelled as one. The keyboard contract therefore has to be
+ * implemented, and this is it — the WAI-ARIA radio-group pattern, by hand,
+ * with no dependency.
+ *
+ * **One tab stop.** Roving `tabIndex`: the selected option is the only member
+ * in the tab sequence, so Tab moves past the whole control rather than through
+ * it, and Shift+Tab leaves it in one press. That is what makes a two-option
+ * control cost one stop instead of two on the way to the rows below.
+ *
+ * **Selection follows focus.** Arrow keys move both at once, which is correct
+ * for a group this small: every option is a complete, instant, non-destructive
+ * view of the same data, so there is nothing to preview and nothing to confirm.
+ * Left and Up go back, Right and Down go forward, and both ends wrap.
+ *
+ * **Space and Enter** re-select the focused option through the button's native
+ * click, which is a no-op here precisely because focus already carried the
+ * selection with it.
+ *
+ * `aria-checked` tracks the same state the rows render from, so what is
+ * announced and what is drawn cannot disagree.
+ */
+function LensPicker({
+  active,
+  lenses,
+  onSelect,
+}: {
+  active: PerformanceLens;
+  lenses: PerformanceSummary[];
+  onSelect: (lens: PerformanceLens) => void;
+}) {
+  const groupId = useId();
+  // Focus has to move with the selection, and only the DOM can do that.
+  const buttons = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const move = (from: number, step: number) => {
+    // Wrapping, so a two-option group behaves the same in both directions and
+    // neither end is a dead key.
+    const next = (from + step + lenses.length) % lenses.length;
+    onSelect(lenses[next].lens);
+    buttons.current[next]?.focus();
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent, index: number) => {
+    const step =
+      event.key === "ArrowRight" || event.key === "ArrowDown"
+        ? 1
+        : event.key === "ArrowLeft" || event.key === "ArrowUp"
+          ? -1
+          : 0;
+
+    if (step === 0) return;
+    // The arrows drive the group rather than scrolling the page under it.
+    event.preventDefault();
+    move(index, step);
+  };
+
+  return (
+    <div
+      aria-labelledby={groupId}
+      className="flex shrink-0 gap-0.5 rounded-record border border-border bg-surface-muted p-0.5"
+      role="radiogroup"
+    >
+      <span className="sr-only" id={groupId}>
+        Compare by
+      </span>
+      {lenses.map((summary, index) => {
+        const selected = summary.lens === active;
+
+        return (
+          <button
+            aria-checked={selected}
+            className={`min-h-8 rounded-control px-3 text-[13px] transition-colors ${
+              selected
+                ? "bg-accent-soft font-medium text-accent"
+                : "text-foreground-secondary hover:text-foreground"
+            }`}
+            key={summary.lens}
+            onClick={() => onSelect(summary.lens)}
+            onKeyDown={(event) => onKeyDown(event, index)}
+            ref={(element) => {
+              buttons.current[index] = element;
+            }}
+            role="radio"
+            tabIndex={selected ? 0 : -1}
+            type="button"
+          >
+            {LENS_LABELS[summary.lens]}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

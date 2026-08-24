@@ -81,16 +81,22 @@ export function AnalyticsView({
   /*
     A lens earns its place by having something to compare. One source filling a
     single full-width bar repeats what the funnel said a moment earlier, so a
-    dimension with fewer than two groups is dropped rather than drawn.
+    dimension with fewer than two comparable groups is dropped rather than drawn.
+
+    `comparableGroups` rather than `rows.length`, because `Not specified` is a
+    row and not a source. A student who recorded `LinkedIn` on half their
+    applications and nothing on the rest has one source; letting the residue
+    make up the second would render that as a comparison and invite a reader to
+    find a difference between a source and an absent record.
 
     Source leads when it qualifies, because where a posting was found is the
     lever a student actually has. Role type takes over when source cannot form a
-    comparison — a student who records every application as `Not specified` still
-    gets the analysis, through the dimension their data supports.
+    comparison — a student with one named source, or none, still gets the
+    analysis through the dimension their data supports.
   */
   const lenses = (["source", "role"] as const)
     .map((lens) => summarizePerformance(rows, events, lens))
-    .filter((summary) => summary.rows.length >= MINIMUM_COMPARABLE_GROUPS);
+    .filter((summary) => summary.comparableGroups >= MINIMUM_COMPARABLE_GROUPS);
 
   return (
     <div className="space-y-14">
