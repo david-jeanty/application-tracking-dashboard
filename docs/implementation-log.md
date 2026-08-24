@@ -1,5 +1,130 @@
 # Implementation log
 
+## 2026-08-24 — Phase 3A: dashboard command centre
+
+### Scope
+
+`/dashboard` rewritten from a static welcome card into an operational page
+answering "what needs my attention?" — search summary, needs attention, pipeline
+snapshot, this week, recent activity, and a handoff to analytics. No MCP change,
+no schema change, no new dependency, and no change to what analytics means.
+
+### Audit findings
+
+No architectural or schema mismatch, and **no migration was needed**.
+
+Every field the dashboard reasons about already exists and is already indexed:
+`next_action`, `next_action_due_date`, `application_deadline`, `archived_at`,
+`current_status`, and `application_status_history.changed_at` /
+`previous_status`. `authenticated` holds a table-level `select` on the history
+table, so no grant changed either.
+
+Two findings shaped the design.
+
+`listStatusHistory` projects two columns and its comment records a deliberate
+decision to keep `changed_at` out, so nobody builds a duration metric mixing a
+`timestamptz` with the date-only `date_applied`. The dashboard needs *when*
+things moved, so it got a separate `listStatusTimeline` read rather than a
+widened shared projection that would hand every analytics caller a field that
+decision excluded.
+
+`lib/applications/dashboard.ts` — `summarizeTrackedApplications` — was
+superseded outright. Two Phase 2 suites asserted through it that "the dashboard
+count follows the active list", which stopped being true of the dashboard. The
+module and its suite were removed and those assertions re-pointed at
+`pipelineSnapshot`, which is what now carries that behaviour.
+
+### Architecture
+
+Repository functions fetch, pure functions interpret, components render. No
+business logic in `page.tsx` and none in a component.
+
+- `lib/dashboard/definitions.ts` — every threshold and status set, named once.
+  The status sets are imported from `lib/analytics/definitions`, never restated.
+- `lib/dashboard/attention.ts` — classification and urgency ordering.
+- `lib/dashboard/calculate.ts` — pipeline, week, activity, day grouping.
+- `lib/dashboard/summary.ts` — composes the above from two whole reads.
+- `components/dashboard/dashboard-sections.tsx` — presentation only.
+
+Every calculator is pure and takes `today` as a parameter. Nothing reads a
+clock, a database, or a request, which is what makes the rules testable.
+
+### Metric definitions
+
+The search summary reads the canonical `summarizeApplications` result rather
+than recounting: submitted and the interview/offer figures come from status
+history, active from current status. No competing definition was created.
+
+Two populations, both borrowed rather than redefined. Historical sections —
+search summary, recent activity — include archived applications, matching
+analytics. Working-set sections — needs attention, pipeline snapshot — are
+active-only, matching the applications list.
+
+### Needs attention
+
+Active applications only, one entry per application, capped at six.
+
+1. **Overdue next action** — an action exists and its due date is past.
+2. **Deadline soon** — a deadline today or within 7 days, never one that passed.
+3. **Next action soon** — an action due today or within 7 days.
+4. **Stale** — status in the shared `ACTIVE_STATUSES` and no status event for
+   14 days.
+
+An application matching several reasons appears once, under the highest, so one
+company cannot push five others off the card. A due date with no action is
+ignored, because a date alone describes nothing to do.
+
+Staleness is measured from `application_status_history`, never `updated_at`: a
+student who fixed a typo yesterday has not heard from anybody.
+
+### This week
+
+Monday through today. Three metrics, all exactly derivable: applications first
+submitted, real status changes (the creation event is not a change), and
+interviews first reached. "Follow-ups completed" is deliberately absent —
+nothing records when an action was carried out, and neither faking it nor adding
+a column belonged in this ticket. No streaks, targets, or comparisons.
+
+### Recent activity
+
+One entry per real history event, newest first, capped at six. The creation
+event — the single row with a null `previous_status`, unique per application by
+partial index — renders as "Saved as Applied". No synthetic entry is derived
+from `created_at`, so a creation cannot appear twice.
+
+### Dates
+
+`today` is resolved once on the server, and timestamps become calendar days
+once, both through `DEFAULT_TIME_ZONE`. Everything downstream compares
+`YYYY-MM-DD` strings, so no rule can shift a day. Three new pure helpers —
+`differenceInCalendarDays`, `startOfWeek`, `dateOnlyFromTimestamp` — build both
+sides at UTC midnight rather than parsing through local time.
+
+### Verification
+
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run test`: passed, 469 tests across 27 files (100 new).
+- `npm run build`: passed.
+- Playwright: 10 credential-free tests passed, 8 authenticated tests correctly
+  skipped for want of credentials.
+- Rendered the composed sections to static HTML with the production stylesheet
+  and screenshotted them at 1280px and 390px to check layout and density.
+
+### Not verified here
+
+No live run against a real database: the authenticated Playwright specs need
+credentials and stayed skipped.
+
+No pgTAP suite was added. This ticket adds no new database behaviour — one new
+read over existing tables under existing policies — and a suite written only to
+raise a test count would be noise. `supabase/tests/003`, `004`, and `005` remain
+written but not executed, Docker being unreachable; they must not be described
+as passing.
+
+Phase 2 was marked complete in `PROJECT_SPEC.md` on the ticket author's
+statement that it is complete, not on a smoke test run here.
+
 ## 2026-08-23 — Phase 2: quick status and next-action updates
 
 ### Scope

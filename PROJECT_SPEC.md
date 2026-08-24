@@ -121,10 +121,11 @@ never parses free text itself. `delete_job` may follow later.
 1. **Foundation:** framework, auth, protected shell, schema, RLS, tests, docs.
    *(complete)*
 2. **Application management:** CRUD, list/detail, search, filters, status, actions,
-   deadlines, complete UI states. *(create/detail/edit and list search/filters
-   complete; delete/archive actions remain)*
+   deadlines, complete UI states. *(complete)*
 3. **Dashboard:** shared accurate metrics, actions, deadlines, recent activity,
-   accessible charts.
+   accessible charts. *(in progress — 3A, the operational command centre, is
+   built: search summary, needs attention, pipeline snapshot, this week, recent
+   activity. 3B will cover analytics visualisation and conversion insight.)*
 4. **Pipeline:** persistent status columns, failure recovery, keyboard alternative,
    responsive behavior.
 5. **MCP integration:** `/api/mcp` route, the four tools above, tool-input

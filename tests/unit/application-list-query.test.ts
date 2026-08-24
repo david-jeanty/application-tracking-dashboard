@@ -5,6 +5,7 @@ import {
   listActiveWorkTermSeasons,
   listApplications,
   listStatusHistory,
+  listStatusTimeline,
 } from "@/lib/applications/repository";
 
 const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -277,5 +278,49 @@ describe("status history read", () => {
     await listStatusHistory(recorder.client, USER);
 
     expect(recorder.argsFor("is", "archived_at")).toBeUndefined();
+  });
+});
+
+describe("the status timeline read", () => {
+  it("is scoped to the authenticated owner", async () => {
+    const recorder = recordingClient();
+
+    await listStatusTimeline(recorder.client, USER);
+
+    expect(recorder.argsFor("eq", "user_id")).toEqual(["user_id", USER]);
+  });
+
+  it("reads only the history table, and only the columns it needs", async () => {
+    const recorder = recordingClient();
+
+    await listStatusTimeline(recorder.client, USER);
+
+    expect(recorder.find("from").map((call) => call.args[0])).toEqual([
+      "application_status_history",
+    ]);
+    expect(recorder.find("select")[0]?.args[0]).toBe(
+      "application_id,previous_status,new_status,changed_at",
+    );
+  });
+
+  it("returns the newest event first", async () => {
+    const recorder = recordingClient();
+
+    await listStatusTimeline(recorder.client, USER);
+
+    expect(recorder.find("order")[0]?.args).toEqual([
+      "changed_at",
+      { ascending: false },
+    ]);
+  });
+
+  it("never writes to the history table", async () => {
+    // Authenticated clients hold `select` only; every mutation policy denies.
+    const recorder = recordingClient();
+
+    await listStatusTimeline(recorder.client, USER);
+
+    expect(recorder.find("update")).toHaveLength(0);
+    expect(recorder.find("delete")).toHaveLength(0);
   });
 });

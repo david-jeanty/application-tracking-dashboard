@@ -1,48 +1,39 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { AlertCircle, ArrowRight, ClipboardCheck, Sparkles } from "lucide-react";
+import { redirect } from "next/navigation";
+import {
+  AnalyticsLink,
+  NeedsAttention,
+  PipelineSnapshot,
+  RecentActivity,
+  SummaryTile,
+  ThisWeek,
+} from "@/components/dashboard/dashboard-sections";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  summarizeTrackedApplications,
-  type DashboardApplicationSummary,
-} from "@/lib/applications/dashboard";
-import { listActiveApplications } from "@/lib/applications/repository";
+  listApplications,
+  listStatusTimeline,
+} from "@/lib/applications/repository";
+import { buildDashboard } from "@/lib/dashboard/summary";
+import { formatDateOnly, todayInTimeZone } from "@/lib/dates/date-only";
+import { DEFAULT_TIME_ZONE } from "@/lib/dates/time-zone";
 import { createClient } from "@/lib/supabase/server";
-import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
-/**
- * The headline card's content for each state.
- *
- * The unavailable case says only that the read failed and that nothing was
- * lost — no database code, message, or query detail reaches the student.
- */
-function headlineCard(summary: DashboardApplicationSummary) {
-  switch (summary.kind) {
-    case "tracking":
-      return {
-        Icon: ClipboardCheck,
-        tone: "bg-blue-50 text-blue-700",
-        heading: "Your applications",
-        body: summary.description,
-      };
-    case "unavailable":
-      return {
-        Icon: AlertCircle,
-        tone: "bg-amber-50 text-amber-700",
-        heading: "Couldn't load your applications",
-        body: "Your applications are still safe. Try refreshing the page.",
-      };
-    case "first-application":
-      return {
-        Icon: ClipboardCheck,
-        tone: "bg-blue-50 text-blue-700",
-        heading: "Ready for your first application",
-        body: "Add applications, track their status and deadlines, and see how your search is going. Everything here works on its own.",
-      };
-  }
+function DashboardHeader() {
+  return (
+    <header>
+      <p className="text-sm font-semibold text-blue-700">Your workspace</p>
+      <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+        Dashboard
+      </h1>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
+        What needs your attention today, and how the search is moving.
+      </p>
+    </header>
+  );
 }
 
 export default async function DashboardPage() {
@@ -53,59 +44,152 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login");
 
-  // Owner-scoped by the server-derived user id, with row-level security
-  // applying again underneath — the same read the applications list performs.
-  // The whole result is handed over so a failure cannot arrive as a count of
-  // zero; the database error itself is never rendered.
-  const summary = summarizeTrackedApplications(
-    await listActiveApplications(supabase, user.id),
+  // Both reads are owner-scoped by the server-derived user id, with row-level
+  // security applying again underneath. Every application is read, archived
+  // ones included, because the search summary uses the analytics definitions —
+  // the sections that answer "what do I do now" filter to active records
+  // themselves rather than making a second, narrower query.
+  const [applications, timeline] = await Promise.all([
+    listApplications(supabase, user.id, { archiveState: "all" }),
+    listStatusTimeline(supabase, user.id),
+  ]);
+
+  // "Today" is resolved once, here, and passed down. Every rule below compares
+  // calendar strings, so no calculation can shift a day across a zone.
+  const today = todayInTimeZone(new Date(), DEFAULT_TIME_ZONE);
+  const dashboard = buildDashboard(
+    applications,
+    timeline,
+    today,
+    DEFAULT_TIME_ZONE,
   );
-  const headline = headlineCard(summary);
+
+  if (dashboard.kind === "unavailable") {
+    return (
+      <div className="space-y-6">
+        <DashboardHeader />
+        {/*
+          A failed read is never reported as zeros. "Nothing needs your
+          attention" is a claim about the student's data, and it is only true
+          when the query actually succeeded. No database detail is shown.
+        */}
+        <Card className="flex gap-3 border-amber-200 bg-amber-50 p-5 text-amber-900">
+          <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
+          <div>
+            <h2 className="font-semibold">
+              Couldn&rsquo;t load your dashboard
+            </h2>
+            <p className="mt-1 text-sm leading-6">
+              Your applications are still safe. Refresh the page to try again.
+            </p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (dashboard.kind === "empty") {
+    return (
+      <div className="space-y-6">
+        <DashboardHeader />
+        <Card className="px-6 py-12 text-center">
+          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+            <ClipboardCheck aria-hidden="true" className="size-6" />
+          </span>
+          <h2 className="mt-4 text-lg font-semibold text-slate-950">
+            Ready for your first application
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+            Save one and this page starts answering what needs your attention —
+            follow-ups, deadlines, and applications that have gone quiet.
+          </p>
+          <div className="mt-5">
+            <ButtonLink href="/applications">Add your first application</ButtonLink>
+          </div>
+        </Card>
+        <AssistantCard />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <header>
-        <p className="text-sm font-semibold text-blue-700">Your workspace</p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
-          Application dashboard
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
-          Track every application in one place, and connect the AI assistant you
-          already use if you want it to do the typing.
-        </p>
-      </header>
+      <DashboardHeader />
 
-      <Card className="overflow-hidden">
-        <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1fr_auto] lg:items-center">
-          <div>
-            <span
-              className={cn(
-                "grid size-12 place-items-center rounded-xl",
-                headline.tone,
-              )}
-            >
-              <headline.Icon aria-hidden="true" className="size-6" />
-            </span>
-            <h2 className="mt-5 text-xl font-semibold text-slate-950">
-              {headline.heading}
-            </h2>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-slate-600">
-              {headline.body}
-            </p>
-          </div>
-          <ButtonLink href="/applications" variant="secondary">
-            Go to your applications
-            <ArrowRight aria-hidden="true" className="size-4" />
-          </ButtonLink>
+      <section aria-labelledby="dashboard-summary">
+        <h2 className="sr-only" id="dashboard-summary">
+          Search summary
+        </h2>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryTile
+            context="Sent to an employer at some point"
+            label="Submitted"
+            value={dashboard.search.submitted}
+          />
+          <SummaryTile
+            context="Applied, screening, assessment, or interview"
+            label="Active"
+            value={dashboard.search.active}
+          />
+          <SummaryTile
+            context="Ever reached an interview"
+            label="Interviews"
+            value={dashboard.search.interviews}
+          />
+          <SummaryTile
+            context="Whether or not you took them"
+            label="Offers"
+            value={dashboard.search.offers}
+          />
         </div>
-      </Card>
+      </section>
 
-      <Card className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+      <section aria-labelledby="dashboard-attention">
+        <h2
+          className="text-base font-semibold text-slate-950"
+          id="dashboard-attention"
+        >
+          Needs attention
+        </h2>
+        <div className="mt-3">
+          <NeedsAttention items={dashboard.attention} />
+        </div>
+      </section>
+
+      <section aria-labelledby="dashboard-pipeline">
+        <PipelineSnapshot stages={dashboard.pipeline} />
+      </section>
+
+      {/* items-start so the shorter card keeps its own height instead of
+          stretching into a tall box holding three numbers. */}
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        <section aria-labelledby="dashboard-week">
+          <ThisWeek
+            week={dashboard.week}
+            weekStartLabel={formatDateOnly(dashboard.week.weekStart)}
+          />
+        </section>
+        <section aria-labelledby="dashboard-activity">
+          <RecentActivity entries={dashboard.activity} today={today} />
+        </section>
+      </div>
+
+      <AnalyticsLink />
+      <AssistantCard />
+    </div>
+  );
+}
+
+/** The optional MCP connection, kept below the working sections. */
+function AssistantCard() {
+  return (
+    <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
+          <Sparkles aria-hidden="true" className="size-5" />
+        </span>
         <div>
-          <span className="grid size-10 place-items-center rounded-xl bg-blue-50 text-blue-700">
-            <Sparkles aria-hidden="true" className="size-5" />
-          </span>
-          <h2 className="mt-4 text-base font-semibold text-slate-950">
+          <h2 className="font-semibold text-slate-950">
             Use JobTrack with your AI assistant
           </h2>
           <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">
@@ -114,14 +198,11 @@ export default async function DashboardPage() {
             JobTrack never charges you for AI.
           </p>
         </div>
-        <ButtonLink
-          className="shrink-0"
-          href="/settings"
-          variant="secondary"
-        >
-          Set up the connection
-        </ButtonLink>
-      </Card>
-    </div>
+      </div>
+      <ButtonLink className="shrink-0" href="/settings" variant="secondary">
+        Set up the connection
+        <ArrowRight aria-hidden="true" className="size-4" />
+      </ButtonLink>
+    </Card>
   );
 }

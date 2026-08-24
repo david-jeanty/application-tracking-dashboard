@@ -1,7 +1,9 @@
+import { DEFAULT_TIME_ZONE } from "@/lib/dates/time-zone";
+
 export function formatDateTime(
   value: string,
   locale = "en-CA",
-  timeZone = "America/Toronto",
+  timeZone = DEFAULT_TIME_ZONE,
 ): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {

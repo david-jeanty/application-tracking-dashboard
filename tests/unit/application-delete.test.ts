@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import { toDeleteNotice } from "@/lib/applications/archive-notice";
-import { summarizeTrackedApplications } from "@/lib/applications/dashboard";
+import { pipelineSnapshot } from "@/lib/dashboard/calculate";
 import { deleteArchivedApplication } from "@/lib/applications/repository";
 
 const USER = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -176,15 +176,20 @@ describe("permanent deletion is constrained by the statement, not the page", () 
   });
 });
 
-describe("the dashboard is unaffected by a permanent deletion", () => {
-  it("keeps its count, because only an archived row can be deleted", () => {
-    // The dashboard reads the active list. An archived application was
-    // already absent from it, so deleting one changes nothing there.
-    const before = summarizeTrackedApplications({ data: [1, 2, 3], error: null });
-    const after = summarizeTrackedApplications({ data: [1, 2, 3], error: null });
+describe("the dashboard pipeline is unaffected by a permanent deletion", () => {
+  it("keeps its counts, because only an archived row can be deleted", () => {
+    const active = { current_status: "Applied" as const, archived_at: null };
+    const archived = {
+      current_status: "Applied" as const,
+      archived_at: "2026-08-10T10:00:00.000Z",
+    };
+
+    // The snapshot counts active applications only. An archived one was
+    // already absent from it, so deleting it changes nothing there.
+    const before = pipelineSnapshot([active, active, archived]);
+    const after = pipelineSnapshot([active, active]);
 
     expect(after).toEqual(before);
-    expect(after).toMatchObject({ count: 3 });
   });
 });
 

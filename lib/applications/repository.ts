@@ -19,6 +19,7 @@ import type {
   ApplicationListItem,
   ApplicationRecord,
   ApplicationStatusEvent,
+  ApplicationTimelineEvent,
 } from "@/lib/applications/types";
 import type {
   ApplicationCreationInput,
@@ -206,6 +207,39 @@ export async function listStatusHistory(
     .select("application_id,new_status")
     .eq("user_id", authenticatedUserId)
     .returns<ApplicationStatusEvent[]>();
+}
+
+/**
+ * Every status event belonging to the authenticated user, with its timestamp.
+ *
+ * A separate read from `listStatusHistory` rather than a wider projection on
+ * it. That function's two columns answer a set-membership question — "did this
+ * application ever reach Interview" — and its comment records a deliberate
+ * decision to keep `changed_at` out so nobody builds a duration metric that
+ * mixes a `timestamptz` with the date-only `date_applied`. The dashboard asks
+ * a genuinely different question: *when* did things move. Widening the shared
+ * type would quietly hand every analytics caller a field that decision
+ * excluded.
+ *
+ * `previous_status` is what separates the single creation event a trigger
+ * writes — it alone is null — from a real status change, so recent activity
+ * can describe each in its own words instead of showing both for one moment.
+ *
+ * Newest first, which is the order recent activity renders and the order the
+ * `(user_id, application_id, changed_at)` index already supports. The same
+ * grants and policies apply as to any history read: `select` only, owner
+ * predicate here, and row-level security again underneath.
+ */
+export async function listStatusTimeline(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+) {
+  return supabase
+    .from("application_status_history")
+    .select("application_id,previous_status,new_status,changed_at")
+    .eq("user_id", authenticatedUserId)
+    .order("changed_at", { ascending: false })
+    .returns<ApplicationTimelineEvent[]>();
 }
 
 export async function getApplicationById(
