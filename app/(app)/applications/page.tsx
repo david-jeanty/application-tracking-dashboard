@@ -48,16 +48,21 @@ export default async function ApplicationsPage({
   const listKey = JSON.stringify(filters);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-8">
       {/*
-        One page title. The sidebar already says where you are, and the count
-        belongs with the records it counts rather than up here, where showing
-        it would mean either a second query or waiting on the streamed list.
+        One page title, and a sentence that says what the page is for. The
+        count belongs with the records it counts rather than up here, where
+        showing it would mean a second query or waiting on the streamed list.
       */}
-      <div className="flex items-start justify-between gap-4">
-        <h1 className="text-[26px] font-semibold tracking-tight text-foreground">
-          Applications
-        </h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+        <div>
+          <h1 className="text-[34px] font-medium leading-tight tracking-tight text-foreground sm:text-[38px]">
+            Applications
+          </h1>
+          <p className="mt-2 text-[15px] text-foreground-secondary">
+            Track every application, from the first save to the final outcome.
+          </p>
+        </div>
         <ApplicationCreatePanel />
       </div>
 
@@ -65,8 +70,8 @@ export default async function ApplicationsPage({
         <div
           className={
             archiveNotice.tone === "success"
-              ? "flex gap-2 rounded-record border border-success/30 bg-success-soft p-4 text-sm text-success"
-              : "flex gap-2 rounded-record border border-danger/30 bg-danger-soft p-4 text-sm text-danger"
+              ? "flex gap-2 border border-success/30 bg-success-soft p-4 text-sm text-success"
+              : "flex gap-2 border border-danger/30 bg-danger-soft p-4 text-sm text-danger"
           }
           role="status"
         >

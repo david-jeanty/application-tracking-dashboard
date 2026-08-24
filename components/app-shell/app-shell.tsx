@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BriefcaseBusiness, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import { SidebarContent } from "@/components/app-shell/sidebar-content";
 
 type AppShellProps = {
@@ -40,7 +40,7 @@ export function AppShell({ children, displayName, email }: AppShellProps) {
         Skip to main content
       </a>
 
-      <aside className="fixed inset-y-0 left-0 hidden w-[212px] border-r border-border bg-surface-muted lg:block">
+      <aside className="fixed inset-y-0 left-0 hidden w-[248px] border-r border-border bg-surface-muted lg:block">
         <SidebarContent displayName={displayName} email={email} />
       </aside>
 
@@ -73,7 +73,7 @@ export function AppShell({ children, displayName, email }: AppShellProps) {
         </div>
       ) : null}
 
-      <div className="lg:pl-[212px]">
+      <div className="lg:pl-[248px]">
         <header className="sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b border-border bg-background/95 px-2 backdrop-blur lg:hidden">
           <button
             aria-expanded={mobileOpen}
@@ -84,16 +84,13 @@ export function AppShell({ children, displayName, email }: AppShellProps) {
           >
             <Menu aria-hidden="true" className="size-5" />
           </button>
-          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-            <span className="grid size-6 place-items-center rounded-control bg-accent text-accent-foreground">
-              <BriefcaseBusiness aria-hidden="true" className="size-3.5" />
-            </span>
+          <span className="font-wordmark text-[20px] leading-none text-foreground">
             JobTrack
           </span>
         </header>
 
         <main
-          className="mx-auto max-w-[1440px] p-4 sm:p-6 lg:p-8"
+          className="mx-auto max-w-[1440px] p-4 sm:p-6 lg:px-10 lg:py-9"
           id="main-content"
         >
           {children}

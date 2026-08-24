@@ -114,15 +114,16 @@ describe("company branding across the product", () => {
 
       const { container } = render(await ApplicationList({}));
 
-      // Once on the mobile card and once in the desktop table; both layouts
-      // are in the document, and CSS decides which is seen.
+      // One record per application, at every width: the three regions reflow
+      // rather than a second markup being rendered for phones.
       const sources = logoSources(container);
-      expect(sources).toHaveLength(2);
-      for (const source of sources) {
-        expect(source).toContain(`https://${LOGO_DEV_HOST}/shopify.com?`);
-      }
-      // The company name is still ordinary linked text.
-      expect(screen.getAllByRole("link", { name: "Shopify" })).toHaveLength(2);
+      expect(sources).toHaveLength(1);
+      expect(sources[0]).toContain(`https://${LOGO_DEV_HOST}/shopify.com?`);
+      // The role is what links to the record; the company sits beneath it.
+      expect(
+        screen.getByRole("link", { name: "Data Analyst Intern" }),
+      ).toBeInTheDocument();
+      expect(container.textContent).toContain("Shopify");
     });
 
     it("renders an application with no domain without crashing", async () => {
@@ -140,10 +141,10 @@ describe("company branding across the product", () => {
 
       const { container } = render(await ApplicationList({}));
 
-      // Only the branded row asks Logo.dev for anything.
-      expect(logoSources(container)).toHaveLength(2);
-      expect(screen.getAllByRole("link", { name: "KPMG" })).toHaveLength(2);
-      // The lettermark stands in for the row with no domain.
+      // Only the branded record asks Logo.dev for anything.
+      expect(logoSources(container)).toHaveLength(1);
+      expect(container.textContent).toContain("KPMG");
+      // The lettermark stands in for the record with no domain.
       expect(container.textContent).toContain("K");
     });
 
@@ -157,7 +158,7 @@ describe("company branding across the product", () => {
       const { container } = render(await ApplicationList({}));
 
       expect(logoSources(container)).toHaveLength(0);
-      expect(screen.getAllByRole("link", { name: "Shopify" })).toHaveLength(2);
+      expect(container.textContent).toContain("Shopify");
     });
   });
 
@@ -335,8 +336,9 @@ describe("company branding across the product", () => {
       expect(logoSources(container)).toEqual([
         expect.stringContaining(`https://${LOGO_DEV_HOST}/shopify.com?`),
       ]);
-      // Larger here than in a list row, and still smaller than the name.
-      expect(container.querySelector("img")?.getAttribute("width")).toBe("40");
+      // Larger here than in a list record: on this page the employer is the
+      // identity, and its mark carries most of the page's colour.
+      expect(container.querySelector("img")?.getAttribute("width")).toBe("64");
       // The heading names the whole record — employer and role — so two
       // applications at the same company do not share one.
       expect(

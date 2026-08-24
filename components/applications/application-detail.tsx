@@ -1,5 +1,16 @@
-import type { ReactNode } from "react";
-import { Archive, ChevronRight, ExternalLink } from "lucide-react";
+import type { ComponentType, ReactNode } from "react";
+import {
+  Archive,
+  Banknote,
+  CalendarDays,
+  ChevronRight,
+  Clock,
+  ExternalLink,
+  Globe,
+  MapPin,
+  Monitor,
+  Tag,
+} from "lucide-react";
 import {
   displayOptionalText,
   safeExternalUrl,
@@ -13,23 +24,49 @@ import { formatDateTime } from "@/lib/dates/date-time";
  * workspace. A line of prose 1,100 pixels wide is hard to track back from;
  * a field value in a two-column list is not.
  */
-const PROSE_WIDTH = "max-w-[74ch]";
+const PROSE_WIDTH = "max-w-[72ch]";
+
+const headingClassName =
+  "border-b border-border pb-2 text-[17px] font-medium text-foreground";
+
+function NotSet() {
+  return <span className="text-foreground-muted">Not set</span>;
+}
 
 /**
- * A flat section: a heading, a rule, and its content.
+ * One field of the record.
  *
- * Whitespace and a hairline do the separating that a stack of bordered cards
- * used to, so the page reads as one record rather than seven unrelated panels.
+ * The icon is there to make a long list scannable at a glance, so it is thin,
+ * neutral and never boxed — the values are what the eye should land on.
  */
-function Section({ children, title }: { children: ReactNode; title: string }) {
+function Row({
+  children,
+  icon: Icon,
+  label,
+}: {
+  children: ReactNode;
+  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
+  label: string;
+}) {
   return (
-    <section className="pt-6">
-      <h2 className="border-b border-border pb-2 text-base font-semibold text-foreground">
-        {title}
-      </h2>
-      <div className="pt-4">{children}</div>
-    </section>
+    <div className="flex items-baseline gap-4 border-b border-border/70 py-2.5 last:border-b-0">
+      <dt className="flex w-40 shrink-0 items-center gap-2 text-[13px] text-foreground-muted">
+        <Icon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={1.5} />
+        {label}
+      </dt>
+      <dd className="min-w-0 break-words text-[14px] text-foreground">
+        {children}
+      </dd>
+    </div>
   );
+}
+
+function OptionalValue({ value }: { value: string | null | undefined }) {
+  return displayOptionalText(value) ?? <NotSet />;
+}
+
+function DateValue({ value }: { value: string | null }) {
+  return value ? formatDateOnly(value) : <NotSet />;
 }
 
 /**
@@ -45,71 +82,34 @@ function Section({ children, title }: { children: ReactNode; title: string }) {
 function DisclosureSection({
   children,
   title,
-  hint,
+  invitation,
 }: {
   children: ReactNode;
   title: string;
-  /** Said on the closed summary, so an empty section need not be opened. */
-  hint?: string;
+  /** What is behind the summary, said plainly rather than as a chevron alone. */
+  invitation: string;
 }) {
   return (
-    <details className="group pt-6">
-      <summary className="flex cursor-pointer list-none items-baseline justify-between gap-4 border-b border-border pb-2 [&::-webkit-details-marker]:hidden">
+    <details className="group">
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         {/*
           A real heading inside the summary, so these sections appear in the
-          document outline alongside Overview and Record details and can be
-          reached by heading navigation even while collapsed.
+          document outline alongside the rest and can be reached by heading
+          navigation even while collapsed.
         */}
-        <h2 className="text-base font-semibold text-foreground">
-          {title}
-          {hint ? (
-            <span className="ml-3 text-[13px] font-normal text-foreground-muted">
-              {hint}
-            </span>
-          ) : null}
-        </h2>
-        <ChevronRight
-          aria-hidden="true"
-          className="size-4 shrink-0 self-center text-foreground-muted transition-transform group-open:rotate-90"
-        />
+        <h2 className={headingClassName}>{title}</h2>
+        <span className="flex items-center justify-between gap-4 pt-3 text-[14px] text-foreground-secondary group-hover:text-foreground">
+          {invitation}
+          <ChevronRight
+            aria-hidden="true"
+            className="size-4 shrink-0 text-foreground-muted transition-transform group-open:rotate-90"
+            strokeWidth={1.5}
+          />
+        </span>
       </summary>
       <div className="pt-4">{children}</div>
     </details>
   );
-}
-
-function NotSet() {
-  return <span className="text-foreground-muted">Not set</span>;
-}
-
-/** One label/value pair in a detail list. */
-function Row({ children, label }: { children: ReactNode; label: string }) {
-  return (
-    <div className="flex flex-col gap-0.5 border-b border-border/60 py-2 sm:flex-row sm:items-baseline sm:gap-6">
-      <dt className="text-[13px] text-foreground-muted sm:w-44 sm:shrink-0">
-        {label}
-      </dt>
-      <dd className="min-w-0 break-words text-sm text-foreground">{children}</dd>
-    </div>
-  );
-}
-
-/**
- * Detail rows pair up once there is width for it, so a wide workspace does not
- * leave a column of short values beside a column of nothing.
- */
-function RowList({ children }: { children: ReactNode }) {
-  return (
-    <dl className="grid gap-x-12 xl:grid-cols-2">{children}</dl>
-  );
-}
-
-function OptionalValue({ value }: { value: string | null | undefined }) {
-  return displayOptionalText(value) ?? <NotSet />;
-}
-
-function DateValue({ value }: { value: string | null }) {
-  return value ? formatDateOnly(value) : <NotSet />;
 }
 
 function LongText({ value }: { value: string | null }) {
@@ -117,12 +117,47 @@ function LongText({ value }: { value: string | null }) {
 
   return text ? (
     <p
-      className={`whitespace-pre-wrap break-words text-sm leading-7 text-foreground-secondary ${PROSE_WIDTH}`}
+      className={`whitespace-pre-wrap break-words text-[14px] leading-7 text-foreground-secondary ${PROSE_WIDTH}`}
     >
       {text}
     </p>
   ) : (
-    <p className="text-sm text-foreground-muted">Not set</p>
+    <p className="text-[14px] text-foreground-muted">Not set</p>
+  );
+}
+
+/**
+ * Provenance: when the record was written, and how confident the category
+ * behind it is. Quiet, and last, because it is the least of what a student
+ * comes to this page for.
+ */
+export function ApplicationRecordMeta({
+  application,
+}: {
+  application: ApplicationRecord;
+}) {
+  return (
+    <section aria-labelledby="record-heading" className="pt-10">
+      <h2 className={headingClassName} id="record-heading">
+        Record
+      </h2>
+      <dl className="pt-3">
+        <Row icon={Clock} label="Created">
+          {formatDateTime(application.created_at)}
+        </Row>
+        <Row icon={Clock} label="Updated">
+          {formatDateTime(application.updated_at)}
+        </Row>
+        <Row icon={Archive} label="Archive state">
+          {application.archived_at
+            ? `Archived ${formatDateTime(application.archived_at)}`
+            : "Active"}
+        </Row>
+        <Row icon={Tag} label="Category confidence">
+          <OptionalValue value={application.classification_confidence} />
+        </Row>
+      </dl>
+    </section>
   );
 }
 
@@ -136,48 +171,55 @@ export function ApplicationDetail({
   const jobDescription = displayOptionalText(application.job_description);
 
   return (
-    <div>
+    <div className="space-y-10">
       {application.archived_at ? (
-        <div className="flex gap-2 rounded-record border border-warning/30 bg-warning-soft p-4 text-sm text-warning">
+        <div className="flex gap-2 border border-warning/30 bg-warning-soft p-4 text-sm text-warning">
           <Archive aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           This application is archived. It remains stored and can still be
           reviewed or edited.
         </div>
       ) : null}
 
-      <Section title="Overview">
-        <RowList>
-          <Row label="Location">
+      <section aria-labelledby="application-heading">
+        <h2 className={headingClassName} id="application-heading">
+          Application
+        </h2>
+        <dl className="pt-3">
+          <Row icon={MapPin} label="Location">
             <OptionalValue value={application.location} />
           </Row>
-          <Row label="Work arrangement">
+          <Row icon={CalendarDays} label="Work term">
+            {application.work_term_season}
+          </Row>
+          <Row icon={Tag} label="Category">
+            {application.normalized_job_category}
+          </Row>
+          <Row icon={Globe} label="Source">
+            <OptionalValue value={application.application_source} />
+          </Row>
+          <Row icon={CalendarDays} label="Date applied">
+            <DateValue value={application.date_applied} />
+          </Row>
+          <Row icon={CalendarDays} label="Application deadline">
+            <DateValue value={application.application_deadline} />
+          </Row>
+          <Row icon={Monitor} label="Work arrangement">
             {application.work_arrangement === "Unknown" ? (
               <NotSet />
             ) : (
               application.work_arrangement
             )}
           </Row>
-          <Row label="Category">{application.normalized_job_category}</Row>
-          <Row label="Source">
-            <OptionalValue value={application.application_source} />
-          </Row>
-          <Row label="Date applied">
-            <DateValue value={application.date_applied} />
-          </Row>
-          <Row label="Deadline">
-            <DateValue value={application.application_deadline} />
-          </Row>
-          <Row label="Work term">{application.work_term_season}</Row>
-          <Row label="Duration">
+          <Row icon={Clock} label="Duration">
             <OptionalValue value={application.work_term_duration} />
           </Row>
-          <Row label="Salary">
+          <Row icon={Banknote} label="Salary">
             <OptionalValue value={application.salary} />
           </Row>
-          <Row label="Job posting">
+          <Row icon={ExternalLink} label="Job posting">
             {externalUrl ? (
               <a
-                className="inline-flex items-center gap-1.5 break-all font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:text-accent-hover"
+                className="inline-flex items-center gap-1.5 break-all text-accent underline decoration-accent/40 underline-offset-4 hover:text-accent-hover"
                 href={externalUrl}
                 rel="noreferrer noopener"
                 target="_blank"
@@ -191,45 +233,26 @@ export function ApplicationDetail({
               </span>
             )}
           </Row>
-        </RowList>
-      </Section>
+        </dl>
+      </section>
 
       {/*
         Notes before the job description: notes are the student's own record of
         what happened, and the description is the posting they saved.
       */}
-      <DisclosureSection hint={notes ? undefined : "No notes"} title="Notes">
+      <DisclosureSection
+        invitation={notes ? "View notes" : "No notes"}
+        title="Notes"
+      >
         <LongText value={application.notes} />
       </DisclosureSection>
 
       <DisclosureSection
-        hint={jobDescription ? undefined : "Not saved"}
+        invitation={jobDescription ? "View saved posting" : "No saved posting"}
         title="Job description"
       >
         <LongText value={application.job_description} />
       </DisclosureSection>
-
-      {/*
-        Provenance rather than content: when the record was written, and how
-        confident the category behind it is. Last, and quiet, because it is
-        the least of what a student comes to this page for.
-      */}
-      <Section title="Record details">
-        <RowList>
-          <Row label="Created">{formatDateTime(application.created_at)}</Row>
-          <Row label="Last updated">
-            {formatDateTime(application.updated_at)}
-          </Row>
-          <Row label="Archive state">
-            {application.archived_at
-              ? `Archived ${formatDateTime(application.archived_at)}`
-              : "Active"}
-          </Row>
-          <Row label="Category confidence">
-            <OptionalValue value={application.classification_confidence} />
-          </Row>
-        </RowList>
-      </Section>
     </div>
   );
 }

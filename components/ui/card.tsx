@@ -12,7 +12,7 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "rounded-surface border border-border bg-surface",
+        "rounded-record border border-border bg-surface",
         className,
       )}
       {...props}

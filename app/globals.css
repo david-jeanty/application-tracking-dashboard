@@ -20,67 +20,72 @@
 
 :root,
 :root[data-accent="blue"] {
-  --accent-light: #2456d8;
-  --accent-hover-light: #1c45b0;
-  --accent-soft-light: #e9eefb;
+  --accent-light: #315f96;
+  --accent-hover-light: #274d7b;
+  --accent-soft-light: #e7edf6;
   --accent-on-light: #ffffff;
 
-  --accent-dark: #7ba4f7;
-  --accent-hover-dark: #99baf9;
-  --accent-soft-dark: #1a2440;
-  --accent-on-dark: #0b142a;
+  --accent-dark: #88ace0;
+  --accent-hover-dark: #9dbce8;
+  --accent-soft-dark: #1d2735;
+  --accent-on-dark: #0f1620;
 }
 
 :root[data-accent="rose"] {
-  --accent-light: #ad3a5d;
-  --accent-hover-light: #8e2f4c;
-  --accent-soft-light: #fbeaef;
+  --accent-light: #9d4059;
+  --accent-hover-light: #813348;
+  --accent-soft-light: #f6e9ec;
   --accent-on-light: #ffffff;
 
-  --accent-dark: #e28ba4;
-  --accent-hover-dark: #eda3b8;
-  --accent-soft-dark: #351f28;
-  --accent-on-dark: #2a0f19;
+  --accent-dark: #dd94a6;
+  --accent-hover-dark: #e7a8b8;
+  --accent-soft-dark: #2f2026;
+  --accent-on-dark: #211016;
 }
 
 :root[data-accent="violet"] {
-  --accent-light: #6741c4;
-  --accent-hover-light: #55349f;
-  --accent-soft-light: #f0eafc;
+  --accent-light: #614a94;
+  --accent-hover-light: #4f3c79;
+  --accent-soft-light: #eeeaf6;
   --accent-on-light: #ffffff;
 
-  --accent-dark: #a78bfa;
-  --accent-hover-dark: #bda6fc;
-  --accent-soft-dark: #251d3f;
-  --accent-on-dark: #170f2c;
+  --accent-dark: #a99ada;
+  --accent-hover-dark: #bbafe3;
+  --accent-soft-dark: #262234;
+  --accent-on-dark: #161125;
 }
 
 :root[data-accent="emerald"] {
-  --accent-light: #0a7a63;
-  --accent-hover-light: #06614f;
-  --accent-soft-light: #e2f3ee;
+  --accent-light: #2c6a56;
+  --accent-hover-light: #235444;
+  --accent-soft-light: #e6efeb;
   --accent-on-light: #ffffff;
 
-  --accent-dark: #4fc7a6;
-  --accent-hover-dark: #6fd6ba;
-  --accent-soft-dark: #12302a;
-  --accent-on-dark: #032019;
+  --accent-dark: #7bb8a0;
+  --accent-hover-dark: #92c7b2;
+  --accent-soft-dark: #1a2a25;
+  --accent-on-dark: #0a1a15;
 }
 
 /* ------------------------------------------------------------ light theme */
 
 :root {
-  --background: #fbfbfc;
-  --surface: #ffffff;
-  --surface-muted: #f4f5f7;
-  --surface-raised: #ffffff;
+  /*
+    A warm ivory page rather than a white canvas. The sidebar, the page and a
+    control surface are three close, warm neutrals; what separates them is a
+    shade and a hairline, not a shadow or a rounded card.
+  */
+  --background: #f8f6f1;
+  --surface: #fcfbf8;
+  --surface-muted: #f3f0ea;
+  --surface-raised: #fdfcfa;
 
-  --foreground: #15181f;
-  --foreground-secondary: #4c5461;
-  --foreground-muted: #686f7c;
+  --foreground: #1f2328;
+  --foreground-secondary: #55524d;
+  --foreground-muted: #706c62;
 
-  --border: #e5e7eb;
-  --border-strong: #cbd0d8;
+  --border: #ddd8d0;
+  --border-strong: #c9c2b7;
 
   /*
     The unreached part of the lifecycle rail. A dedicated token because it has
@@ -88,8 +93,7 @@
     to separate surfaces, which is a quieter job than telling a student that a
     stage exists and has not been reached.
   */
-  --rail-track: #828b9c;
-
+  --rail-track: #8d8373;
 
   --accent: var(--accent-light);
   --accent-hover: var(--accent-hover-light);
@@ -97,12 +101,12 @@
   --accent-foreground: var(--accent-on-light);
   --focus: var(--accent-light);
 
-  --success: #05704a;
-  --success-soft: #e3f3ec;
-  --warning: #9a5108;
-  --warning-soft: #fbeee0;
-  --danger: #b0261a;
-  --danger-soft: #fbeae8;
+  --success: #2f6b4f;
+  --success-soft: #e7efe9;
+  --warning: #8a5a1c;
+  --warning-soft: #f6ece0;
+  --danger: #a33a2e;
+  --danger-soft: #f6e8e5;
   --danger-foreground: #ffffff;
 
   /*
@@ -123,10 +127,10 @@
   --shadow-menu: 0 10px 30px -12px rgb(21 24 31 / 0.28);
 
   /* Fixed previews for the accent picker, independent of the current choice. */
-  --swatch-blue: #2456d8;
-  --swatch-rose: #ad3a5d;
-  --swatch-violet: #6741c4;
-  --swatch-emerald: #0a7a63;
+  --swatch-blue: #315f96;
+  --swatch-rose: #9d4059;
+  --swatch-violet: #614a94;
+  --swatch-emerald: #2c6a56;
   --swatch-on: #ffffff;
 
   color-scheme: light;
@@ -139,19 +143,19 @@
   no-JavaScript `prefers-color-scheme` fallback below.
 */
 :root[data-theme="dark"] {
-  --background: #101116;
-  --surface: #16181e;
-  --surface-muted: #1d1f27;
-  --surface-raised: #23262f;
+  --background: #14161a;
+  --surface: #1a1d22;
+  --surface-muted: #202429;
+  --surface-raised: #252a30;
 
-  --foreground: #eceef2;
-  --foreground-secondary: #a9afba;
-  --foreground-muted: #838a96;
+  --foreground: #e8e6e1;
+  --foreground-secondary: #a8a49c;
+  --foreground-muted: #918c83;
 
-  --border: #282b34;
-  --border-strong: #3d414d;
+  --border: #2a2e34;
+  --border-strong: #3a3f46;
 
-  --rail-track: #6a7181;
+  --rail-track: #6d7480;
 
 
   --accent: var(--accent-dark);
@@ -160,12 +164,12 @@
   --accent-foreground: var(--accent-on-dark);
   --focus: var(--accent-dark);
 
-  --success: #4cc98d;
-  --success-soft: #122c22;
-  --warning: #e0a758;
-  --warning-soft: #2e2317;
-  --danger: #f08279;
-  --danger-soft: #341c1c;
+  --success: #5cb98a;
+  --success-soft: #16261f;
+  --warning: #d9a24f;
+  --warning-soft: #2a2318;
+  --danger: #e8837a;
+  --danger-soft: #2e1e1c;
   --danger-foreground: #2b0c0a;
 
   --status-applied: #8fb2f5;
@@ -181,10 +185,10 @@
   --overlay: rgb(4 5 8 / 0.62);
   --shadow-menu: 0 10px 30px -12px rgb(0 0 0 / 0.7);
 
-  --swatch-blue: #7ba4f7;
-  --swatch-rose: #e28ba4;
-  --swatch-violet: #a78bfa;
-  --swatch-emerald: #4fc7a6;
+  --swatch-blue: #88ace0;
+  --swatch-rose: #dd94a6;
+  --swatch-violet: #a99ada;
+  --swatch-emerald: #7bb8a0;
   --swatch-on: #10131a;
 
   color-scheme: dark;
@@ -197,19 +201,19 @@
 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #101116;
-    --surface: #16181e;
-    --surface-muted: #1d1f27;
-    --surface-raised: #23262f;
+    --background: #14161a;
+    --surface: #1a1d22;
+    --surface-muted: #202429;
+    --surface-raised: #252a30;
 
-    --foreground: #eceef2;
-    --foreground-secondary: #a9afba;
-    --foreground-muted: #838a96;
+    --foreground: #e8e6e1;
+    --foreground-secondary: #a8a49c;
+    --foreground-muted: #918c83;
 
-    --border: #282b34;
-    --border-strong: #3d414d;
+    --border: #2a2e34;
+    --border-strong: #3a3f46;
 
-    --rail-track: #6a7181;
+    --rail-track: #6d7480;
 
 
     --accent: var(--accent-dark);
@@ -218,12 +222,12 @@
     --accent-foreground: var(--accent-on-dark);
     --focus: var(--accent-dark);
 
-    --success: #4cc98d;
-    --success-soft: #122c22;
-    --warning: #e0a758;
-    --warning-soft: #2e2317;
-    --danger: #f08279;
-    --danger-soft: #341c1c;
+    --success: #5cb98a;
+    --success-soft: #16261f;
+    --warning: #d9a24f;
+    --warning-soft: #2a2318;
+    --danger: #e8837a;
+    --danger-soft: #2e1e1c;
     --danger-foreground: #2b0c0a;
 
     --status-applied: #8fb2f5;
@@ -239,10 +243,10 @@
     --overlay: rgb(4 5 8 / 0.62);
     --shadow-menu: 0 10px 30px -12px rgb(0 0 0 / 0.7);
 
-    --swatch-blue: #7ba4f7;
-    --swatch-rose: #e28ba4;
-    --swatch-violet: #a78bfa;
-    --swatch-emerald: #4fc7a6;
+    --swatch-blue: #88ace0;
+    --swatch-rose: #dd94a6;
+    --swatch-violet: #a99ada;
+    --swatch-emerald: #7bb8a0;
     --swatch-on: #10131a;
 
     color-scheme: dark;
@@ -256,6 +260,9 @@
   theme switch is a variable change rather than a class swap.
 */
 @theme inline {
+  --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-plex-serif), ui-serif, Georgia, serif;
+
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
@@ -294,10 +301,14 @@
 
   --color-overlay: var(--overlay);
 
-  /* Shape convention: controls, records/menus, larger contained surfaces. */
-  --radius-control: 6px;
-  --radius-record: 8px;
-  --radius-surface: 10px;
+  /*
+    Shape convention. Deliberately tight: records are separated by rules and
+    spacing rather than by rounded containers, so almost nothing needs a
+    radius at all.
+  */
+  --radius-control: 4px;
+  --radius-record: 4px;
+  --radius-surface: 6px;
 
   --shadow-menu: var(--shadow-menu);
 }
@@ -318,12 +329,19 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+  The wordmark, and nothing else. The serif is identity rather than interface:
+  giving it a class rather than an element keeps it from creeping into headings.
+*/
+.font-wordmark {
+  font-family: var(--font-plex-serif), ui-serif, Georgia, serif;
 }
 
 button,
@@ -341,6 +359,7 @@ a {
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+  border-radius: 2px;
 }
 
 ::selection {

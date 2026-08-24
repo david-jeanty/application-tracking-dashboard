@@ -19,7 +19,7 @@ import {
  * column, which is what keeps the controls next to the records they narrow.
  */
 const selectClassName =
-  "min-h-10 w-full rounded-control border border-border-strong bg-surface px-3 text-base text-foreground hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
+  "min-h-9 w-full rounded-control border border-border bg-surface px-2.5 text-base text-foreground hover:border-border-strong focus:border-accent focus:outline-none focus-visible:outline-none sm:text-[13px]";
 
 /**
  * Search and filter controls for the applications list.
@@ -53,10 +53,10 @@ export function ApplicationFilters({
   return (
     <form
       action="/applications"
-      className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+      className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center"
       method="get"
     >
-      <div className="sm:min-w-48 sm:flex-1">
+      <div className="sm:min-w-56 sm:flex-1">
         <label className="sr-only" htmlFor="applications-search">
           Search applications
         </label>
@@ -141,7 +141,7 @@ export function ApplicationFilters({
         </Button>
         {filtered ? (
           <Link
-            className="inline-flex min-h-10 items-center justify-center rounded-control px-3 text-sm font-medium text-foreground-secondary transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            className="inline-flex min-h-9 items-center justify-center rounded-control px-3 text-sm text-foreground-secondary transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             href="/applications"
           >
             Clear

@@ -1,6 +1,9 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { ApplicationDetail } from "@/components/applications/application-detail";
+import {
+  ApplicationDetail,
+  ApplicationRecordMeta,
+} from "@/components/applications/application-detail";
 import type { ApplicationRecord } from "@/lib/applications/types";
 
 // This suite does not run with Vitest globals, so Testing Library's automatic
@@ -91,7 +94,7 @@ describe("long-form sections start closed", () => {
     // So an empty section need not be opened to find that out.
     expect(within(disclosure("Notes")).getByText("No notes")).toBeInTheDocument();
     expect(
-      within(disclosure("Job description")).getByText("Not saved"),
+      within(disclosure("Job description")).getByText("No saved posting"),
     ).toBeInTheDocument();
   });
 });
@@ -108,12 +111,25 @@ describe("the order of the record", () => {
       (node) => node.textContent,
     );
 
-    expect(headings).toEqual([
-      "Overview",
-      "Notes",
-      "Job description",
-      "Record details",
-    ]);
+    expect(headings).toEqual(["Application", "Notes", "Job description"]);
+  });
+
+  it("keeps provenance in its own quiet section", () => {
+    // Record lives in the right-hand column beside Current, not in the record
+    // body, so it is rendered by its own component.
+    render(<ApplicationRecordMeta application={application()} />);
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Record" }),
+    ).toBeInTheDocument();
+    for (const label of [
+      "Created",
+      "Updated",
+      "Archive state",
+      "Category confidence",
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
   });
 });
 
@@ -135,15 +151,11 @@ describe("what stays plainly visible", () => {
       "Category",
       "Source",
       "Date applied",
-      "Deadline",
+      "Application deadline",
       "Work term",
       "Duration",
       "Salary",
       "Job posting",
-      "Created",
-      "Last updated",
-      "Archive state",
-      "Category confidence",
     ]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }

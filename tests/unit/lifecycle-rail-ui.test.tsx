@@ -1,35 +1,32 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { ApplicationStatusLabel } from "@/components/applications/application-status";
-import {
-  CompactLifecycleRail,
-  LabelledLifecycleRail,
-} from "@/components/applications/lifecycle-rail";
+import { LifecycleRail } from "@/components/applications/lifecycle-rail";
 import { buildLifecycle } from "@/lib/applications/lifecycle";
 
 // This suite does not run with Vitest globals, so Testing Library's automatic
 // cleanup is never registered and renders would otherwise accumulate.
 afterEach(cleanup);
 
-describe("the compact rail in a list row", () => {
+describe("the rail as a whole", () => {
   it("is announced as one description rather than five stray dots", () => {
     render(
-      <CompactLifecycleRail lifecycle={buildLifecycle("Applied", ["Applied"])} />,
+      <LifecycleRail lifecycle={buildLifecycle("Applied", ["Applied"])} />,
     );
 
     expect(
-      screen.getByRole("img", { name: /lifecycle progress/i }),
+      screen.getByRole("list", { name: /lifecycle progress/i }),
     ).toBeInTheDocument();
   });
 
   it("says which stages were reached and which is current", () => {
     render(
-      <CompactLifecycleRail
+      <LifecycleRail
         lifecycle={buildLifecycle("Rejected", ["Applied", "Interview", "Rejected"])}
       />,
     );
 
-    const rail = screen.getByRole("img");
+    const rail = screen.getByRole("list");
     const description = rail.getAttribute("aria-label") ?? "";
 
     expect(description).toContain("Applied reached");
@@ -39,16 +36,16 @@ describe("the compact rail in a list row", () => {
 
   it("adds no tab stops, because the dots are information and not controls", () => {
     const { container } = render(
-      <CompactLifecycleRail lifecycle={buildLifecycle("Applied")} />,
+      <LifecycleRail lifecycle={buildLifecycle("Applied")} />,
     );
 
     expect(container.querySelectorAll("button, a, [tabindex]")).toHaveLength(0);
   });
 });
 
-describe("the labelled rail on the detail page", () => {
+describe("the stage labels", () => {
   it("names every stage in order", () => {
-    render(<LabelledLifecycleRail lifecycle={buildLifecycle("Applied")} />);
+    render(<LifecycleRail lifecycle={buildLifecycle("Applied")} />);
 
     const stages = within(screen.getByRole("list")).getAllByRole("listitem");
 
@@ -65,7 +62,7 @@ describe("the labelled rail on the detail page", () => {
 
   it("states each stage's state in words, not only in colour", () => {
     render(
-      <LabelledLifecycleRail
+      <LifecycleRail
         lifecycle={buildLifecycle("Interview", ["Applied", "Interview"])}
       />,
     );
@@ -79,7 +76,7 @@ describe("the labelled rail on the detail page", () => {
 
   it("uses an ordered list, because the stages are a sequence", () => {
     const { container } = render(
-      <LabelledLifecycleRail lifecycle={buildLifecycle("Applied")} />,
+      <LifecycleRail lifecycle={buildLifecycle("Applied")} />,
     );
 
     expect(container.querySelector("ol")).toBeInTheDocument();
@@ -87,7 +84,7 @@ describe("the labelled rail on the detail page", () => {
 
   it("adds no tab stops either", () => {
     const { container } = render(
-      <LabelledLifecycleRail lifecycle={buildLifecycle("Offer")} />,
+      <LifecycleRail lifecycle={buildLifecycle("Offer")} />,
     );
 
     expect(container.querySelectorAll("button, a, [tabindex]")).toHaveLength(0);

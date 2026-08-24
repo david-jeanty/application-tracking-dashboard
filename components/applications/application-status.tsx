@@ -49,6 +49,26 @@ const statusTextClasses: Partial<Record<ApplicationStatus, string>> = {
  * pills would fight the company names for attention. Both carry the same
  * semantic colour, so a rejection is recognisable either way.
  */
+/**
+ * The quiet detail-page presentation: a semantic dot and the status in words.
+ *
+ * A filled pill would compete with the employer's mark for the loudest thing
+ * in the hero, and the status is already the one fact the lifecycle beneath it
+ * is summarising.
+ */
+export function ApplicationStatusDot({ status }: { status: ApplicationStatus }) {
+  return (
+    <span className={cn("inline-flex items-center gap-2 text-[14px]", statusTextClasses[status])}>
+      <span
+        aria-hidden="true"
+        className="size-2 shrink-0 rounded-full bg-current"
+      />
+      <span className="sr-only">Status: </span>
+      {status}
+    </span>
+  );
+}
+
 export function ApplicationStatusLabel({
   status,
   variant = "chip",
@@ -58,7 +78,7 @@ export function ApplicationStatusLabel({
 }) {
   if (variant === "text") {
     return (
-      <span className={cn("text-[13px] font-medium", statusTextClasses[status])}>
+      <span className={cn("text-[13px]", statusTextClasses[status])}>
         <span className="sr-only">Status: </span>
         {status}
       </span>
@@ -68,7 +88,7 @@ export function ApplicationStatusLabel({
   return (
     <span
       className={cn(
-        "inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold",
+        "inline-flex rounded-full border px-2.5 py-1 text-xs",
         statusClasses[status],
       )}
     >

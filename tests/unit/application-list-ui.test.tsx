@@ -73,49 +73,49 @@ beforeEach(() => {
   listStatusHistory.mockReset();
 });
 
-describe("what a desktop row shows", () => {
-  it("leads with the employer and the role", async () => {
+/** The application records: the list's own children, not the rails inside. */
+function records(): HTMLElement[] {
+  const list = screen.getByRole("list", { name: "Applications" });
+  return Array.from(list.children) as HTMLElement[];
+}
+
+describe("what a record shows", () => {
+  it("leads with the role, and links it to the record", async () => {
     await renderList();
 
+    // The role leads in the list; the employer follows it.
     expect(
-      screen.getAllByRole("link", { name: "RBC" })[0],
+      screen.getByRole("link", { name: "Business Analyst Intern" }),
     ).toHaveAttribute("href", "/applications/11111111-1111-4111-8111-111111111111");
-    expect(screen.getAllByText("Business Analyst Intern").length).toBeGreaterThan(0);
+    expect(records()[0].textContent).toContain("RBC");
   });
 
   it("shows the lifecycle rail and the exact status together", async () => {
     await renderList({ history: [{ application_id: "11111111-1111-4111-8111-111111111111", new_status: "Applied" }] });
 
-    expect(screen.getAllByRole("img", { name: /lifecycle progress/i }).length)
-      .toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("list", { name: /lifecycle progress/i }).length,
+    ).toBeGreaterThan(0);
     // The rail summarises; the exact status is still there in words.
-    expect(screen.getAllByText("Applied").length).toBeGreaterThan(0);
+    expect(records()[0].textContent).toContain("Applied");
   });
 
-  it("shows location and work term, and no longer a column each for category and applied date", async () => {
+  it("shows location and work term, and neither category nor applied date", async () => {
     await renderList();
+    const record = records()[0];
 
-    const table = screen.getByRole("table");
-    const headers = within(table)
-      .getAllByRole("columnheader")
-      .map((header) => header.textContent);
-
-    expect(headers).toEqual([
-      "Employer / role",
-      "Progress",
-      "Location / term",
-      "Next",
-    ]);
-    expect(within(table).getAllByText("Toronto").length).toBeGreaterThan(0);
-    expect(within(table).getAllByText("Winter 2027").length).toBeGreaterThan(0);
-    expect(within(table).queryByText("Business Analysis")).not.toBeInTheDocument();
+    expect(record.textContent).toContain("Toronto");
+    expect(record.textContent).toContain("Winter 2027");
+    expect(record.textContent).not.toContain("Business Analysis");
+    expect(record.textContent).not.toContain("Aug 22, 2026");
   });
 
-  it("keeps semantic table markup", async () => {
+  it("is a list of records rather than a table", async () => {
     await renderList();
 
-    expect(screen.getByRole("table")).toBeInTheDocument();
-    expect(screen.getAllByRole("rowgroup").length).toBeGreaterThan(0);
+    // Nothing here is compared column against column; each row is one record.
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(records()).toHaveLength(1);
   });
 
   it("counts what it is showing", async () => {
@@ -131,13 +131,8 @@ describe("what a desktop row shows", () => {
   });
 });
 
-describe("what a mobile record shows", () => {
-  /** The stacked records, as opposed to the desktop table beside them. */
-  function mobileList() {
-    return screen.getByRole("list");
-  }
-
-  it("stacks records instead of compressing the table", async () => {
+describe("what one record carries at any width", () => {
+  it("renders one record per application", async () => {
     await renderList({
       rows: [
         application(),
@@ -145,7 +140,7 @@ describe("what a mobile record shows", () => {
       ],
     });
 
-    expect(within(mobileList()).getAllByRole("listitem")).toHaveLength(2);
+    expect(records()).toHaveLength(2);
   });
 
   it("keeps the logo, employer, role, rail, status and context together", async () => {
@@ -162,29 +157,32 @@ describe("what a mobile record shows", () => {
       ],
     });
 
-    const record = within(mobileList()).getAllByRole("listitem")[0];
+    const record = records()[0];
 
-    expect(within(record).getByRole("link", { name: "RBC" })).toBeInTheDocument();
-    expect(within(record).getByText("Business Analyst Intern")).toBeInTheDocument();
     expect(
-      within(record).getByRole("img", { name: /lifecycle progress/i }),
+      within(record).getByRole("link", { name: "Business Analyst Intern" }),
     ).toBeInTheDocument();
-    expect(within(record).getByText("Applied")).toBeInTheDocument();
-    expect(within(record).getByText(/Toronto · Winter 2027/)).toBeInTheDocument();
-    expect(record.textContent).toContain("Next: Follow up");
+    expect(record.textContent).toContain("RBC");
+    expect(
+      within(record).getByRole("list", { name: /lifecycle progress/i }),
+    ).toBeInTheDocument();
+    expect(record.textContent).toContain("Applied");
+    expect(record.textContent).toContain("Toronto");
+    expect(record.textContent).toContain("Winter 2027");
+    expect(record.textContent).toContain("Follow up");
     expect(record.textContent).toContain("Aug 28, 2026");
   });
 
   it("leaves the date out entirely when there is none to show", async () => {
     await renderList({ rows: [application({ application_deadline: null })] });
 
-    const record = within(mobileList()).getAllByRole("listitem")[0];
+    const record = records()[0];
 
-    expect(record.textContent).not.toContain("Next:");
-    expect(record.textContent).not.toContain("Deadline:");
+    expect(record.textContent).not.toContain("Application deadline");
+    expect(record.textContent).toContain("—");
   });
 
-  it("names a next action as Next, since there is no column heading here", async () => {
+  it("names the action itself, so the record reads without a column heading", async () => {
     await renderList({
       rows: [
         application({
@@ -194,13 +192,13 @@ describe("what a mobile record shows", () => {
       ],
     });
 
-    const record = within(mobileList()).getAllByRole("listitem")[0];
+    const record = records()[0];
 
-    expect(record.textContent).toContain("Next: Follow up");
+    expect(record.textContent).toContain("Follow up with recruiter");
     expect(record.textContent).toContain("Aug 28, 2026");
   });
 
-  it("names a pre-submission deadline as Deadline", async () => {
+  it("names a pre-submission deadline in words", async () => {
     await renderList({
       rows: [
         application({
@@ -210,10 +208,10 @@ describe("what a mobile record shows", () => {
       ],
     });
 
-    const record = within(mobileList()).getAllByRole("listitem")[0];
+    const record = records()[0];
 
-    expect(record.textContent).toContain("Deadline: Sep 3, 2026");
-    expect(record.textContent).not.toContain("Next:");
+    expect(record.textContent).toContain("Application deadline");
+    expect(record.textContent).toContain("Sep 3, 2026");
   });
 
   it("shows no deadline on a submitted application", async () => {
@@ -227,18 +225,16 @@ describe("what a mobile record shows", () => {
       ],
     });
 
-    const record = within(mobileList()).getAllByRole("listitem")[0];
+    const record = records()[0];
 
-    expect(record.textContent).not.toContain("Deadline");
+    expect(record.textContent).not.toContain("Application deadline");
+    expect(record.textContent).not.toContain("Sep 21, 2026");
   });
 });
 
 describe("the date a row surfaces", () => {
-  /** The date under the desktop "Next" heading, or null when there is none. */
   function nextColumn() {
-    const row = within(screen.getByRole("table")).getAllByRole("row")[1];
-    const cell = within(row).getAllByRole("cell")[3];
-    return cell.textContent?.trim() ?? "";
+    return records()[0].textContent ?? "";
   }
 
   it("names the action, then dates it", async () => {
@@ -253,7 +249,7 @@ describe("the date a row surfaces", () => {
     });
 
     // A bare date under a "Next" heading never said next what.
-    expect(nextColumn()).toBe("Follow up with recruiterAug 28, 2026");
+    expect(nextColumn()).toContain("Follow up with recruiter");
   });
 
   it("shows a deadline while the application is still only Interested", async () => {
@@ -266,7 +262,7 @@ describe("the date a row surfaces", () => {
       ],
     });
 
-    expect(nextColumn()).toBe("DeadlineSep 3, 2026");
+    expect(nextColumn()).toContain("Application deadline");
   });
 
   it("shows a deadline while the application is still being Prepared", async () => {
@@ -279,7 +275,7 @@ describe("the date a row surfaces", () => {
       ],
     });
 
-    expect(nextColumn()).toBe("DeadlineSep 3, 2026");
+    expect(nextColumn()).toContain("Application deadline");
   });
 
   it("lets an explicit next action outrank a deadline before submission", async () => {
@@ -294,20 +290,19 @@ describe("the date a row surfaces", () => {
       ],
     });
 
-    expect(nextColumn()).toBe("Ask for a referralAug 28, 2026");
+    expect(nextColumn()).toContain("Ask for a referral");
   });
 
   it("shows a dash when the record carries neither", async () => {
     await renderList({ rows: [application({ application_deadline: null })] });
 
-    expect(nextColumn()).toBe("—");
+    expect(nextColumn()).toContain("—");
   });
 });
 
 describe("a deadline stops being a next date once the application is out", () => {
   function nextColumn() {
-    const row = within(screen.getByRole("table")).getAllByRole("row")[1];
-    return within(row).getAllByRole("cell")[3].textContent?.trim() ?? "";
+    return records()[0].textContent ?? "";
   }
 
   // The deadline stays on the record; it just is not something still to do.
@@ -336,7 +331,7 @@ describe("a deadline stops being a next date once the application is out", () =>
         ],
       });
 
-      expect(nextColumn()).toBe("—");
+      expect(nextColumn()).toContain("—");
     });
   }
 
@@ -353,7 +348,7 @@ describe("a deadline stops being a next date once the application is out", () =>
       ],
     });
 
-    expect(nextColumn()).toBe("—");
+    expect(nextColumn()).toContain("—");
   });
 
   it("still shows a next action once submitted", async () => {
@@ -369,7 +364,7 @@ describe("a deadline stops being a next date once the application is out", () =>
       ],
     });
 
-    expect(nextColumn()).toBe("Follow up with recruiterAug 28, 2026");
+    expect(nextColumn()).toContain("Follow up with recruiter");
   });
 });
 
@@ -377,15 +372,18 @@ describe("when status history cannot be read", () => {
   it("still renders the list", async () => {
     await renderList({ historyFails: true });
 
-    expect(screen.getAllByRole("link", { name: "RBC" }).length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("link", { name: "Business Analyst Intern" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the exact status rather than guessing at progress", async () => {
     await renderList({ historyFails: true });
 
-    expect(screen.getAllByText("Applied").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("img", { name: /lifecycle progress/i })).not
-      .toBeInTheDocument();
+    expect(records()[0].textContent).toContain("Applied");
+    expect(
+      screen.queryByRole("list", { name: /lifecycle progress/i }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -425,7 +423,7 @@ describe("reading history for the whole list", () => {
     });
 
     const rails = screen
-      .getAllByRole("img", { name: /lifecycle progress/i })
+      .getAllByRole("list", { name: /lifecycle progress/i })
       .map((rail) => rail.getAttribute("aria-label"));
 
     // The rejected one never went through In process, and does not claim to.

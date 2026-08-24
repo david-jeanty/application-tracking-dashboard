@@ -1,143 +1,110 @@
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { describeLifecycle, type Lifecycle } from "@/lib/applications/lifecycle";
 
 /**
  * JobTrack's lifecycle rail.
  *
- * A coarse visual summary of how far an application has travelled. It draws
- * only what the lifecycle calculation says was reached, so a skipped stage
- * stays an open node with an unjoined connector on either side rather than
- * being quietly drawn over.
+ * A coarse visual summary of how far an application has travelled, led by the
+ * stage names rather than by the dots: the labels are the information, and the
+ * track underneath is what turns five words into a journey.
  *
- * The rail is lifecycle and navigation information, so it follows the chosen
- * accent. Exact status colour never does — a rejection reads as a rejection in
- * every theme — which is why the status label is rendered by the caller,
- * beside the rail, rather than colouring the rail itself.
+ * It draws only what the lifecycle calculation says was reached, so a skipped
+ * stage keeps an open node with an unjoined connector on either side rather
+ * than being quietly drawn over.
+ *
+ * The rail follows the chosen accent, because progress is interface rather
+ * than outcome. Exact status colour never does — a rejection reads as a
+ * rejection in every theme — which is why the status label is rendered beside
+ * or beneath the rail by the caller.
  *
  * **Accessibility.** The nodes are informational, not interactive: they are
- * not focusable and never become five tab stops. The compact rail is announced
- * as one description; the labelled rail carries visible stage names plus a
- * short state for each, so reached, current and not reached are all
- * distinguishable without seeing colour.
+ * never focusable and never become five tab stops. The whole rail is announced
+ * as one description, and the labelled form additionally spells out each
+ * stage's state so reached, current and future do not depend on seeing colour.
  */
+
+function Node({
+  reached,
+  current,
+}: {
+  reached: boolean;
+  current: boolean;
+}) {
+  if (current) {
+    return (
+      <span
+        aria-hidden="true"
+        className="relative z-10 grid size-[13px] shrink-0 place-items-center rounded-full bg-accent ring-4 ring-accent/20"
+      />
+    );
+  }
+
+  if (reached) {
+    return (
+      <span
+        aria-hidden="true"
+        className="relative z-10 grid size-[13px] shrink-0 place-items-center rounded-full bg-accent text-accent-foreground"
+      >
+        <Check className="size-2" strokeWidth={3.5} />
+      </span>
+    );
+  }
+
+  return (
+    <span
+      aria-hidden="true"
+      className="relative z-10 size-[13px] shrink-0 rounded-full border border-rail-track bg-background"
+    />
+  );
+}
 
 function Connector({ completed }: { completed: boolean }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        "h-px min-w-3 flex-1 transition-colors",
+        "absolute left-[-50%] right-1/2 top-[6px] h-px",
         completed ? "bg-accent" : "bg-rail-track",
       )}
     />
   );
 }
 
-function Node({
-  reached,
-  current,
+/**
+ * The full rail: a stage name over every node.
+ *
+ * Used on a list record and on the detail page alike — the composition is the
+ * same, only the type sizes differ, which is what keeps one application
+ * recognisable in both places.
+ */
+export function LifecycleRail({
+  lifecycle,
+  className,
   size = "compact",
 }: {
-  reached: boolean;
-  current: boolean;
-  size?: "compact" | "labelled";
-}) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "relative z-10 grid shrink-0 place-items-center rounded-full transition-colors",
-        // The ring is drawn outside the node so the current stage reads as
-        // different in shape, not only in colour.
-        // A soft halo, so the current stage differs in shape as well as fill.
-        current && "ring-4 ring-accent/25",
-        size === "compact" ? "size-2" : "size-2.5",
-        reached
-          ? "bg-accent"
-          : "border border-rail-track bg-background",
-      )}
-    />
-  );
-}
-
-/**
- * The rail as it appears in a list row: dots and connectors, no labels.
- *
- * The caller renders the exact status next to it, which is what carries the
- * precise meaning; this carries the shape of the journey.
- */
-export function CompactLifecycleRail({
-  lifecycle,
-  className,
-}: {
   lifecycle: Lifecycle;
   className?: string;
+  size?: "compact" | "detail";
 }) {
   return (
-    <span
+    <ol
       aria-label={describeLifecycle(lifecycle)}
-      className={cn("flex w-full max-w-40 items-center gap-0.5", className)}
-      role="img"
+      className={cn("flex items-start", className)}
     >
       {lifecycle.stages.map((stage, index) => (
-        <span className="contents" key={stage.id}>
-          <Node current={stage.current} reached={stage.reached} />
-          {index < lifecycle.connectors.length ? (
-            <Connector completed={lifecycle.connectors[index]} />
-          ) : null}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-/**
- * The rail as it appears on the detail page, with a name under every stage.
- *
- * An ordered list, because the stages are a sequence and their order is part
- * of the information. Each stage's state is spelled out for a screen reader
- * rather than left to the colour of a dot.
- */
-export function LabelledLifecycleRail({
-  lifecycle,
-  className,
-}: {
-  lifecycle: Lifecycle;
-  className?: string;
-}) {
-  return (
-    <ol className={cn("flex items-start", className)}>
-      {lifecycle.stages.map((stage, index) => (
-        // Every stage takes an equal share of the width and centres its node,
-        // so the connector can span exactly from one node's centre to the
-        // next without any measuring.
+        // Equal shares, each centring its node, so a connector can run from
+        // one node's centre to the next without anything being measured.
         <li
-          className="relative flex flex-1 flex-col items-center gap-2"
+          className="relative flex flex-1 flex-col items-center gap-1.5"
           key={stage.id}
         >
-          {index > 0 ? (
-            <span
-              aria-hidden="true"
-              className={cn(
-                "absolute right-1/2 left-[-50%] top-[5px] h-px",
-                lifecycle.connectors[index - 1]
-                  ? "bg-accent"
-                  : "bg-rail-track",
-              )}
-            />
-          ) : null}
-
-          <Node
-            current={stage.current}
-            reached={stage.reached}
-            size="labelled"
-          />
-
           <span
             className={cn(
-              "text-center text-[11px] leading-4",
+              "text-center leading-4",
+              size === "detail" ? "text-[12px]" : "text-[11px]",
               stage.current
-                ? "font-semibold text-foreground"
+                ? "text-accent"
                 : stage.reached
                   ? "text-foreground-secondary"
                   : "text-foreground-muted",
@@ -152,6 +119,13 @@ export function LabelledLifecycleRail({
                   ? " — reached"
                   : " — not reached"}
             </span>
+          </span>
+
+          <span className="relative flex w-full items-center justify-center">
+            {index > 0 ? (
+              <Connector completed={lifecycle.connectors[index - 1]} />
+            ) : null}
+            <Node current={stage.current} reached={stage.reached} />
           </span>
         </li>
       ))}
