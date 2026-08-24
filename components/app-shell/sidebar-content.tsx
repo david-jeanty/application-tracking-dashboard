@@ -60,7 +60,7 @@ function NavigationLink({
           "flex min-h-9 items-center gap-2.5 rounded-control px-2.5 py-2 text-sm transition-colors",
           active
             ? "bg-accent-soft font-medium text-accent"
-            : "text-foreground-secondary hover:bg-surface-muted hover:text-foreground",
+            : "text-foreground-secondary hover:bg-surface hover:text-foreground",
         )}
         href={item.href}
         onClick={onNavigate}
@@ -137,7 +137,7 @@ export function SidebarContent({
           <form action={signOutAction}>
             <button
               aria-label="Sign out"
-              className="grid size-9 place-items-center rounded-control text-foreground-muted transition-colors hover:bg-surface-muted hover:text-foreground"
+              className="grid size-9 place-items-center rounded-control text-foreground-muted transition-colors hover:bg-surface hover:text-foreground"
               title="Sign out"
               type="submit"
             >

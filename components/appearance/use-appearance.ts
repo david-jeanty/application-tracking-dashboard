@@ -72,37 +72,61 @@ function getServerSnapshot(): AppearanceSnapshot {
 }
 
 function subscribe(listener: () => void): () => void {
-  const first = listeners.size === 0;
-  listeners.add(listener);
-
   // Re-read on the first subscription: another tab may have changed the
   // preference while nothing here was mounted.
-  if (first) {
+  if (listeners.size === 0) {
     snapshot = read();
   }
+  listeners.add(listener);
 
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/**
+ * Keeps the document in step with the world outside this tab: the operating
+ * system's colour scheme while the mode is `system`, and the preference being
+ * changed in another tab.
+ *
+ * This is deliberately not registered by `useAppearance`. That hook is only
+ * mounted where the Settings controls render, so hanging the listeners off it
+ * meant a visitor reading their dashboard never saw their desktop switch to
+ * dark. `<AppearanceSync />` mounts this once for the whole application
+ * instead.
+ */
+export function watchAppearance(): () => void {
   const onStorage = (event: StorageEvent) => {
+    // A `null` key means the whole store was cleared.
     if (event.key !== null && event.key !== APPEARANCE_STORAGE_KEY) return;
     snapshot = read();
     applyAppearance(document.documentElement, snapshot, prefersDark());
     emit();
   };
 
-  // `system` keeps following the operating system while the tab is open.
+  const syncToSystem = (systemPrefersDark: boolean) => {
+    const current = getSnapshot();
+    // An explicit Light or Dark choice outranks the operating system.
+    if (current.mode !== "system") return;
+    applyAppearance(document.documentElement, current, systemPrefersDark);
+  };
+  const onSystemChange = (event: MediaQueryListEvent) =>
+    syncToSystem(event.matches);
+
   const query =
     typeof window.matchMedia === "function"
       ? window.matchMedia(DARK_MEDIA_QUERY)
       : null;
-  const onSystemChange = () => {
-    if (getSnapshot().mode !== "system") return;
-    applyAppearance(document.documentElement, getSnapshot(), prefersDark());
-  };
 
   window.addEventListener("storage", onStorage);
   query?.addEventListener("change", onSystemChange);
 
+  // Reconcile once now: the operating system can change between the head
+  // script running and this listener being registered, and that change would
+  // otherwise never arrive.
+  syncToSystem(query?.matches ?? false);
+
   return () => {
-    listeners.delete(listener);
     window.removeEventListener("storage", onStorage);
     query?.removeEventListener("change", onSystemChange);
   };

@@ -105,3 +105,87 @@ test.describe("appearance", () => {
     await context.close();
   });
 });
+
+/**
+ * The sign-in page never renders the Appearance controls, so these prove the
+ * theme follows the operating system for a visitor who has not been anywhere
+ * near Settings — the case a Settings-scoped listener would have missed.
+ */
+test.describe("a live operating-system change", () => {
+  async function themeOf(page: import("@playwright/test").Page) {
+    return page.evaluate(() => ({
+      attribute: document.documentElement.dataset.theme,
+      background: getComputedStyle(document.body).backgroundColor,
+    }));
+  }
+
+  function brightness(background: string) {
+    const [r, g, b] = background.match(/\d+/g)!.map(Number);
+    return (r + g + b) / 3;
+  }
+
+  test("system mode follows the desktop switching to dark", async ({ browser }) => {
+    const context = await browser.newContext({ colorScheme: "light" });
+    const page = await context.newPage();
+    await page.goto("/login");
+    expect((await themeOf(page)).attribute).toBe("light");
+
+    await page.emulateMedia({ colorScheme: "dark" });
+
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    // The attribute is only worth anything if the paint followed it.
+    expect(brightness((await themeOf(page)).background)).toBeLessThan(80);
+    await context.close();
+  });
+
+  test("system mode follows the desktop switching back to light", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ colorScheme: "dark" });
+    const page = await context.newPage();
+    await page.goto("/login");
+    expect((await themeOf(page)).attribute).toBe("dark");
+
+    await page.emulateMedia({ colorScheme: "light" });
+
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(brightness((await themeOf(page)).background)).toBeGreaterThan(200);
+    await context.close();
+  });
+
+  test("an explicit light choice ignores the desktop switching to dark", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ colorScheme: "light" });
+    await context.addInitScript(
+      ([key, value]) => window.localStorage.setItem(key, value),
+      [STORAGE_KEY, JSON.stringify({ mode: "light", accent: "blue" })],
+    );
+    const page = await context.newPage();
+    await page.goto("/login");
+
+    await page.emulateMedia({ colorScheme: "dark" });
+
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    expect(brightness((await themeOf(page)).background)).toBeGreaterThan(200);
+    await context.close();
+  });
+
+  test("an explicit dark choice ignores the desktop switching to light", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ colorScheme: "dark" });
+    await context.addInitScript(
+      ([key, value]) => window.localStorage.setItem(key, value),
+      [STORAGE_KEY, JSON.stringify({ mode: "dark", accent: "blue" })],
+    );
+    const page = await context.newPage();
+    await page.goto("/login");
+
+    await page.emulateMedia({ colorScheme: "light" });
+
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    expect(brightness((await themeOf(page)).background)).toBeLessThan(80);
+    await context.close();
+  });
+});

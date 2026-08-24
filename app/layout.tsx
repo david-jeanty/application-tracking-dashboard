@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AppearanceSync } from "@/components/appearance/appearance-sync";
 import { appearanceInlineScript } from "@/lib/appearance/inline-script";
 import "./globals.css";
 
@@ -26,6 +27,7 @@ export default function RootLayout({
         />
       </head>
       <body>
+        <AppearanceSync />
         {children}
       </body>
     </html>

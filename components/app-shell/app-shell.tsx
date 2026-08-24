@@ -58,7 +58,7 @@ export function AppShell({ children, displayName, email }: AppShellProps) {
           >
             <button
               aria-label="Close navigation"
-              className="absolute right-2 top-2 z-10 grid size-11 place-items-center rounded-control text-foreground-secondary hover:bg-surface-muted"
+              className="absolute right-2 top-2 z-10 grid size-11 place-items-center rounded-control text-foreground-secondary hover:bg-surface"
               onClick={() => setMobileOpen(false)}
               type="button"
             >
