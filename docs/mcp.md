@@ -139,20 +139,43 @@ All four tools exist: `save_job`, `list_jobs`, `get_job`, and `update_job`.
 | `category` | no | Defaults to `Other` |
 | `deadline`, `date_applied` | no | `YYYY-MM-DD` |
 | `work_term`, `duration` | no | e.g. `Summer 2027`, `4 months` |
-| `company_domain` | no | The employer's own domain, e.g. `shopify.com` |
+| `company_domain` | no | The employer's canonical domain, e.g. `shopify.com`. Claude fills this in |
 
 `work_term_season` is a required column that a posting rarely states, so it
 falls back to the same `Not specified` sentinel the web form uses.
 
 `company_domain` is brand metadata used to show the employer's logo, and
-nothing else. Claude supplies it when it already knows the domain; JobTrack
-never infers one, keeps no employer-to-domain table, and calls no model to
-guess. It is deliberately not the posting URL (`job_url` holds that), a
-recruiter's email domain, a LinkedIn link, or the applicant-tracking host a
-posting happens to be served from. Whatever arrives is normalized to a bare
-lowercase hostname by the same helper the web form uses, so
-`https://www.shopify.com/careers` is stored as `shopify.com`, and anything that
-is not a plausible domain is rejected rather than stored.
+nothing else.
+
+The tool asks Claude to treat it as ordinary employer metadata and fill it in
+whenever the employer can be reasonably identified — from the posting, the
+employer name, a supplied URL, or ordinary knowledge — rather than waiting to
+be asked for a domain or a logo. "Save this KPMG internship" should produce
+`company: KPMG Canada` and `company_domain: kpmg.com` in one step, because a
+student asking for a job to be saved is not thinking about brand assets. The
+guidance names the hosts that are not the employer (Workday, Greenhouse, Lever,
+LinkedIn, Indeed) and carries worked examples: Shopify → `shopify.com`, KPMG →
+`kpmg.com`, RBC or Royal Bank of Canada → `rbc.com`, BMO → `bmo.com`,
+Microsoft → `microsoft.com`.
+
+That expectation lives entirely in the tool description, which is the whole
+mechanism. **JobTrack still infers nothing**: no employer-to-domain table
+exists in the application, no model is called from the server, and the Logo.dev
+Search and Brand APIs are not used. The knowledge is Claude's, and it arrives
+over the wire like any other argument.
+
+It is deliberately not the posting URL (`job_url` holds that), a recruiter's
+email domain, or the applicant-tracking host a posting happens to be served
+from. Whatever arrives is normalized to a bare lowercase hostname by the same
+helper the web form uses, so `https://www.shopify.com/careers` is stored as
+`shopify.com`, and anything that is not a plausible domain is rejected rather
+than stored.
+
+The field stays optional and the column stays nullable, and that is the safety
+net rather than an oversight: an employer that genuinely cannot be identified
+confidently produces a save with no domain and a local lettermark, never a
+failed save and never a guess. A student can always correct or clear the value
+on the edit form.
 
 ### `list_jobs`
 
@@ -215,6 +238,14 @@ An omitted field keeps its stored value. An empty string clears a field that
 is allowed to be empty; a required field cannot be emptied. There is no
 dedicated interview-date column, so a phrase like "the interview is
 September 4" is expressed as `next_action` plus `next_action_due_date`.
+
+`company_domain` is the one field the tool invites Claude to fill in on its own
+initiative: if an application has none stored and the employer can be
+reasonably identified, the guidance asks for it alongside whatever else is
+being updated, so an application saved before this existed picks up a logo the
+next time it moves. The same guidance and the same worked examples as
+`save_job`, defined once so the two cannot drift. Clearing still works, so a
+student is never stuck with a domain that was identified wrongly.
 
 It works by read-merge-write rather than a partial SQL update:
 

@@ -22,6 +22,14 @@ import { cn } from "@/lib/utils";
  * correctly sized box rather than a hole. Nothing about this page depends on
  * Logo.dev being reachable.
  *
+ * That only holds because the `img` paints nothing of its own. It carries no
+ * background: an element with one paints it whether or not any image data ever
+ * arrives, so a background here would sit as an opaque blank square over the
+ * letter for the whole of a slow load, and permanently on a failed one — which
+ * is precisely the fallback this component claims to have. Covering the letter
+ * once the logo *has* arrived is the image format's job instead: the URL helper
+ * requests JPEG, which has no alpha channel.
+ *
  * No external request is made when there is no stored domain: with no domain
  * there is no `img` element at all, so a student who never entered one causes
  * no traffic to Logo.dev.
@@ -75,11 +83,14 @@ export function CompanyLogo({
           that Logo.dev already serves resized, cached, and CDN-backed. The
           intrinsic size is stated to reserve the box before the image arrives,
           and `object-contain` keeps the logo's own aspect ratio inside it.
+
+          No background class belongs here. See the note above: one would hide
+          the lettermark underneath for as long as the image has not arrived.
         */
         // eslint-disable-next-line @next/next/no-img-element -- deliberate: see above.
         <img
           alt=""
-          className="absolute inset-0 size-full bg-white object-contain"
+          className="absolute inset-0 size-full object-contain"
           height={pixels}
           loading="lazy"
           src={source}

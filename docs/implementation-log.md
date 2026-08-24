@@ -1,5 +1,96 @@
 # Implementation log
 
+## 2026-08-24 — Logos appear automatically for jobs saved through Claude
+
+### Scope
+
+A behaviour correction to the company-logo feature, not a schema change. Two
+things: what `save_job` and `update_job` tell Claude about `company_domain`, and
+one real bug in the `CompanyLogo` fallback. No new tool, no new column, no
+authorization change.
+
+`applications.company_domain` stays nullable, deliberately.
+
+### The problem
+
+The field shipped with guidance that read "supply it when you already know it;
+never guess". That is the wording of a field a caller opts into, and the result
+was what the wording asked for: a student who said "save this KPMG internship"
+got an application with no domain and no logo, and had to ask a second time for
+something they had never thought to ask for once.
+
+The domain is not a separate feature a student requests. It is employer
+metadata, like the location or the source, and the assistant that just read the
+posting is the thing best placed to know it.
+
+### What changed
+
+`save_job` now asks Claude to fill `company_domain` in whenever the employer can
+be reasonably identified — from the posting, the employer name, a supplied URL,
+or ordinary knowledge. The guidance names the hosts that are not the employer
+(Workday, Greenhouse, Lever, LinkedIn, Indeed) and carries worked examples:
+Shopify → `shopify.com`, KPMG → `kpmg.com`, RBC → `rbc.com`, BMO → `bmo.com`,
+Microsoft → `microsoft.com`. `update_job` gets the same guidance, plus an
+invitation to fill in a domain an existing application is missing, so older
+records pick up a logo the next time they move.
+
+Both descriptions share one constant, so the two tools cannot drift into saying
+different things about the same field.
+
+The tool descriptions themselves changed too, not only the argument
+descriptions: a client reads the tool description before it reads any argument,
+so guidance buried in a field is guidance that may never be reached.
+
+### What deliberately did not change
+
+The expectation lives entirely in prose that Claude reads. JobTrack still infers
+nothing — no employer-to-domain map in application code, no model called from
+the server, no Logo.dev Search or Brand API. The examples are guidance to a
+model, not a lookup table this product consults, which is the distinction that
+keeps the list from rotting into wrong answers.
+
+The column stays nullable and the argument stays optional, and that is the
+safety net rather than an oversight: an employer that cannot be identified
+confidently produces a save with no domain and a local lettermark, never a
+failed save. A student can correct or clear the value on the edit form, which
+matters more now that a value can arrive without anyone typing it.
+
+### The fallback bug
+
+The previous entry claimed the lettermark was "the layer underneath, so a
+blocked, failed, or slow Logo.dev request leaves a readable initial". It did
+not. The `img` carried `bg-white`, and a background is painted whether or not
+any image data ever arrives — so the letter sat under an opaque white square for
+the whole of a slow load, and permanently on a failed one. The documented
+fallback existed in the comment and not on the screen.
+
+The background is gone from the `img`. Covering the letter once the logo has
+actually arrived is now the image format's job instead: the URL helper requests
+`format=jpg`, and JPEG has no alpha channel, so opacity is a property of the
+bytes rather than something the component paints over an empty box. The
+container keeps its own background, which is what the letter is drawn on.
+
+This is why the earlier PNG choice was wrong in the first place. It was made for
+transparency — a logo "needs transparency to sit on the card background" — and
+transparency is precisely what forced the `bg-white` that broke the fallback.
+
+### Verification
+
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run test`: passed.
+- `npm run build`: passed.
+- Credential-free `npm run test:e2e`: public and protection tests passed;
+  authenticated tests were correctly skipped for want of `E2E_USER_EMAIL` and
+  `E2E_USER_PASSWORD`.
+- `npm run test:db` was **not** run: it needs Docker, unavailable here. No
+  migration accompanies this change, so nothing new is unapplied.
+- Not verifiable here: whether Logo.dev's JPEG response is opaque in practice.
+  `www.logo.dev` is blocked by this environment's egress proxy, so no image was
+  ever fetched. The reasoning rests on JPEG having no alpha channel, which is a
+  property of the format, and on `jpg` being the API's documented default.
+
+
 ## 2026-08-24 — Company logos, powered by Logo.dev
 
 ### Scope

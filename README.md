@@ -172,10 +172,16 @@ application — JobTrack only ever uses the Logo API's plain image URLs, and
 never calls the Search or Brand APIs.
 
 A logo appears only where an application has a **company website** saved
-(`shopify.com`, `rbc.com`). That field is optional on the add and edit forms,
-and an AI assistant can fill it in through `save_job` or `update_job` when it
-already knows the domain. JobTrack never guesses one. Applications saved before
-this existed simply keep the lettermark until you add a domain.
+(`shopify.com`, `rbc.com`). The field is optional on the add and edit forms, so
+you can type it in yourself. When a job is saved through a connected AI
+assistant, it fills the domain in for you as part of saving — ask it to save a
+KPMG internship and it records `kpmg.com` without being asked again — and it
+fills in a missing one when it next updates an older application.
+
+JobTrack itself never works a domain out: it keeps no list of employers, calls
+no AI of its own, and stores only what it was given. If an employer can't be
+identified confidently the application still saves, and keeps the lettermark
+until you or your assistant add a domain.
 
 Logo.dev's Community plan covers a project this size. On the free tier,
 commercial use asks for an attribution link back to Logo.dev; a personal
