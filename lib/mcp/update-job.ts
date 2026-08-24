@@ -45,6 +45,7 @@ export type UpdateJobDependencies = {
 /** Columns the tool can change, labelled with the argument that changes them. */
 const REPORTED_FIELDS = {
   company_name: "company",
+  company_domain: "company_domain",
   original_job_title: "job_title",
   location: "location",
   current_status: "status",

@@ -34,6 +34,7 @@ export function toJobDetail(application: ApplicationRecord): JobDetail {
   return {
     application_id: application.id,
     company: application.company_name,
+    company_domain: application.company_domain,
     job_title: application.original_job_title,
     status: application.current_status,
     category: application.normalized_job_category,

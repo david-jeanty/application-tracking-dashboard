@@ -8,6 +8,12 @@ import type {
 export type ApplicationRecord = {
   id: string;
   company_name: string;
+  /**
+   * The employer's canonical domain, for brand lookup only. Null for every
+   * application saved before the field existed, and for every one whose owner
+   * never supplied it. Nothing infers it.
+   */
+  company_domain: string | null;
   original_job_title: string;
   normalized_job_category: JobCategory;
   classification_confidence: ClassificationConfidence | null;
@@ -40,6 +46,13 @@ export type ApplicationRecord = {
 export type ApplicationListItem = {
   id: string;
   company_name: string;
+  /**
+   * Present here, in the summary, because every list surface renders the
+   * company's mark beside its name — the applications list, the archive, and
+   * both dashboard sections. One short nullable hostname per row is what keeps
+   * those surfaces from needing a second read per application.
+   */
+  company_domain: string | null;
   original_job_title: string;
   normalized_job_category: JobCategory;
   current_status: ApplicationStatus;
@@ -84,6 +97,7 @@ export type ApplicationTimelineEvent = {
 
 export type ApplicationFormValues = {
   companyName: string;
+  companyDomain: string;
   originalJobTitle: string;
   normalizedJobCategory: JobCategory | "";
   currentStatus: ApplicationStatus | "";

@@ -159,6 +159,8 @@ function inWeekChanges(
 export type ActivityEntry = {
   applicationId: string;
   companyName: string;
+  /** The employer's domain, for the same mark the rest of the product shows. */
+  companyDomain: string | null;
   /** "Saved as Applied" or "Moved to Interview". */
   description: string;
   status: ApplicationStatus;
@@ -171,6 +173,7 @@ export type ActivityEntry = {
 export type ActivityApplication = {
   id: string;
   company_name: string;
+  company_domain: string | null;
 };
 
 /**
@@ -197,20 +200,25 @@ export function recentActivity(
   applications: readonly ActivityApplication[],
   limit: number = ACTIVITY_LIMIT,
 ): ActivityEntry[] {
-  const names = new Map(
-    applications.map((application) => [application.id, application.company_name]),
+  // The join is here, in memory, over the applications the dashboard has
+  // already read. An event names an application id; this is what turns it into
+  // a company. Adding the domain to that same lookup is what lets each row
+  // carry a logo without a per-row read.
+  const companies = new Map(
+    applications.map((application) => [application.id, application]),
   );
 
   return [...events]
     .sort((first, second) => second.changedAt.localeCompare(first.changedAt))
     .flatMap((event) => {
-      const companyName = names.get(event.application_id);
-      if (!companyName) return [];
+      const company = companies.get(event.application_id);
+      if (!company) return [];
 
       return [
         {
           applicationId: event.application_id,
-          companyName,
+          companyName: company.company_name,
+          companyDomain: company.company_domain,
           description:
             event.previous_status === null
               ? `Saved as ${event.new_status}`

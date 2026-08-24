@@ -36,6 +36,7 @@ function stored(
     user_id: userId,
     id: RBC_ID,
     company_name: "RBC",
+    company_domain: null,
     original_job_title: "Business Analyst",
     normalized_job_category: "Business Analysis",
     classification_confidence: null,
@@ -102,6 +103,7 @@ function fakeRepositoryFactory(
   const summarize = (row: StoredApplication): ApplicationListItem => ({
     id: row.id,
     company_name: row.company_name,
+    company_domain: row.company_domain,
     original_job_title: row.original_job_title,
     normalized_job_category: row.normalized_job_category,
     current_status: row.current_status,
@@ -593,6 +595,215 @@ describe("the existing write tools still work through the real server", () => {
     });
 
     expect(result.isError).toBe(true);
+    await connection.close();
+  });
+});
+
+describe("company domain over MCP", () => {
+  it("offers company_domain on save_job and update_job, and nowhere else", async () => {
+    const connection = await connectServer();
+    const tools = await connection.listTools();
+    const properties = (name: string) =>
+      Object.keys(
+        tools.find((tool) => tool.name === name)!.inputSchema.properties,
+      );
+
+    expect(properties("save_job")).toContain("company_domain");
+    expect(properties("update_job")).toContain("company_domain");
+    // list_jobs filters by what a student would say out loud; a brand domain
+    // is not a way anyone chooses between applications.
+    expect(properties("list_jobs")).not.toContain("company_domain");
+    expect(properties("get_job")).not.toContain("company_domain");
+
+    // Still exactly the four tools, with the field added to existing schemas.
+    expect(tools).toHaveLength(4);
+    await connection.close();
+  });
+
+  it("never requires company_domain to save a job", async () => {
+    const connection = await connectServer();
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "save_job",
+    );
+
+    expect(tool!.inputSchema.required ?? []).not.toContain("company_domain");
+    await connection.close();
+  });
+
+  it("saves a job with the domain Claude supplied", async () => {
+    const connection = await connectServer();
+
+    const saved = await connection.callTool("save_job", {
+      company: "Shopify",
+      job_title: "Data Analyst Intern",
+      company_domain: "shopify.com",
+    });
+    const listed = await connection.callTool("list_jobs", {
+      company: "Shopify",
+    });
+    const id = (
+      listed.structuredContent!.applications as { application_id: string }[]
+    ).find((job) => job.application_id === MISSING_ID)!.application_id;
+    const read = await connection.callTool("get_job", { application_id: id });
+
+    expect(saved.isError).toBeUndefined();
+    expect(read.structuredContent).toMatchObject({
+      company: "Shopify",
+      company_domain: "shopify.com",
+    });
+    await connection.close();
+  });
+
+  it("saves a job without a domain, exactly as before", async () => {
+    const connection = await connectServer();
+
+    const saved = await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
+    });
+    const read = await connection.callTool("get_job", {
+      application_id: MISSING_ID,
+    });
+
+    expect(saved.isError).toBeUndefined();
+    expect(read.structuredContent).toMatchObject({ company_domain: null });
+    await connection.close();
+  });
+
+  it("normalizes a pasted URL at the runtime boundary", async () => {
+    const connection = await connectServer();
+
+    await connection.callTool("save_job", {
+      company: "KPMG",
+      job_title: "Audit Intern",
+      company_domain: "https://WWW.KPMG.com/ca/en/careers",
+    });
+    const read = await connection.callTool("get_job", {
+      application_id: MISSING_ID,
+    });
+
+    expect(read.structuredContent).toMatchObject({ company_domain: "kpmg.com" });
+    await connection.close();
+  });
+
+  it("rejects a malformed domain rather than storing it", async () => {
+    const connection = await connectServer();
+
+    for (const company_domain of [
+      "Royal Bank of Canada",
+      "javascript://evil.example",
+      "shopify",
+    ]) {
+      const result = await connection.callTool("save_job", {
+        company: "RBC",
+        job_title: "Business Analyst",
+        company_domain,
+      });
+
+      expect(result.isError).toBe(true);
+    }
+    await connection.close();
+  });
+
+  it("sets, changes, and clears the domain through update_job", async () => {
+    const connection = await connectServer();
+
+    const set = await connection.callTool("update_job", {
+      application_id: SHOPIFY_ID,
+      company_domain: "shopify.com",
+    });
+    expect(set.structuredContent!.changed_fields).toEqual([
+      { field: "company_domain", from: null, to: "shopify.com" },
+    ]);
+
+    const changed = await connection.callTool("update_job", {
+      application_id: SHOPIFY_ID,
+      company_domain: "https://www.shopify.ca/",
+    });
+    expect(changed.structuredContent!.changed_fields).toEqual([
+      { field: "company_domain", from: "shopify.com", to: "shopify.ca" },
+    ]);
+
+    // An empty string clears, which is the same partial-update semantics every
+    // other clearable field already has.
+    const cleared = await connection.callTool("update_job", {
+      application_id: SHOPIFY_ID,
+      company_domain: "",
+    });
+    expect(cleared.structuredContent!.changed_fields).toEqual([
+      { field: "company_domain", from: "shopify.ca", to: null },
+    ]);
+
+    const read = await connection.callTool("get_job", {
+      application_id: SHOPIFY_ID,
+    });
+    expect(read.structuredContent).toMatchObject({ company_domain: null });
+    await connection.close();
+  });
+
+  it("leaves every other field alone when only the domain changes", async () => {
+    const connection = await connectServer();
+
+    const before = await connection.callTool("get_job", {
+      application_id: RBC_ID,
+    });
+    await connection.callTool("update_job", {
+      application_id: RBC_ID,
+      company_domain: "rbc.com",
+    });
+    const after = await connection.callTool("get_job", {
+      application_id: RBC_ID,
+    });
+
+    expect(after.structuredContent).toMatchObject({
+      ...(before.structuredContent as Record<string, unknown>),
+      company_domain: "rbc.com",
+      updated_at: (after.structuredContent as { updated_at: string }).updated_at,
+    });
+    await connection.close();
+  });
+
+  it("rejects a malformed domain on update without changing the record", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool("update_job", {
+      application_id: SHOPIFY_ID,
+      company_domain: "not a domain",
+    });
+    const read = await connection.callTool("get_job", {
+      application_id: SHOPIFY_ID,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(read.structuredContent).toMatchObject({ company_domain: null });
+    await connection.close();
+  });
+
+  it("still takes no user_id and grants no new authority", async () => {
+    const connection = await connectServer();
+
+    const forged = await connection.callTool("save_job", {
+      company: "Shopify",
+      job_title: "Analyst",
+      company_domain: "shopify.com",
+      user_id: ANOTHER_STUDENT,
+    });
+    const otherStudentsRow = await connection.callTool("update_job", {
+      application_id: OTHER_STUDENTS_ID,
+      company_domain: "rbc.com",
+    });
+
+    // The forged owner is ignored, not honoured: the row is saved to the
+    // caller, and another student's application stays unreachable.
+    expect(forged.isError).toBeUndefined();
+    expect(otherStudentsRow.isError).toBe(true);
+
+    const mine = await connection.callTool("list_jobs", {});
+    expect(
+      (mine.structuredContent!.applications as { company: string }[]).some(
+        (job) => job.company === "Data Analyst",
+      ),
+    ).toBe(false);
     await connection.close();
   });
 });

@@ -133,6 +133,7 @@ describe("application update validation and mapping", () => {
     const application: ApplicationRecord = {
       id: "df9cacdb-95b7-4687-bfd2-9bce6d8cbf40",
       company_name: "Example Company",
+      company_domain: null,
       original_job_title: "Business Analyst Intern",
       normalized_job_category: "Business Analysis",
       classification_confidence: null,
@@ -183,5 +184,130 @@ describe("application update validation and mapping", () => {
   it("classifies a failed conditional update without leaking ownership", () => {
     expect(classifyMissingConditionalUpdate(true)).toBe("conflict");
     expect(classifyMissingConditionalUpdate(false)).toBe("not_found");
+  });
+});
+
+describe("optional company domain", () => {
+  it("accepts an application saved without one", () => {
+    const parsed = applicationCreationSchema.parse(requiredInput);
+
+    expect(parsed.companyDomain).toBeUndefined();
+    expect(toApplicationInsert(parsed).company_domain).toBeNull();
+  });
+
+  it("accepts a bare domain and writes it unchanged", () => {
+    const parsed = applicationCreationSchema.parse({
+      ...requiredInput,
+      companyDomain: "shopify.com",
+    });
+
+    expect(toApplicationInsert(parsed).company_domain).toBe("shopify.com");
+  });
+
+  it("writes the normalized value, not what was typed", () => {
+    const parsed = applicationCreationSchema.parse({
+      ...requiredInput,
+      companyDomain: "  HTTPS://WWW.Shopify.com/careers?ref=1  ",
+    });
+
+    expect(parsed.companyDomain).toBe("shopify.com");
+    expect(toApplicationInsert(parsed).company_domain).toBe("shopify.com");
+  });
+
+  it("treats a blank field as absent rather than as an error", () => {
+    for (const companyDomain of ["", "   "]) {
+      const parsed = applicationCreationSchema.parse({
+        ...requiredInput,
+        companyDomain,
+      });
+
+      expect(parsed.companyDomain).toBeUndefined();
+      expect(toApplicationInsert(parsed).company_domain).toBeNull();
+    }
+  });
+
+  it("reports a mistyped domain instead of silently dropping it", () => {
+    const result = applicationCreationSchema.safeParse({
+      ...requiredInput,
+      companyDomain: "Royal Bank of Canada",
+    });
+
+    expect(result.success).toBe(false);
+    expect(
+      result.success ? [] : result.error.flatten().fieldErrors.companyDomain,
+    ).toEqual(["Enter a company domain such as shopify.com."]);
+  });
+
+  it("rejects anything that is not a plausible domain", () => {
+    for (const companyDomain of [
+      "shopify",
+      "javascript://evil.example",
+      "recruiter@shopify.com",
+      "192.168.1.1",
+    ]) {
+      expect(
+        applicationCreationSchema.safeParse({ ...requiredInput, companyDomain })
+          .success,
+      ).toBe(false);
+    }
+  });
+
+  it("lets an edit add, change, and clear the domain", () => {
+    const version = { expectedUpdatedAt: "2027-01-15T17:30:00.000Z" };
+
+    const added = applicationUpdateSchema.parse({
+      ...requiredInput,
+      ...version,
+      companyDomain: "shopify.com",
+    });
+    expect(toApplicationUpdate(added).company_domain).toBe("shopify.com");
+
+    const changed = applicationUpdateSchema.parse({
+      ...requiredInput,
+      ...version,
+      companyDomain: "https://www.kpmg.com/",
+    });
+    expect(toApplicationUpdate(changed).company_domain).toBe("kpmg.com");
+
+    const cleared = applicationUpdateSchema.parse({
+      ...requiredInput,
+      ...version,
+      companyDomain: "",
+    });
+    expect(toApplicationUpdate(cleared).company_domain).toBeNull();
+  });
+
+  it("round-trips a stored record back into the edit form", () => {
+    const stored: ApplicationRecord = {
+      id: "df9cacdb-95b7-4687-bfd2-9bce6d8cbf40",
+      company_name: "Shopify",
+      company_domain: "shopify.com",
+      original_job_title: "Business Analyst Intern",
+      normalized_job_category: "Business Analysis",
+      classification_confidence: null,
+      location: "Toronto, ON",
+      work_arrangement: "Unknown",
+      application_url: null,
+      application_source: "LinkedIn",
+      job_description: null,
+      application_deadline: null,
+      date_applied: null,
+      current_status: "Applied",
+      work_term_season: "Summer 2027",
+      work_term_duration: null,
+      salary: null,
+      notes: null,
+      next_action: null,
+      next_action_due_date: null,
+      created_at: "2027-01-15T17:30:00.000Z",
+      updated_at: "2027-01-15T17:30:00.000Z",
+      archived_at: null,
+    };
+
+    expect(toApplicationFormValues(stored).companyDomain).toBe("shopify.com");
+    expect(
+      toApplicationFormValues({ ...stored, company_domain: null })
+        .companyDomain,
+    ).toBe("");
   });
 });

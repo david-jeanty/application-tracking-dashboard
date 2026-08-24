@@ -8,6 +8,7 @@ import {
   type JobCategory,
 } from "@/lib/applications/constants";
 import type { ApplicationFormValues } from "@/lib/applications/types";
+import { MAXIMUM_DOMAIN_LENGTH } from "@/lib/branding/domain";
 
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -35,6 +36,13 @@ export const saveJobInputSchema = z.object({
     .min(1)
     .max(200)
     .describe("The job title exactly as posted."),
+  company_domain: z
+    .string()
+    .max(MAXIMUM_DOMAIN_LENGTH)
+    .optional()
+    .describe(
+      "The employer's own website domain, for example 'shopify.com' for Shopify or 'rbc.com' for Royal Bank of Canada. Used only to show the company's logo. Supply it when you already know it; never guess. Not the posting URL, not a LinkedIn link, and not the applicant-tracking host a posting is served from unless that genuinely is the employer's own domain.",
+    ),
   location: z
     .string()
     .max(200)
@@ -125,6 +133,9 @@ function normalizeCategory(value: string | undefined): JobCategory {
 export function toApplicationCreationValues(input: SaveJobInput) {
   return {
     companyName: input.company,
+    // Validated and normalized by the shared creation schema, exactly as a
+    // value typed into the web form is. Nothing here parses a domain.
+    companyDomain: input.company_domain,
     originalJobTitle: input.job_title,
     normalizedJobCategory: normalizeCategory(input.category),
     currentStatus: normalizeStatus(input.status),
@@ -159,6 +170,13 @@ export const updateJobInputSchema = z.object({
     .uuid()
     .describe("Identifier of the application to update, from the tracker."),
   company: z.string().min(1).max(160).optional(),
+  company_domain: z
+    .string()
+    .max(MAXIMUM_DOMAIN_LENGTH)
+    .optional()
+    .describe(
+      "The employer's own website domain, for example 'shopify.com', or empty to clear it. Used only to show the company's logo.",
+    ),
   job_title: z.string().min(1).max(200).optional(),
   location: z.string().max(200).optional(),
   status: z
@@ -210,6 +228,7 @@ export type UpdateJobInput = z.infer<typeof updateJobInputSchema>;
  */
 export const UPDATE_FIELD_MAP = {
   company: "companyName",
+  company_domain: "companyDomain",
   job_title: "originalJobTitle",
   location: "location",
   status: "currentStatus",
@@ -375,6 +394,12 @@ export type GetJobInput = z.infer<typeof getJobInputSchema>;
 export const jobDetailSchema = z.object({
   application_id: z.string(),
   company: z.string(),
+  company_domain: z
+    .string()
+    .nullable()
+    .describe(
+      "The employer's stored website domain, or null when none was recorded.",
+    ),
   job_title: z.string(),
   status: z.enum(APPLICATION_STATUSES),
   category: z.enum(JOB_CATEGORIES),

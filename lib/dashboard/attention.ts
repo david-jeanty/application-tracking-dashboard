@@ -18,6 +18,7 @@ import { differenceInCalendarDays } from "@/lib/dates/date-only";
 export type AttentionApplication = {
   id: string;
   company_name: string;
+  company_domain: string | null;
   original_job_title: string;
   current_status: ApplicationStatus;
   next_action: string | null;
@@ -57,6 +58,12 @@ export type AttentionReason = (typeof ATTENTION_REASONS)[number];
 export type AttentionItem = {
   applicationId: string;
   companyName: string;
+  /**
+   * Carried through so each row can show the employer's mark. It reaches here
+   * on the application record the rules already read, so branding costs no
+   * extra query and changes nothing about which entries qualify.
+   */
+  companyDomain: string | null;
   jobTitle: string;
   status: ApplicationStatus;
   reason: AttentionReason;
@@ -117,6 +124,7 @@ function classify(
   const base = {
     applicationId: application.id,
     companyName: application.company_name,
+    companyDomain: application.company_domain,
     jobTitle: application.original_job_title,
     status: application.current_status,
   };

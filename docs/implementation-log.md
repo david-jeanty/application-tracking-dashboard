@@ -1,5 +1,144 @@
 # Implementation log
 
+## 2026-08-24 — Company logos, powered by Logo.dev
+
+### Scope
+
+One additive nullable column, `applications.company_domain`, and the branding it
+enables. Product polish, not a phase: no new MCP tool, no new table, no
+authorization change, no AI call inside JobTrack, and nothing about enrichment,
+scraping, caching, or uploaded logos.
+
+The division of labour it rests on:
+
+> Claude can reason about the company and its domain. JobTrack stores the
+> structured truth. Logo.dev renders the brand asset.
+
+### Audit result
+
+A read-only audit ran first, over the schema, the creation and update schemas,
+the mapper, both repository projections, the record and list types, all four MCP
+tools, the applications list, the detail page, the archive, both dashboard
+sections, the (placeholder) pipeline page, image conventions, `next.config.ts`,
+environment-variable conventions, `.env.example`, the migrations and RLS
+policies, and the existing tests around creation, update, and MCP.
+
+No architectural mismatch. The column is cleanly supported because the shapes
+that had to carry it already exist in exactly one place each: two projection
+constants in the repository, one insert mapper, one form-values mapper, one
+creation schema that every write path funnels through, and one in-memory join in
+the dashboard. Nothing needed a second read, a new access path, or a policy
+change.
+
+### Data model
+
+`supabase/migrations/20260824000100_add_company_domain.sql` adds a nullable
+`text` column with a 253-character DNS length check and a column comment. No
+default, no backfill, no attempt to infer a domain for existing rows: they hold
+null and render a lettermark until somebody sets one.
+
+No RLS change was needed, and that is structural rather than a judgement call.
+The `applications` policies are owner predicates on `user_id` that apply to the
+whole row whatever its columns, and the grants are table-wide.
+
+### Normalization
+
+`lib/branding/domain.ts` holds one deterministic function, called from the
+shared creation schema — so the web form, `save_job`, and `update_job` all
+normalize identically, and nothing downstream ever re-parses. It trims, accepts
+a bare hostname, tolerates a pasted `http(s)` URL, lowercases, drops a leading
+`www.`, discards path/query/fragment, returns `undefined` for blank, and rejects
+anything that is not a plausible registrable domain — a single word, an IP
+address, an email address, a URL carrying credentials, a port, or a non-web
+scheme.
+
+Both the bare and pasted cases run through the platform's `URL` parser rather
+than string surgery, so lowercasing, IDNA/punycode conversion, and delimiter
+handling cannot drift from what a browser does. A blank field is absent; a
+mistyped one is a validation error the student sees, not a value silently
+dropped.
+
+It is deliberately not a discovery engine. No hard-coded `RBC -> rbc.com` map
+exists anywhere — that rots — and JobTrack never guesses a domain from a company
+name.
+
+### Logo.dev integration
+
+`lib/branding/logo.ts` is the only place a Logo.dev URL is built. The host
+`img.logo.dev` is a fixed constant; only the path varies, and only with an
+already-normalized domain that is re-normalized and percent-encoded on the way
+in. The URL is assembled with `URL`/`URLSearchParams`, never by concatenation,
+so no stored value can add a host, a path segment, or a parameter. The field can
+therefore never become a general remote-image URL, and no proxy exists.
+
+The publishable key is read from `NEXT_PUBLIC_LOGO_DEV_TOKEN`. It is
+deliberately absent from `lib/env.ts`: that module validates configuration the
+application cannot start without and throws when it is missing, and logos are an
+enhancement that must never break a deployment that has no key. Only the Logo
+API is used — no Search API, no Brand API, no secret key.
+
+### `<img>` over Next `<Image>`
+
+The audit found no bitmap image anywhere in the product: every existing graphic
+is a Lucide SVG, and `next.config.ts` has no `images` configuration at all.
+Adding `remotePatterns` and the optimizer pipeline for one 32-pixel mark that
+Logo.dev already serves resized and CDN-cached would be infrastructure bought
+for nothing. A plain `<img>` with explicit `width`/`height`, `loading="lazy"`,
+and `object-contain` was chosen instead. `next.config.ts` is unchanged.
+
+### Fallback
+
+`CompanyLogo` renders a rounded, bordered box containing the company's first
+letter or digit, with the Logo.dev image layered on top when there is both a
+domain and a token. The lettermark is not an error branch — it is the layer
+underneath, so a blocked, failed, or slow request leaves a readable initial in a
+correctly sized box rather than a hole. With no stored domain there is no `img`
+element at all, so an application without one causes no Logo.dev traffic.
+
+The mark is `aria-hidden`. Every caller renders the company name as adjacent
+text, so announcing the logo too would name the same employer twice.
+
+### Where logos render
+
+Applications list (desktop table and mobile card), application detail header at
+the larger size, archive list, dashboard Needs attention, and dashboard Recent
+activity. Nowhere else: not on stat tiles, analytics metrics, the pipeline
+summary, buttons, or navigation.
+
+Recent activity was included rather than deferred because the data shape already
+supported it. `recentActivity` joins events to applications in memory, over rows
+the dashboard has already read; widening that lookup from a name to the record
+adds the domain with no extra query and no per-row read.
+
+### MCP
+
+Still exactly four tools. `save_job` and `update_job` gained an optional
+`company_domain` argument, `get_job` returns it, and `update_job` reports it in
+`changed_fields`. `list_jobs` did not: its summary exists so Claude can tell one
+saved application from another, and a brand domain is not something anyone
+chooses between applications by.
+
+Clearing follows the existing partial-update semantics — an omitted field keeps
+its value, an empty string clears it. No `user_id`, authentication, OAuth, RLS,
+or tool-count change.
+
+### Verification
+
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run test`: passed.
+- `npm run build`: passed.
+- Credential-free `npm run test:e2e`: public and protection tests passed;
+  authenticated tests were correctly skipped for want of `E2E_USER_EMAIL` and
+  `E2E_USER_PASSWORD`.
+- `npm run test:db` was **not** run: it needs Docker, which is unavailable in
+  this environment. The migration is therefore unapplied and unverified against
+  a real Postgres. No new pgTAP suite was added — the existing suites cover
+  rules only a database can answer (triggers, policies, statement predicates),
+  and a plain nullable column with no default, trigger, or policy introduces
+  none.
+
+
 ## 2026-08-25 — Needs attention: only what a student can act on
 
 ### Scope

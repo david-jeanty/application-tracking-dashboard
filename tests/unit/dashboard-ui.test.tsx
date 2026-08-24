@@ -18,6 +18,7 @@ function attentionItem(overrides: Partial<AttentionItem> = {}): AttentionItem {
   return {
     applicationId: "11111111-1111-4111-8111-111111111111",
     companyName: "KPMG",
+    companyDomain: null,
     jobTitle: "Audit Intern",
     status: "Applied",
     reason: "overdue-action",
@@ -265,6 +266,7 @@ describe("recent activity", () => {
   const entry = (overrides: Partial<ActivityEntry> = {}): ActivityEntry => ({
     applicationId: "app-1",
     companyName: "KPMG",
+    companyDomain: null,
     description: "Moved to Applied",
     status: "Applied",
     day: "2026-08-26",

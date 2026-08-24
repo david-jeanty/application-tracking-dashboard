@@ -11,6 +11,9 @@ import type {
 export function toApplicationInsert(input: ApplicationCreationInput) {
   return {
     company_name: input.companyName,
+    // Already a bare hostname: the schema normalized it. Absent becomes null,
+    // which is what every application saved before this field existed holds.
+    company_domain: input.companyDomain ?? null,
     original_job_title: input.originalJobTitle,
     normalized_job_category: input.normalizedJobCategory,
     current_status: input.currentStatus,
@@ -61,6 +64,7 @@ export function toApplicationFormValues(
 ): ApplicationFormValues {
   return {
     companyName: application.company_name,
+    companyDomain: application.company_domain ?? "",
     originalJobTitle: application.original_job_title,
     normalizedJobCategory: application.normalized_job_category,
     currentStatus: application.current_status,

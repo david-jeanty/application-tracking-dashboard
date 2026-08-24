@@ -11,6 +11,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ApplicationDetail } from "@/components/applications/application-detail";
 import { QuickUpdate } from "@/components/applications/quick-update";
+import { CompanyLogo } from "@/components/branding/company-logo";
 import { Button, ButtonLink } from "@/components/ui/button";
 import {
   archiveApplicationAction,
@@ -65,9 +66,21 @@ export default async function ApplicationDetailPage({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-semibold text-blue-700">Application</p>
-          <h1 className="mt-1 break-words text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
-            {application.company_name}
-          </h1>
+          {/*
+            The mark sits beside the employer's name, at the one place on this
+            page that identifies the company. It is decorative: the name it
+            accompanies is the heading itself.
+          */}
+          <div className="mt-1 flex items-center gap-3">
+            <CompanyLogo
+              companyName={application.company_name}
+              domain={application.company_domain}
+              size="md"
+            />
+            <h1 className="break-words text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+              {application.company_name}
+            </h1>
+          </div>
           <p className="mt-2 break-words text-sm leading-6 text-slate-600">
             {application.original_job_title}
           </p>
