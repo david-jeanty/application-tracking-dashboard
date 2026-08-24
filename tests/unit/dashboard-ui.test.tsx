@@ -71,6 +71,34 @@ describe("your search", () => {
     expect(container.querySelectorAll("dd")).toHaveLength(4);
   });
 
+  it("puts the term before its description in the DOM", () => {
+    const { container } = render(<SearchSummaryMetrics metrics={metrics} />);
+
+    // The visual order is number-then-label, produced by reversing the column.
+    // The reading order a screen reader follows is the markup order, and a
+    // description has to follow the term it describes.
+    for (const pair of container.querySelectorAll("dl > div")) {
+      const tags = [...pair.children].map((child) => child.tagName);
+      expect(tags).toEqual(["DT", "DD"]);
+    }
+  });
+
+  it("keeps each term next to its own number", () => {
+    const { container } = render(<SearchSummaryMetrics metrics={metrics} />);
+
+    const pairs = [...container.querySelectorAll("dl > div")].map((pair) => [
+      pair.querySelector("dt")?.textContent,
+      pair.querySelector("dd")?.textContent,
+    ]);
+
+    expect(pairs).toEqual([
+      ["Applications", "142"],
+      ["Submitted", "118"],
+      ["Interviews", "9"],
+      ["Offers", "2"],
+    ]);
+  });
+
   it("holds its shape from one digit to three", () => {
     render(
       <SearchSummaryMetrics
@@ -128,10 +156,14 @@ describe("pipeline", () => {
     ).toBeInTheDocument();
   });
 
-  it("totals the active applications", () => {
+  it("claims no total of its own", () => {
     render(<PipelineSnapshot stages={stages} />);
 
-    expect(screen.getByText("30 active applications")).toBeInTheDocument();
+    // These five stages are not JobTrack's ACTIVE_STATUSES vocabulary, so
+    // summing them and calling the result "active" would invent a definition.
+    // The counts already say what there is.
+    expect(screen.queryByText(/active application/i)).toBeNull();
+    expect(screen.queryByText(/^\d+ applications?$/)).toBeNull();
   });
 
   it("adds no tab stop for the distribution bar", () => {
@@ -143,11 +175,58 @@ describe("pipeline", () => {
     expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
   });
 
-  it("survives a search with nothing active", () => {
+  it("draws an empty track when every stage is zero", () => {
     const empty = stages.map((stage) => ({ ...stage, count: 0 }));
+    const { container } = render(<PipelineSnapshot stages={empty} />);
 
-    expect(() => render(<PipelineSnapshot stages={empty} />)).not.toThrow();
-    expect(screen.getByText("0 active applications")).toBeInTheDocument();
+    const track = container.querySelector('[aria-hidden="true"]');
+    expect(track?.children).toHaveLength(1);
+    // One full-width placeholder rather than five zero-width segments, and
+    // nothing divided by a zero total.
+    expect(track?.firstElementChild).toHaveClass("w-full");
+  });
+
+  describe("the distribution bar divides the track by ratio", () => {
+    const segments = (stages: PipelineStage[]) => {
+      const { container } = render(<PipelineSnapshot stages={stages} />);
+      const track = container.querySelector('[aria-hidden="true"]');
+      return [...(track?.children ?? [])] as HTMLElement[];
+    };
+
+    it("gives equal stages equal shares", () => {
+      const grown = segments([
+        { status: "Applied", count: 1 },
+        { status: "Screening", count: 1 },
+        { status: "Assessment", count: 1 },
+      ]).map((segment) => segment.style.flexGrow);
+
+      expect(grown).toEqual(["1", "1", "1"]);
+    });
+
+    it("splits eight and two in that proportion", () => {
+      const grown = segments([
+        { status: "Applied", count: 8 },
+        { status: "Screening", count: 2 },
+      ]).map((segment) => segment.style.flexGrow);
+
+      expect(grown).toEqual(["8", "2"]);
+    });
+
+    it("grows from a zero basis, so gaps cannot push the row past the track", () => {
+      // A percentage width would be a share of the whole track and the gaps
+      // would be added on top of it, squeezing or clipping the last stage.
+      for (const segment of segments(stages)) {
+        expect(segment.style.flexBasis).toBe("0px");
+        expect(segment.style.width).toBe("");
+      }
+    });
+
+    it("draws nothing for a stage with no applications", () => {
+      const grown = segments(stages);
+
+      // Five stages, one of them empty.
+      expect(grown).toHaveLength(4);
+    });
   });
 
   it("draws no connectors between stages", () => {

@@ -76,13 +76,19 @@ export function SearchSummaryMetrics({
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-6 pt-5 sm:flex sm:flex-wrap sm:gap-x-16">
       {metrics.map((metric) => (
-        <div key={metric.label}>
+        /*
+          The term precedes its description in the DOM, which is what a
+          description list means and what a screen reader reads. The visual
+          order — number first, label under it — is produced by reversing the
+          column, so the markup and the design can each be right.
+        */
+        <div className="flex flex-col-reverse gap-2" key={metric.label}>
+          <dt className="text-[13px] text-foreground-secondary">
+            {metric.label}
+          </dt>
           <dd className="text-[30px] font-medium leading-none tabular-nums tracking-tight text-foreground">
             {metric.value}
           </dd>
-          <dt className="mt-2 text-[13px] text-foreground-secondary">
-            {metric.label}
-          </dt>
         </div>
       ))}
     </dl>
@@ -137,10 +143,17 @@ export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
         tab stop. The opacity step follows pipeline order, which is what lets a
         segment be matched to the stage above it.
 
-        A student with nothing active divides by zero, so the track is drawn
+        Segments divide the track by ratio — `flexGrow` on a zero basis —
+        rather than each claiming a percentage of it. A percentage width would
+        be a share of the *whole* track, so the gaps between segments would push
+        the row past 100% and the last stage would be squeezed or clipped. Grow
+        factors are shares of whatever space is left after the gaps, which is
+        the quantity actually being divided.
+
+        A student with nothing active divides by nothing, so the track is drawn
         empty rather than guarded against after the fact.
       */}
-      <div aria-hidden="true" className="mt-5 flex h-1.5 gap-0.5 overflow-hidden">
+      <div aria-hidden="true" className="mt-5 flex h-1.5 gap-0.5">
         {total === 0 ? (
           <span className="h-full w-full bg-border" />
         ) : (
@@ -150,7 +163,8 @@ export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
                 className="h-full bg-accent"
                 key={stage.status}
                 style={{
-                  width: `${(stage.count / total) * 100}%`,
+                  flexBasis: 0,
+                  flexGrow: stage.count,
                   opacity: 1 - index * 0.15,
                 }}
               />
@@ -158,10 +172,6 @@ export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
           )
         )}
       </div>
-
-      <p className="mt-3 text-[12px] text-foreground-muted">
-        {total} active {total === 1 ? "application" : "applications"}
-      </p>
     </section>
   );
 }
