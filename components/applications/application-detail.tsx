@@ -1,7 +1,16 @@
-import type { ReactNode } from "react";
-import { Archive, ExternalLink } from "lucide-react";
-import { ApplicationStatusLabel } from "@/components/applications/application-status";
-import { Card } from "@/components/ui/card";
+import type { ComponentType, ReactNode } from "react";
+import {
+  Archive,
+  Banknote,
+  CalendarDays,
+  ChevronRight,
+  Clock,
+  ExternalLink,
+  Globe,
+  MapPin,
+  Monitor,
+  Tag,
+} from "lucide-react";
 import {
   displayOptionalText,
   safeExternalUrl,
@@ -10,53 +19,145 @@ import type { ApplicationRecord } from "@/lib/applications/types";
 import { formatDateOnly } from "@/lib/dates/date-only";
 import { formatDateTime } from "@/lib/dates/date-time";
 
-function Value({
+/**
+ * Long-form text keeps a readable measure even though the page spans the
+ * workspace. A line of prose 1,100 pixels wide is hard to track back from;
+ * a field value in a two-column list is not.
+ */
+const PROSE_WIDTH = "max-w-[72ch]";
+
+const headingClassName =
+  "border-b border-border pb-2 text-[17px] font-medium text-foreground";
+
+function NotSet() {
+  return <span className="text-foreground-muted">Not set</span>;
+}
+
+/**
+ * One field of the record.
+ *
+ * The icon is there to make a long list scannable at a glance, so it is thin,
+ * neutral and never boxed — the values are what the eye should land on.
+ */
+function Row({
   children,
+  icon: Icon,
   label,
 }: {
   children: ReactNode;
+  icon: ComponentType<{ className?: string; strokeWidth?: number }>;
   label: string;
 }) {
   return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+    <div className="flex items-baseline gap-4 border-b border-border/70 py-2.5 last:border-b-0">
+      <dt className="flex w-40 shrink-0 items-center gap-2 text-[13px] text-foreground-muted">
+        <Icon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={1.5} />
         {label}
       </dt>
-      <dd className="mt-1.5 text-sm leading-6 text-foreground">{children}</dd>
+      <dd className="min-w-0 break-words text-[14px] text-foreground">
+        {children}
+      </dd>
     </div>
   );
 }
 
 function OptionalValue({ value }: { value: string | null | undefined }) {
-  return displayOptionalText(value) ?? (
-    <span className="text-foreground-muted">Not set</span>
-  );
+  return displayOptionalText(value) ?? <NotSet />;
 }
 
 function DateValue({ value }: { value: string | null }) {
-  return value ? (
-    formatDateOnly(value)
-  ) : (
-    <span className="text-foreground-muted">Not set</span>
+  return value ? formatDateOnly(value) : <NotSet />;
+}
+
+/**
+ * A section that starts closed.
+ *
+ * Notes and a saved job description are both arbitrarily long, and neither is
+ * what a student opens this page to read — they came for the status and the
+ * next action. A native `<details>` keeps them one keystroke away without any
+ * JavaScript, any state to persist, or any focus management to get wrong: the
+ * summary is focusable and operable by keyboard because the browser makes it
+ * so, and assistive technology announces the expanded state for free.
+ */
+function DisclosureSection({
+  children,
+  title,
+  invitation,
+}: {
+  children: ReactNode;
+  title: string;
+  /** What is behind the summary, said plainly rather than as a chevron alone. */
+  invitation: string;
+}) {
+  return (
+    <details className="group">
+      <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+        {/*
+          A real heading inside the summary, so these sections appear in the
+          document outline alongside the rest and can be reached by heading
+          navigation even while collapsed.
+        */}
+        <h2 className={headingClassName}>{title}</h2>
+        <span className="flex items-center justify-between gap-4 pt-3 text-[14px] text-foreground-secondary group-hover:text-foreground">
+          {invitation}
+          <ChevronRight
+            aria-hidden="true"
+            className="size-4 shrink-0 text-foreground-muted transition-transform group-open:rotate-90"
+            strokeWidth={1.5}
+          />
+        </span>
+      </summary>
+      <div className="pt-4">{children}</div>
+    </details>
   );
 }
 
-function TextSection({
-  title,
-  value,
+function LongText({ value }: { value: string | null }) {
+  const text = displayOptionalText(value);
+
+  return text ? (
+    <p
+      className={`whitespace-pre-wrap break-words text-[14px] leading-7 text-foreground-secondary ${PROSE_WIDTH}`}
+    >
+      {text}
+    </p>
+  ) : (
+    <p className="text-[14px] text-foreground-muted">Not set</p>
+  );
+}
+
+/**
+ * Provenance: when the record was written, and how confident the category
+ * behind it is. Quiet, and last, because it is the least of what a student
+ * comes to this page for.
+ */
+export function ApplicationRecordMeta({
+  application,
 }: {
-  title: string;
-  value: string | null;
+  application: ApplicationRecord;
 }) {
   return (
-    <Card className="p-5 sm:p-6">
-      <h2 className="font-semibold text-foreground">{title}</h2>
-      <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-foreground-secondary">
-        {displayOptionalText(value) ?? (
-          <span className="text-foreground-muted">Not set</span>
-        )}
-      </p>
-    </Card>
+    <section aria-labelledby="record-heading" className="pt-10">
+      <h2 className={headingClassName} id="record-heading">
+        Record
+      </h2>
+      <dl className="pt-3">
+        <Row icon={Clock} label="Created">
+          {formatDateTime(application.created_at)}
+        </Row>
+        <Row icon={Clock} label="Updated">
+          {formatDateTime(application.updated_at)}
+        </Row>
+        <Row icon={Archive} label="Archive state">
+          {application.archived_at
+            ? `Archived ${formatDateTime(application.archived_at)}`
+            : "Active"}
+        </Row>
+        <Row icon={Tag} label="Category confidence">
+          <OptionalValue value={application.classification_confidence} />
+        </Row>
+      </dl>
+    </section>
   );
 }
 
@@ -66,123 +167,92 @@ export function ApplicationDetail({
   application: ApplicationRecord;
 }) {
   const externalUrl = safeExternalUrl(application.application_url);
+  const notes = displayOptionalText(application.notes);
+  const jobDescription = displayOptionalText(application.job_description);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-10">
       {application.archived_at ? (
-        <div className="flex gap-2 rounded-record border border-warning/30 bg-warning-soft p-4 text-sm text-warning">
+        <div className="flex gap-2 border border-warning/30 bg-warning-soft p-4 text-sm text-warning">
           <Archive aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           This application is archived. It remains stored and can still be
           reviewed or edited.
         </div>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card className="p-5 sm:p-6">
-          <h2 className="font-semibold text-foreground">Application</h2>
-          <dl className="mt-4 grid gap-5 sm:grid-cols-2">
-            <Value label="Status">
-              <ApplicationStatusLabel status={application.current_status} />
-            </Value>
-            <Value label="Normalized category">
-              {application.normalized_job_category}
-            </Value>
-            {application.classification_confidence ? (
-              <Value label="Classification confidence">
-                {application.classification_confidence}
-              </Value>
-            ) : null}
-            <Value label="Application source">
-              <OptionalValue value={application.application_source} />
-            </Value>
-            <Value label="Application URL">
-              {externalUrl ? (
-                <a
-                  className="inline-flex items-center gap-1.5 break-all font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:text-accent-hover"
-                  href={externalUrl}
-                  rel="noreferrer noopener"
-                  target="_blank"
-                >
-                  Open job posting
-                  <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
-                </a>
-              ) : (
-                <span className="text-foreground-muted">
-                  {application.application_url ? "Unavailable" : "Not set"}
-                </span>
-              )}
-            </Value>
-          </dl>
-        </Card>
-
-        <Card className="p-5 sm:p-6">
-          <h2 className="font-semibold text-foreground">Work term</h2>
-          <dl className="mt-4 grid gap-5 sm:grid-cols-2">
-            <Value label="Season">{application.work_term_season}</Value>
-            <Value label="Duration">
-              <OptionalValue value={application.work_term_duration} />
-            </Value>
-            <Value label="Location">
-              <OptionalValue value={application.location} />
-            </Value>
-            <Value label="Work arrangement">
-              {application.work_arrangement === "Unknown" ? (
-                <span className="text-foreground-muted">Not set</span>
-              ) : (
-                application.work_arrangement
-              )}
-            </Value>
-            <Value label="Salary">
-              <OptionalValue value={application.salary} />
-            </Value>
-          </dl>
-        </Card>
-
-        <Card className="p-5 sm:p-6">
-          <h2 className="font-semibold text-foreground">Dates</h2>
-          <dl className="mt-4 grid gap-5 sm:grid-cols-2">
-            <Value label="Date applied">
-              <DateValue value={application.date_applied} />
-            </Value>
-            <Value label="Application deadline">
-              <DateValue value={application.application_deadline} />
-            </Value>
-          </dl>
-        </Card>
-
-        <Card className="p-5 sm:p-6">
-          <h2 className="font-semibold text-foreground">Next action</h2>
-          <dl className="mt-4 grid gap-5 sm:grid-cols-2">
-            <Value label="Action">
-              <OptionalValue value={application.next_action} />
-            </Value>
-            <Value label="Due date">
-              <DateValue value={application.next_action_due_date} />
-            </Value>
-          </dl>
-        </Card>
-      </div>
-
-      <TextSection
-        title="Job description"
-        value={application.job_description}
-      />
-      <TextSection title="Notes" value={application.notes} />
-
-      <Card className="p-5 sm:p-6">
-        <h2 className="font-semibold text-foreground">Record details</h2>
-        <dl className="mt-4 grid gap-5 sm:grid-cols-3">
-          <Value label="Created">{formatDateTime(application.created_at)}</Value>
-          <Value label="Last updated">
-            {formatDateTime(application.updated_at)}
-          </Value>
-          <Value label="Archive state">
-            {application.archived_at
-              ? `Archived ${formatDateTime(application.archived_at)}`
-              : "Active"}
-          </Value>
+      <section aria-labelledby="application-heading">
+        <h2 className={headingClassName} id="application-heading">
+          Application
+        </h2>
+        <dl className="pt-3">
+          <Row icon={MapPin} label="Location">
+            <OptionalValue value={application.location} />
+          </Row>
+          <Row icon={CalendarDays} label="Work term">
+            {application.work_term_season}
+          </Row>
+          <Row icon={Tag} label="Category">
+            {application.normalized_job_category}
+          </Row>
+          <Row icon={Globe} label="Source">
+            <OptionalValue value={application.application_source} />
+          </Row>
+          <Row icon={CalendarDays} label="Date applied">
+            <DateValue value={application.date_applied} />
+          </Row>
+          <Row icon={CalendarDays} label="Application deadline">
+            <DateValue value={application.application_deadline} />
+          </Row>
+          <Row icon={Monitor} label="Work arrangement">
+            {application.work_arrangement === "Unknown" ? (
+              <NotSet />
+            ) : (
+              application.work_arrangement
+            )}
+          </Row>
+          <Row icon={Clock} label="Duration">
+            <OptionalValue value={application.work_term_duration} />
+          </Row>
+          <Row icon={Banknote} label="Salary">
+            <OptionalValue value={application.salary} />
+          </Row>
+          <Row icon={ExternalLink} label="Job posting">
+            {externalUrl ? (
+              <a
+                className="inline-flex items-center gap-1.5 break-all text-accent underline decoration-accent/40 underline-offset-4 hover:text-accent-hover"
+                href={externalUrl}
+                rel="noreferrer noopener"
+                target="_blank"
+              >
+                Open posting
+                <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+              </a>
+            ) : (
+              <span className="text-foreground-muted">
+                {application.application_url ? "Unavailable" : "Not set"}
+              </span>
+            )}
+          </Row>
         </dl>
-      </Card>
+      </section>
+
+      {/*
+        Notes before the job description: notes are the student's own record of
+        what happened, and the description is the posting they saved.
+      */}
+      <DisclosureSection
+        invitation={notes ? "View notes" : "No notes"}
+        title="Notes"
+      >
+        <LongText value={application.notes} />
+      </DisclosureSection>
+
+      <DisclosureSection
+        invitation={jobDescription ? "View saved posting" : "No saved posting"}
+        title="Job description"
+      >
+        <LongText value={application.job_description} />
+      </DisclosureSection>
     </div>
   );
 }

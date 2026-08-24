@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { CheckCircle2, LoaderCircle, Plus, X } from "lucide-react";
+import { CheckCircle2, LoaderCircle, X } from "lucide-react";
 import { ApplicationFields } from "@/components/applications/application-fields";
 import { createApplicationAction } from "@/lib/applications/actions";
 import { initialApplicationState } from "@/lib/applications/state";
@@ -30,7 +30,6 @@ export function ApplicationCreatePanel() {
   if (!isOpen) {
     return (
       <Button onClick={() => setIsOpen(true)} type="button">
-        <Plus aria-hidden="true" className="size-4" />
         Add application
       </Button>
     );

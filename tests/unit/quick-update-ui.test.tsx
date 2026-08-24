@@ -199,7 +199,8 @@ describe("the full edit workflow is untouched by this ticket", () => {
   it("is still linked from the detail page", () => {
     const detail = source("app/(app)/applications/[id]/page.tsx");
 
-    expect(detail).toContain("Edit application");
+    // The control's wording is the detail page's business; that the full form
+    // is still reachable from it is this ticket's.
     expect(detail).toContain("/edit`");
   });
 

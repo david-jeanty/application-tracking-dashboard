@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BriefcaseBusiness, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { signOutAction } from "@/lib/auth/actions";
 import { cn } from "@/lib/utils";
 import {
@@ -51,21 +51,21 @@ function NavigationLink({
       {active ? (
         <span
           aria-hidden="true"
-          className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-accent"
+          className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 bg-accent"
         />
       ) : null}
       <Link
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex min-h-9 items-center gap-2.5 rounded-control px-2.5 py-2 text-sm transition-colors",
+          "flex min-h-9 items-center gap-3 rounded-control px-3 py-2 text-[15px] transition-colors",
           active
-            ? "bg-accent-soft font-medium text-accent"
+            ? "bg-accent-soft text-accent"
             : "text-foreground-secondary hover:bg-surface hover:text-foreground",
         )}
         href={item.href}
         onClick={onNavigate}
       >
-        <Icon aria-hidden="true" className="size-4 shrink-0" />
+        <Icon aria-hidden="true" className="size-[18px] shrink-0" strokeWidth={1.5} />
         {item.label}
       </Link>
     </li>
@@ -92,13 +92,10 @@ export function SidebarContent({
   return (
     <div className="flex h-full flex-col">
       <Link
-        className="flex items-center gap-2 px-4 py-4 text-[15px] font-semibold tracking-tight text-foreground"
+        className="font-wordmark px-5 py-6 text-[26px] leading-none text-foreground"
         href="/dashboard"
         onClick={onNavigate}
       >
-        <span className="grid size-6 shrink-0 place-items-center rounded-control bg-accent text-accent-foreground">
-          <BriefcaseBusiness aria-hidden="true" className="size-3.5" />
-        </span>
         JobTrack
       </Link>
 

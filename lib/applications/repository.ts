@@ -248,6 +248,32 @@ export async function listStatusHistory(
 }
 
 /**
+ * Every status event belonging to one application the caller owns.
+ *
+ * The same table, projection and owner scoping as `listStatusHistory`, narrowed
+ * by `application_id`. The detail page needs one application's stages, and the
+ * existing `(user_id, application_id, changed_at)` index already covers this
+ * shape, so reading the student's entire history to draw a single rail would be
+ * work for nothing.
+ *
+ * `select` only, like every history read: the table grants no mutation to
+ * authenticated clients, the owner predicate sits on top, and row-level
+ * security applies again underneath.
+ */
+export async function listApplicationStatusHistory(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+  applicationId: string,
+) {
+  return supabase
+    .from("application_status_history")
+    .select("application_id,new_status")
+    .eq("user_id", authenticatedUserId)
+    .eq("application_id", applicationId)
+    .returns<ApplicationStatusEvent[]>();
+}
+
+/**
  * Every status event belonging to the authenticated user, with its timestamp.
  *
  * A separate read from `listStatusHistory` rather than a wider projection on

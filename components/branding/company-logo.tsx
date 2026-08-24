@@ -38,13 +38,14 @@ import { cn } from "@/lib/utils";
 /**
  * The two sizes in use, as literal classes so Tailwind can see them.
  *
- * `sm` sits beside a company name in a list row; `md` beside the heading on
- * the detail page. Both stay smaller than the name they accompany — the mark
- * is there to make a row scannable, not to brand the page.
+ * `sm` sits beside a company name in a compact row, `md` beside an application
+ * record, and `lg` beside the employer on the detail page, where the mark is
+ * the most saturated thing on the screen and carries most of its colour.
  */
 const SIZES = {
   sm: { className: "size-8 text-[0.7rem]", pixels: 32 },
   md: { className: "size-10 text-sm", pixels: 40 },
+  lg: { className: "size-16 text-xl", pixels: 64 },
 } as const;
 
 export type CompanyLogoSize = keyof typeof SIZES;
@@ -70,7 +71,7 @@ export function CompanyLogo({
     <span
       aria-hidden="true"
       className={cn(
-        "relative grid shrink-0 place-items-center overflow-hidden rounded-control border border-border bg-surface-muted font-semibold uppercase text-foreground-secondary",
+        "relative grid shrink-0 place-items-center overflow-hidden rounded-control border border-border bg-surface-muted font-medium uppercase text-foreground-secondary",
         sizeClassName,
         className,
       )}
