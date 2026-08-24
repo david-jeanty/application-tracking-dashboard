@@ -33,23 +33,23 @@ const reasonPresentation: Record<
 > = {
   "overdue-action": {
     label: "Overdue",
-    className: "border-red-200 bg-red-50 text-red-800",
+    className: "border-danger/30 bg-danger-soft text-danger",
   },
   "deadline-critical": {
     label: "Deadline",
-    className: "border-red-200 bg-red-50 text-red-800",
+    className: "border-danger/30 bg-danger-soft text-danger",
   },
   "action-due-now": {
     label: "Next action",
-    className: "border-amber-200 bg-amber-50 text-amber-900",
+    className: "border-warning/30 bg-warning-soft text-warning",
   },
   "deadline-important": {
     label: "Deadline",
-    className: "border-amber-200 bg-amber-50 text-amber-900",
+    className: "border-warning/30 bg-warning-soft text-warning",
   },
   "action-due-soon": {
     label: "Next action",
-    className: "border-amber-200 bg-amber-50 text-amber-900",
+    className: "border-warning/30 bg-warning-soft text-warning",
   },
 };
 
@@ -61,7 +61,7 @@ function SectionHeading({
   id: string;
 }) {
   return (
-    <h2 className="text-base font-semibold text-slate-950" id={id}>
+    <h2 className="text-base font-semibold text-foreground" id={id}>
       {children}
     </h2>
   );
@@ -84,11 +84,11 @@ export function SummaryTile({
 }) {
   return (
     <Card className="p-4">
-      <p className="text-sm font-medium text-slate-600">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
+      <p className="text-sm font-medium text-foreground-secondary">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground">
         {value}
       </p>
-      <p className="mt-1 text-xs leading-5 text-slate-600">{context}</p>
+      <p className="mt-1 text-xs leading-5 text-foreground-secondary">{context}</p>
     </Card>
   );
 }
@@ -105,12 +105,12 @@ export function NeedsAttention({ items }: { items: AttentionItem[] }) {
   if (items.length === 0) {
     return (
       <Card className="flex items-start gap-3 p-5">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+        <span className="grid size-9 shrink-0 place-items-center rounded-record bg-success-soft text-success">
           <CheckCircle2 aria-hidden="true" className="size-5" />
         </span>
         <div>
-          <p className="font-semibold text-slate-950">You&rsquo;re caught up.</p>
-          <p className="mt-1 text-sm leading-6 text-slate-600">
+          <p className="font-semibold text-foreground">You&rsquo;re caught up.</p>
+          <p className="mt-1 text-sm leading-6 text-foreground-secondary">
             Nothing you noted is due, and no application you are still working
             on is about to close.
           </p>
@@ -120,15 +120,15 @@ export function NeedsAttention({ items }: { items: AttentionItem[] }) {
   }
 
   return (
-    <Card className="divide-y divide-slate-100">
+    <Card className="divide-y divide-border">
       <ul>
         {items.map((item) => {
           const presentation = reasonPresentation[item.reason];
 
           return (
-            <li className="border-b border-slate-100 last:border-b-0" key={item.applicationId}>
+            <li className="border-b border-border last:border-b-0" key={item.applicationId}>
               <Link
-                className="flex flex-col gap-2 p-4 hover:bg-slate-50/70 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-blue-600 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+                className="flex flex-col gap-2 p-4 hover:bg-surface-muted focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-focus sm:flex-row sm:items-center sm:justify-between sm:gap-4"
                 href={`/applications/${item.applicationId}`}
               >
                 <div className="flex min-w-0 items-start gap-3">
@@ -137,10 +137,10 @@ export function NeedsAttention({ items }: { items: AttentionItem[] }) {
                     domain={item.companyDomain}
                   />
                   <div className="min-w-0">
-                    <p className="font-semibold text-slate-950">
+                    <p className="font-semibold text-foreground">
                       {item.companyName}
                     </p>
-                    <p className="mt-0.5 truncate text-sm text-slate-600">
+                    <p className="mt-0.5 truncate text-sm text-foreground-secondary">
                       {item.detail || item.jobTitle}
                     </p>
                     {/*
@@ -150,7 +150,7 @@ export function NeedsAttention({ items }: { items: AttentionItem[] }) {
                       dashboard does not tell a student what to do about it.
                     */}
                     {item.note ? (
-                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                      <p className="mt-0.5 truncate text-xs text-foreground-muted">
                         {item.note}
                       </p>
                     ) : null}
@@ -162,12 +162,12 @@ export function NeedsAttention({ items }: { items: AttentionItem[] }) {
                   >
                     {presentation.label}
                   </span>
-                  <span className="text-sm font-medium text-slate-800">
+                  <span className="text-sm font-medium text-foreground">
                     {item.timing}
                   </span>
                   <ArrowRight
                     aria-hidden="true"
-                    className="size-4 shrink-0 text-slate-400"
+                    className="size-4 shrink-0 text-foreground-muted"
                   />
                 </div>
               </Link>
@@ -195,7 +195,7 @@ export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
     <Card className="p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <SectionHeading id="dashboard-pipeline">Pipeline snapshot</SectionHeading>
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-foreground-secondary">
           {total} active {total === 1 ? "application" : "applications"} in
           progress
         </p>
@@ -205,13 +205,13 @@ export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
         {stages.map((stage, index) => (
           <li className="flex items-center gap-2 sm:flex-1" key={stage.status}>
             <Link
-              className="flex flex-1 items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2.5 hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 sm:flex-col sm:items-start sm:gap-1"
+              className="flex flex-1 items-center justify-between gap-3 rounded-record border border-border px-3 py-2.5 hover:border-border-strong hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:flex-col sm:items-start sm:gap-1"
               href={`/applications?${STATUS_PARAM}=${encodeURIComponent(stage.status)}`}
             >
-              <span className="text-sm font-medium text-slate-700">
+              <span className="text-sm font-medium text-foreground-secondary">
                 {stage.status}
               </span>
-              <span className="text-xl font-semibold tabular-nums text-slate-950">
+              <span className="text-xl font-semibold tabular-nums text-foreground">
                 {stage.count}
                 <span className="sr-only">
                   {" "}
@@ -222,7 +222,7 @@ export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
             {index < stages.length - 1 ? (
               <ArrowRight
                 aria-hidden="true"
-                className="hidden size-4 shrink-0 self-center text-slate-300 sm:block"
+                className="hidden size-4 shrink-0 self-center text-foreground-muted sm:block"
               />
             ) : null}
           </li>
@@ -256,13 +256,13 @@ export function ThisWeek({
     <Card className="p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <SectionHeading id="dashboard-week">This week</SectionHeading>
-        <p className="text-sm text-slate-600">Since {weekStartLabel}</p>
+        <p className="text-sm text-foreground-secondary">Since {weekStartLabel}</p>
       </div>
       <dl className="mt-4 grid gap-4 sm:grid-cols-3">
         {metrics.map((metric) => (
           <div key={metric.label}>
-            <dt className="text-sm text-slate-600">{metric.label}</dt>
-            <dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-950">
+            <dt className="text-sm text-foreground-secondary">{metric.label}</dt>
+            <dd className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
               {metric.value}
             </dd>
           </div>
@@ -290,7 +290,7 @@ export function RecentActivity({
     return (
       <Card className="p-5">
         <SectionHeading id="dashboard-activity">Recent activity</SectionHeading>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+        <p className="mt-2 text-sm leading-6 text-foreground-secondary">
           Nothing has changed yet. Saving an application or moving its status
           will show up here.
         </p>
@@ -304,7 +304,7 @@ export function RecentActivity({
       <div className="mt-4 space-y-4">
         {groupActivityByDay(entries).map((group) => (
           <section key={group.day}>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
               {activityDayLabel(group.day, today, formatDateOnly)}
             </h3>
             <ul className="mt-1.5 space-y-1.5">
@@ -323,12 +323,12 @@ export function RecentActivity({
                     domain={entry.companyDomain}
                   />
                   <Link
-                    className="rounded-sm font-medium text-blue-800 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                    className="rounded-sm font-medium text-accent-hover hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                     href={`/applications/${entry.applicationId}`}
                   >
                     {entry.companyName}
                   </Link>
-                  <span className="text-slate-600">{entry.description}</span>
+                  <span className="text-foreground-secondary">{entry.description}</span>
                 </li>
               ))}
             </ul>
@@ -344,14 +344,14 @@ export function AnalyticsLink() {
   return (
     <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
+        <span className="grid size-9 shrink-0 place-items-center rounded-record bg-accent-soft text-accent">
           <CalendarClock aria-hidden="true" className="size-5" />
         </span>
         <div>
-          <h2 className="font-semibold text-slate-950">
+          <h2 className="font-semibold text-foreground">
             How is the search going overall?
           </h2>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">
+          <p className="mt-1 max-w-xl text-sm leading-6 text-foreground-secondary">
             This page is about today. Analytics covers the whole search —
             response rates, how far applications got, and what you have applied
             to.

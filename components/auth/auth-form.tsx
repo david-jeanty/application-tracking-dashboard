@@ -45,7 +45,7 @@ function FieldError({
 }) {
   if (!errors?.length) return null;
   return (
-    <p className="mt-1.5 text-sm text-red-700" id={`${id}-error`}>
+    <p className="mt-1.5 text-sm text-danger" id={`${id}-error`}>
       {errors[0]}
     </p>
   );
@@ -68,8 +68,8 @@ export function AuthForm({ action, kind, nextPath }: AuthFormProps) {
           aria-live="polite"
           className={
             state.status === "success"
-              ? "flex gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"
-              : "rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+              ? "flex gap-2 rounded-control border border-success/30 bg-success-soft p-3 text-sm text-success"
+              : "rounded-control border border-danger/30 bg-danger-soft p-3 text-sm text-danger"
           }
           role={state.status === "error" ? "alert" : "status"}
         >
@@ -82,7 +82,7 @@ export function AuthForm({ action, kind, nextPath }: AuthFormProps) {
 
       {kind === "signup" ? (
         <div>
-          <label className="text-sm font-medium text-slate-800" htmlFor="fullName">
+          <label className="text-sm font-medium text-foreground" htmlFor="fullName">
             Full name
           </label>
           <Input
@@ -102,7 +102,7 @@ export function AuthForm({ action, kind, nextPath }: AuthFormProps) {
 
       {showsEmail ? (
         <div>
-          <label className="text-sm font-medium text-slate-800" htmlFor="email">
+          <label className="text-sm font-medium text-foreground" htmlFor="email">
             Email address
           </label>
           <Input
@@ -124,14 +124,14 @@ export function AuthForm({ action, kind, nextPath }: AuthFormProps) {
         <div>
           <div className="flex items-center justify-between gap-4">
             <label
-              className="text-sm font-medium text-slate-800"
+              className="text-sm font-medium text-foreground"
               htmlFor="password"
             >
               {kind === "reset" ? "New password" : "Password"}
             </label>
             {kind === "login" ? (
               <Link
-                className="text-sm font-medium text-blue-700 hover:text-blue-800 hover:underline"
+                className="text-sm font-medium text-accent hover:text-accent-hover hover:underline"
                 href="/forgot-password"
               >
                 Forgot password?
@@ -157,7 +157,7 @@ export function AuthForm({ action, kind, nextPath }: AuthFormProps) {
       {kind === "reset" ? (
         <div>
           <label
-            className="text-sm font-medium text-slate-800"
+            className="text-sm font-medium text-foreground"
             htmlFor="confirmPassword"
           >
             Confirm new password

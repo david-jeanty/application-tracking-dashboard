@@ -51,11 +51,11 @@ export default async function ApplicationsPage({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-semibold text-blue-700">Applications</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+          <p className="text-sm font-semibold text-accent">Applications</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
             Your applications
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
             Add applications and keep their current status, important dates, and
             next action in one place.
           </p>
@@ -67,8 +67,8 @@ export default async function ApplicationsPage({
         <div
           className={
             archiveNotice.tone === "success"
-              ? "flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
-              : "flex gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+              ? "flex gap-2 rounded-record border border-success/30 bg-success-soft p-4 text-sm text-success"
+              : "flex gap-2 rounded-record border border-danger/30 bg-danger-soft p-4 text-sm text-danger"
           }
           role="status"
         >

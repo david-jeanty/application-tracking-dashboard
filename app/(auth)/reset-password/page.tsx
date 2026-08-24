@@ -12,7 +12,7 @@ export default function ResetPasswordPage() {
       description="Choose a new password with at least eight characters."
       footer={
         <Link
-          className="font-semibold text-blue-700 hover:underline"
+          className="font-semibold text-accent hover:underline"
           href="/forgot-password"
         >
           Request a new reset link

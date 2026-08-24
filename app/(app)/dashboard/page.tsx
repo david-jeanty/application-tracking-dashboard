@@ -25,11 +25,11 @@ export const metadata: Metadata = { title: "Dashboard" };
 function DashboardHeader() {
   return (
     <header>
-      <p className="text-sm font-semibold text-blue-700">Your workspace</p>
-      <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+      <p className="text-sm font-semibold text-accent">Your workspace</p>
+      <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
         Dashboard
       </h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary sm:text-base">
         What needs your attention today, and how the search is moving.
       </p>
     </header>
@@ -73,7 +73,7 @@ export default async function DashboardPage() {
           attention" is a claim about the student's data, and it is only true
           when the query actually succeeded. No database detail is shown.
         */}
-        <Card className="flex gap-3 border-amber-200 bg-amber-50 p-5 text-amber-900">
+        <Card className="flex gap-3 border-warning/30 bg-warning-soft p-5 text-warning">
           <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
           <div>
             <h2 className="font-semibold">
@@ -93,13 +93,13 @@ export default async function DashboardPage() {
       <div className="space-y-6">
         <DashboardHeader />
         <Card className="px-6 py-12 text-center">
-          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+          <span className="mx-auto grid size-12 place-items-center rounded-surface bg-accent-soft text-accent">
             <ClipboardCheck aria-hidden="true" className="size-6" />
           </span>
-          <h2 className="mt-4 text-lg font-semibold text-slate-950">
+          <h2 className="mt-4 text-lg font-semibold text-foreground">
             Ready for your first application
           </h2>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-foreground-secondary">
             Save one and this page starts answering what needs your attention —
             follow-ups, deadlines, and applications that have gone quiet.
           </p>
@@ -146,7 +146,7 @@ export default async function DashboardPage() {
 
       <section aria-labelledby="dashboard-attention">
         <h2
-          className="text-base font-semibold text-slate-950"
+          className="text-base font-semibold text-foreground"
           id="dashboard-attention"
         >
           Needs attention
@@ -185,14 +185,14 @@ function AssistantCard() {
   return (
     <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-3">
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
+        <span className="grid size-9 shrink-0 place-items-center rounded-record bg-accent-soft text-accent">
           <Sparkles aria-hidden="true" className="size-5" />
         </span>
         <div>
-          <h2 className="font-semibold text-slate-950">
+          <h2 className="font-semibold text-foreground">
             Use JobTrack with your AI assistant
           </h2>
-          <p className="mt-1 max-w-xl text-sm leading-6 text-slate-600">
+          <p className="mt-1 max-w-xl text-sm leading-6 text-foreground-secondary">
             Already using an assistant to read job postings? Let it save and
             update applications for you instead of retyping them. Optional, and
             JobTrack never charges you for AI.

@@ -56,7 +56,7 @@ export default async function AnalyticsPage() {
     return (
       <div className="space-y-6">
         <AnalyticsHeader />
-        <Card className="flex gap-3 border-red-200 bg-red-50 p-5 text-red-900">
+        <Card className="flex gap-3 border-danger/30 bg-danger-soft p-5 text-danger">
           <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
           <div>
             <h2 className="font-semibold">Analytics could not be loaded</h2>
@@ -80,13 +80,13 @@ export default async function AnalyticsPage() {
       <div className="space-y-6">
         <AnalyticsHeader />
         <Card className="px-6 py-12 text-center">
-          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+          <span className="mx-auto grid size-12 place-items-center rounded-surface bg-accent-soft text-accent">
             <BarChart3 aria-hidden="true" className="size-6" />
           </span>
-          <h2 className="mt-4 text-lg font-semibold text-slate-950">
+          <h2 className="mt-4 text-lg font-semibold text-foreground">
             Nothing to measure yet
           </h2>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-foreground-secondary">
             Save your first application and these numbers will describe your own
             search — never sample data.
           </p>
@@ -134,7 +134,7 @@ export default async function AnalyticsPage() {
 
       <section aria-labelledby="analytics-overview">
         <h2
-          className="text-base font-semibold text-slate-950"
+          className="text-base font-semibold text-foreground"
           id="analytics-overview"
         >
           Search overview
@@ -242,11 +242,11 @@ export default async function AnalyticsPage() {
 function AnalyticsHeader() {
   return (
     <header>
-      <p className="text-sm font-semibold text-blue-700">Analytics</p>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+      <p className="text-sm font-semibold text-accent">Analytics</p>
+      <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
         Your search, measured
       </h1>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
         Calculated from your own applications and their recorded status history.
         Current counts describe where things stand today; the conversion figures
         describe what happened across the whole search.

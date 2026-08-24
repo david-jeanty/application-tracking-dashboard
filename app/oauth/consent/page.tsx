@@ -16,10 +16,10 @@ function Problem({ message }: { message: string }) {
   return (
     <main className="mx-auto flex min-h-screen max-w-lg items-center px-4 py-12">
       <Card className="w-full p-6 sm:p-8">
-        <h1 className="text-xl font-semibold text-slate-950">
+        <h1 className="text-xl font-semibold text-foreground">
           This request cannot be completed
         </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{message}</p>
+        <p className="mt-2 text-sm leading-6 text-foreground-secondary">{message}</p>
       </Card>
     </main>
   );
@@ -62,35 +62,35 @@ export default async function ConsentPage({
   return (
     <main className="mx-auto flex min-h-screen max-w-lg items-center px-4 py-12">
       <Card className="w-full p-6 sm:p-8">
-        <span className="grid size-12 place-items-center rounded-xl bg-blue-50 text-blue-700">
+        <span className="grid size-12 place-items-center rounded-record bg-accent-soft text-accent">
           <ShieldCheck aria-hidden="true" className="size-6" />
         </span>
 
-        <h1 className="mt-5 text-xl font-semibold text-slate-950">
+        <h1 className="mt-5 text-xl font-semibold text-foreground">
           Allow {data.client.name} to use your tracker?
         </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+        <p className="mt-2 text-sm leading-6 text-foreground-secondary">
           Signed in as <span className="font-medium">{data.user.email}</span>.
         </p>
 
-        <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <h2 className="text-sm font-semibold text-slate-900">
+        <div className="mt-6 rounded-record border border-border bg-surface-muted p-4">
+          <h2 className="text-sm font-semibold text-foreground">
             {data.client.name} will be able to
           </h2>
-          <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
+          <ul className="mt-2 space-y-1 text-sm leading-6 text-foreground-secondary">
             {ASSISTANT_CAN.map((capability) => (
               <li key={capability}>{capability}</li>
             ))}
           </ul>
-          <h2 className="mt-4 text-sm font-semibold text-slate-900">
+          <h2 className="mt-4 text-sm font-semibold text-foreground">
             It will not be able to
           </h2>
-          <ul className="mt-2 space-y-1 text-sm leading-6 text-slate-700">
+          <ul className="mt-2 space-y-1 text-sm leading-6 text-foreground-secondary">
             {ASSISTANT_CANNOT.map((limit) => (
               <li key={limit}>{limit}</li>
             ))}
           </ul>
-          <p className="mt-3 text-xs leading-5 text-slate-500">
+          <p className="mt-3 text-xs leading-5 text-foreground-muted">
             {ASSISTANT_OWNERSHIP_NOTE} You can disconnect it at any time from
             JobTrack settings.
           </p>
@@ -100,7 +100,7 @@ export default async function ConsentPage({
           <ConsentForm authorizationId={data.authorization_id} />
         </div>
 
-        <p className="mt-4 break-words text-xs leading-5 text-slate-500">
+        <p className="mt-4 break-words text-xs leading-5 text-foreground-muted">
           You will be returned to {data.redirect_uri}
         </p>
       </Card>

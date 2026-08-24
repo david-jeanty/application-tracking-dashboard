@@ -65,7 +65,7 @@ export default async function ApplicationDetailPage({
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-blue-700">Application</p>
+          <p className="text-sm font-semibold text-accent">Application</p>
           {/*
             The mark sits beside the employer's name, at the one place on this
             page that identifies the company. It is decorative: the name it
@@ -77,11 +77,11 @@ export default async function ApplicationDetailPage({
               domain={application.company_domain}
               size="md"
             />
-            <h1 className="break-words text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+            <h1 className="break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
               {application.company_name}
             </h1>
           </div>
-          <p className="mt-2 break-words text-sm leading-6 text-slate-600">
+          <p className="mt-2 break-words text-sm leading-6 text-foreground-secondary">
             {application.original_job_title}
           </p>
         </div>
@@ -128,7 +128,7 @@ export default async function ApplicationDetailPage({
           */}
           {application.archived_at ? (
             <Link
-              className="rounded-sm text-sm font-semibold text-red-700 underline decoration-red-200 underline-offset-4 hover:text-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600"
+              className="rounded-sm text-sm font-semibold text-danger underline decoration-danger/40 underline-offset-4 hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger"
               href={`/applications/${application.id}/delete`}
             >
               Delete permanently
@@ -139,7 +139,7 @@ export default async function ApplicationDetailPage({
 
       {updated === "1" ? (
         <div
-          className="flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
+          className="flex gap-2 rounded-record border border-success/30 bg-success-soft p-4 text-sm text-success"
           role="status"
         >
           <CheckCircle2
@@ -154,8 +154,8 @@ export default async function ApplicationDetailPage({
         <div
           className={
             quickNotice.tone === "success"
-              ? "flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900"
-              : "flex gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
+              ? "flex gap-2 rounded-record border border-success/30 bg-success-soft p-4 text-sm text-success"
+              : "flex gap-2 rounded-record border border-danger/30 bg-danger-soft p-4 text-sm text-danger"
           }
           role="status"
         >

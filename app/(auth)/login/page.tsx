@@ -21,7 +21,7 @@ export default async function LoginPage({
         <>
           New to JobTrack?{" "}
           <Link
-            className="font-semibold text-blue-700 hover:underline"
+            className="font-semibold text-accent hover:underline"
             href="/signup"
           >
             Create an account

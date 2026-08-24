@@ -18,12 +18,12 @@ export function StatTile({
 }) {
   return (
     <Card className="p-5">
-      <p className="text-sm font-medium text-slate-600">{label}</p>
-      <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">
+      <p className="text-sm font-medium text-foreground-secondary">{label}</p>
+      <p className="mt-2 text-3xl font-semibold tracking-tight text-foreground">
         {value}
       </p>
       {context ? (
-        <p className="mt-1 text-sm leading-6 text-slate-600">{context}</p>
+        <p className="mt-1 text-sm leading-6 text-foreground-secondary">{context}</p>
       ) : null}
     </Card>
   );
@@ -103,25 +103,25 @@ export function MetricBars({
         {rows.map((row) => (
           <tr
             className={
-              row.isBaseline ? "border-b border-slate-200" : undefined
+              row.isBaseline ? "border-b border-border" : undefined
             }
             key={row.label}
           >
             <th
               className={`py-2 pr-3 align-middle sm:w-44 ${
                 row.isBaseline
-                  ? "font-semibold text-slate-950"
-                  : "font-medium text-slate-800"
+                  ? "font-semibold text-foreground"
+                  : "font-medium text-foreground"
               }`}
               scope="row"
             >
               {row.label}
             </th>
-            <td className="w-14 py-2 pr-3 text-right align-middle tabular-nums font-medium text-slate-950">
+            <td className="w-14 py-2 pr-3 text-right align-middle tabular-nums font-medium text-foreground">
               {row.valueLabel}
             </td>
             {detailHeading ? (
-              <td className="w-14 py-2 pr-3 text-right align-middle tabular-nums text-slate-700">
+              <td className="w-14 py-2 pr-3 text-right align-middle tabular-nums text-foreground-secondary">
                 {row.detailLabel}
               </td>
             ) : null}
@@ -134,10 +134,10 @@ export function MetricBars({
               */}
               <span
                 aria-hidden="true"
-                className="block h-2 w-full min-w-16 overflow-hidden rounded-sm bg-slate-100"
+                className="block h-2 w-full min-w-16 overflow-hidden rounded-sm bg-surface-muted"
               >
                 <span
-                  className="block h-2 rounded-r-sm bg-blue-600"
+                  className="block h-2 rounded-r-sm bg-accent"
                   style={{
                     width: `${Math.max(0, Math.min(100, row.percent))}%`,
                   }}
@@ -171,11 +171,11 @@ export function MetricPanel({
 }) {
   return (
     <Card className="p-5">
-      <h2 className="text-base font-semibold text-slate-950" id={titleId}>
+      <h2 className="text-base font-semibold text-foreground" id={titleId}>
         {title}
       </h2>
       {description ? (
-        <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
+        <p className="mt-1 text-sm leading-6 text-foreground-secondary">{description}</p>
       ) : null}
       <div className="mt-4">{children}</div>
     </Card>
@@ -191,7 +191,7 @@ export function MetricPanel({
  */
 export function NotEnoughData({ children }: { children: React.ReactNode }) {
   return (
-    <p className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-sm leading-6 text-slate-600">
+    <p className="rounded-record border border-border bg-surface-muted p-4 text-sm leading-6 text-foreground-secondary">
       {children}
     </p>
   );

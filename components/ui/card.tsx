@@ -1,14 +1,18 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-export function Card({
-  className,
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
+/**
+ * A contained surface.
+ *
+ * Deliberately flat: a border and a 10px radius, no shadow. Shadows are
+ * reserved for genuinely floating UI such as menus and the mobile drawer, so a
+ * page of these does not read as a tray of drifting cards.
+ */
+export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
+        "rounded-surface border border-border bg-surface",
         className,
       )}
       {...props}

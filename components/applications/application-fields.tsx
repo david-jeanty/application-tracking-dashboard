@@ -8,9 +8,9 @@ import {
 import type { ApplicationFormValues } from "@/lib/applications/types";
 
 const selectClassName =
-  "min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-base text-slate-950 shadow-sm hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-3 focus:ring-blue-100 sm:text-sm";
+  "min-h-11 w-full rounded-control border border-border-strong bg-surface px-3.5 text-base text-foreground hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
 const textareaClassName =
-  "min-h-28 w-full resize-y rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base text-slate-950 shadow-sm placeholder:text-slate-400 hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-3 focus:ring-blue-100 sm:text-sm";
+  "min-h-28 w-full resize-y rounded-control border border-border-strong bg-surface px-3.5 py-3 text-base text-foreground placeholder:text-foreground-muted hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
 
 function Field({
   children,
@@ -34,22 +34,22 @@ function Field({
 }) {
   return (
     <div>
-      <label className="text-sm font-medium text-slate-800" htmlFor={id}>
+      <label className="text-sm font-medium text-foreground" htmlFor={id}>
         {label}
         {required ? (
-          <span aria-hidden="true" className="ml-1 text-red-600">
+          <span aria-hidden="true" className="ml-1 text-danger">
             *
           </span>
         ) : null}
       </label>
       <div className="mt-1.5">{children}</div>
       {hint ? (
-        <p className="mt-1.5 text-sm text-slate-500" id={`${id}-hint`}>
+        <p className="mt-1.5 text-sm text-foreground-muted" id={`${id}-hint`}>
           {hint}
         </p>
       ) : null}
       {error?.length ? (
-        <p className="mt-1.5 text-sm text-red-700" id={`${id}-error`}>
+        <p className="mt-1.5 text-sm text-danger" id={`${id}-error`}>
           {error[0]}
         </p>
       ) : null}
@@ -181,13 +181,13 @@ export function ApplicationFields({
       </div>
 
       <details
-        className="rounded-xl border border-slate-200 bg-slate-50/60"
+        className="rounded-record border border-border bg-surface-muted"
         open={optionalDetailsOpen}
       >
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">
           Optional details
         </summary>
-        <div className="grid gap-5 border-t border-slate-200 p-4 sm:grid-cols-2">
+        <div className="grid gap-5 border-t border-border p-4 sm:grid-cols-2">
           <Field error={errors.location} id="location" label="Location">
             <Input
               aria-describedby={describedBy("location")}

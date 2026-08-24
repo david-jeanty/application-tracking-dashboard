@@ -10,8 +10,8 @@ import { APPLICATION_STATUSES } from "@/lib/applications/constants";
 import type { ApplicationRecord } from "@/lib/applications/types";
 
 const selectClassName =
-  "min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-base text-slate-950 shadow-sm hover:border-slate-400 focus:border-blue-500 focus:outline-none focus:ring-3 focus:ring-blue-100 sm:text-sm";
-const labelClassName = "text-sm font-medium text-slate-800";
+  "min-h-11 w-full rounded-control border border-border-strong bg-surface px-3.5 text-base text-foreground hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
+const labelClassName = "text-sm font-medium text-foreground";
 
 /**
  * The two fields a student changes over and over, on the page they are already
@@ -48,8 +48,8 @@ export function QuickUpdate({
 
   return (
     <Card className="p-5 sm:p-6">
-      <h2 className="font-semibold text-slate-950">Quick update</h2>
-      <p className="mt-1 text-sm leading-6 text-slate-600">
+      <h2 className="font-semibold text-foreground">Quick update</h2>
+      <p className="mt-1 text-sm leading-6 text-foreground-secondary">
         Change the two things that move most often. Everything else lives in
         Edit application.
       </p>
@@ -118,7 +118,7 @@ export function QuickUpdate({
               and is not left wondering where their date went.
             */}
             <p
-              className="text-sm leading-6 text-slate-600"
+              className="text-sm leading-6 text-foreground-secondary"
               id="quickNextActionDueDateHint"
             >
               A due date is kept only alongside a next action.

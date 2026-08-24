@@ -3,7 +3,7 @@ import { LoaderCircle } from "lucide-react";
 export default function Loading() {
   return (
     <div
-      className="grid min-h-screen place-items-center bg-slate-50 text-slate-600"
+      className="grid min-h-screen place-items-center bg-surface-muted text-foreground-secondary"
       role="status"
     >
       <div className="flex items-center gap-3">

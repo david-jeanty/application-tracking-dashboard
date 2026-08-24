@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
-import { Menu, X } from "lucide-react";
-import { navigationItems } from "@/components/app-shell/navigation";
+import { BriefcaseBusiness, Menu, X } from "lucide-react";
 import { SidebarContent } from "@/components/app-shell/sidebar-content";
 
 type AppShellProps = {
@@ -12,17 +10,16 @@ type AppShellProps = {
   email: string;
 };
 
-export function AppShell({
-  children,
-  displayName,
-  email,
-}: AppShellProps) {
+/**
+ * The authenticated frame: a quiet sidebar and the workspace beside it.
+ *
+ * There is deliberately no desktop page-title bar. The sidebar already says
+ * where you are and every page renders its own heading, so a shell header only
+ * printed the same word twice. Mobile keeps a slim bar because the drawer
+ * still needs somewhere to be opened from.
+ */
+export function AppShell({ children, displayName, email }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const pathname = usePathname();
-  const pageTitle =
-    navigationItems.find(
-      (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
-    )?.label ?? "JobTrack";
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -35,15 +32,15 @@ export function AppShell({
   }, [mobileOpen]);
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <a
-        className="fixed left-3 top-3 z-50 -translate-y-24 rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white focus:translate-y-0"
+        className="fixed left-3 top-3 z-50 -translate-y-24 rounded-control bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground focus:translate-y-0"
         href="#main-content"
       >
         Skip to main content
       </a>
 
-      <aside className="fixed inset-y-0 left-0 hidden w-64 border-r border-slate-200 bg-white lg:block">
+      <aside className="fixed inset-y-0 left-0 hidden w-[212px] border-r border-border bg-surface-muted lg:block">
         <SidebarContent displayName={displayName} email={email} />
       </aside>
 
@@ -51,17 +48,17 @@ export function AppShell({
         <div className="fixed inset-0 z-40 lg:hidden">
           <button
             aria-label="Close navigation"
-            className="absolute inset-0 bg-slate-950/35"
+            className="absolute inset-0 bg-overlay"
             onClick={() => setMobileOpen(false)}
             type="button"
           />
           <aside
             aria-label="Mobile navigation"
-            className="relative h-full w-[min(86vw,20rem)] bg-white shadow-2xl"
+            className="relative h-full w-[min(86vw,17rem)] border-r border-border bg-surface-muted shadow-menu"
           >
             <button
               aria-label="Close navigation"
-              className="absolute right-3 top-3 z-10 grid size-11 place-items-center rounded-lg text-slate-600 hover:bg-slate-100"
+              className="absolute right-2 top-2 z-10 grid size-11 place-items-center rounded-control text-foreground-secondary hover:bg-surface-muted"
               onClick={() => setMobileOpen(false)}
               type="button"
             >
@@ -76,21 +73,29 @@ export function AppShell({
         </div>
       ) : null}
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6">
+      <div className="lg:pl-[212px]">
+        <header className="sticky top-0 z-30 flex min-h-14 items-center gap-2 border-b border-border bg-background/95 px-2 backdrop-blur lg:hidden">
           <button
             aria-expanded={mobileOpen}
             aria-label="Open navigation"
-            className="grid size-11 place-items-center rounded-lg text-slate-700 hover:bg-slate-100 lg:hidden"
+            className="grid size-11 place-items-center rounded-control text-foreground-secondary hover:bg-surface-muted"
             onClick={() => setMobileOpen(true)}
             type="button"
           >
             <Menu aria-hidden="true" className="size-5" />
           </button>
-          <p className="text-sm font-semibold text-slate-950">{pageTitle}</p>
+          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <span className="grid size-6 place-items-center rounded-control bg-accent text-accent-foreground">
+              <BriefcaseBusiness aria-hidden="true" className="size-3.5" />
+            </span>
+            JobTrack
+          </span>
         </header>
 
-        <main className="mx-auto max-w-[1440px] p-4 sm:p-6 lg:p-8" id="main-content">
+        <main
+          className="mx-auto max-w-[1440px] p-4 sm:p-6 lg:p-8"
+          id="main-content"
+        >
           {children}
         </main>
       </div>

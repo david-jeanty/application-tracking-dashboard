@@ -52,7 +52,7 @@ export function ApplicationEditForm({
         {state.message ? (
           <div
             aria-live="polite"
-            className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+            className="flex gap-2 rounded-control border border-danger/30 bg-danger-soft p-3 text-sm text-danger"
             role="alert"
           >
             <AlertTriangle
@@ -69,7 +69,7 @@ export function ApplicationEditForm({
           optionalDetailsOpen
         />
 
-        <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-5 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-3 border-t border-border pt-5 sm:flex-row sm:justify-end">
           <ButtonLink
             href={`/applications/${applicationId}`}
             variant="secondary"
