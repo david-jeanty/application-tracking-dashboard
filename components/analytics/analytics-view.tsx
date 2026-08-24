@@ -106,11 +106,16 @@ export function AnalyticsView({
         keeping score. When something beyond the funnel rendered, the page has
         already shown that it grows, and the absence explains itself.
 
+        The narrowing callout counts as something beyond the funnel. It is
+        subordinate to the funnel visually, but it is a section the page grew
+        into, and a search that has earned a conversion conclusion is not one
+        that needs telling more will appear.
+
         It says what appears, not what is missing. "More breakdowns appear as
         your search history grows" is a fact about the page; "not enough data
         yet" would be a verdict on the search.
       */}
-      {lenses.length === 0 && !activity.hasEnoughHistory ? (
+      {!funnel.narrowing && lenses.length === 0 && !activity.hasEnoughHistory ? (
         <QuietNote>More breakdowns appear as your search history grows.</QuietNote>
       ) : null}
     </div>

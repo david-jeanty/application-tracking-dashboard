@@ -754,11 +754,14 @@ describe("search activity", () => {
     await renderAnalytics(many("n", 8, { path: ["Applied"], dateApplied: null }));
 
     expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
-    // Eight applications from one source and one category, none of them dated:
-    // the funnel is the whole page, so the one quiet sentence appears.
+    // Eight applications from one source and one category, none of them dated,
+    // so nothing here draws a comparison or a line. The narrowing callout does
+    // draw — 0 of 8 clears both its thresholds — so the funnel is not the whole
+    // page and no sentence stands in for what is missing.
     expect(
-      screen.getByText("More breakdowns appear as your search history grows."),
+      screen.getByRole("region", { name: "Where your funnel narrows" }),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/^More breakdowns appear/)).toBeNull();
   });
 
   it("says nothing about the missing chart when the page grew anyway", async () => {
@@ -938,6 +941,29 @@ describe("progressive disclosure", () => {
     expect(within(funnel).getAllByText(/continued$/)).toHaveLength(1);
     expect(within(funnel).getByText("0% continued")).toBeInTheDocument();
     expect(screen.getAllByText("—")).toHaveLength(2);
+  });
+
+  it("says nothing more will appear once a narrowing callout has", async () => {
+    // Six submitted from one source, one category, all dated in the same week:
+    // no comparison, no line. But 0 of 6 clears both narrowing thresholds, so
+    // the funnel is not the whole page and the sentence would be telling a
+    // student that more will appear directly underneath something that just
+    // did.
+    await renderAnalytics(
+      many("n", 6, {
+        source: "LinkedIn",
+        category: "Finance",
+        path: ["Applied"],
+        dateApplied: daysAgo(2),
+      }),
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Where your funnel narrows" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
+    expect(screen.queryByText(/^More breakdowns appear/)).toBeNull();
   });
 
   it("omits What works at three submitted with nothing to compare", async () => {
