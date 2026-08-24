@@ -1,5 +1,158 @@
 # Implementation log
 
+## 2026-08-24 — Phase 3B: analytics visualisation and source performance
+
+### Scope
+
+The existing `/analytics` page, made easier to read, plus one genuinely new
+analytical section. No metric was redefined, no schema changed, no MCP tool
+touched, and no chart library added.
+
+The page answers "how is my search performing?". The dashboard answers "what
+should I do next?". Neither borrowed the other's job.
+
+### Audit result
+
+`application_source` turned out to be the whole question, so it was audited
+first and not assumed:
+
+- **Free text.** No enum, no normalization anywhere in the write path.
+- **`not null`**, with `check (char_length(btrim(application_source)) between 1
+  and 100)`. It can never be null and never blank in the database.
+- **Sentinel-backed.** A blank form field or omitted MCP argument is written as
+  `Not specified` by `toApplicationInsert`, and `displayOptionalText` converts
+  that back to nothing for display. So "no source" already has a stored
+  representation, and analytics did not need to invent one.
+- **Absent from the list projection.** `APPLICATION_SUMMARY_COLUMNS` does not
+  select it; only the detail projection does.
+
+No architectural mismatch. Nothing about source performance needed a migration,
+a taxonomy, or a second definition of any existing metric.
+
+### Data access
+
+A third projection rather than a widened list one. `APPLICATION_SUMMARY_COLUMNS`
+is documented as the single projection every list read shares, and no list
+surface renders a source; adding one column there would have handed it to the
+applications page, the archive, the dashboard, and `list_jobs` alike. The
+repository already sets this precedent — `listStatusHistory` and
+`listStatusTimeline` are two reads rather than one widened type, for exactly
+this reason.
+
+`listApplicationsForAnalytics` selects five columns —
+`id,current_status,normalized_job_category,application_source,archived_at` —
+which is *smaller* than the list projection, not larger. The page still makes
+two owner-scoped reads in total, and neither grows with the number of sections
+on it.
+
+### Source performance
+
+The section answers "where are my submitted applications coming from, and what
+happened to them?" and stops there.
+
+**Population.** Only applications whose history shows they were actually
+submitted are counted at all. A job saved as Interested and never sent says
+nothing about a source and would silently punish whichever source a student
+browses most. A source with 20 saved, 12 submitted and 2 interviews therefore
+reports 2/12, not 2/20.
+
+**Formulas**, all from status history and all reusing the existing shared status
+sets:
+
+- `submitted` — ever reached a `SUBMITTED_STATUSES` status
+- `employerResponded` — ever reached an `EMPLOYER_RESPONSE_STATUSES` status
+- `interviews` — ever reached an `INTERVIEW_STATUSES` status
+- `offers` — ever reached an `OFFER_STATUSES` status
+- `interviewRate` — `toPercent(interviews, submitted)`
+
+An application that interviewed and was later rejected still counts as an
+interview for its source, because current status is never consulted.
+
+**Grouping** is trim plus lowercase, and nothing else. `LinkedIn`, `linkedin`,
+and `LINKEDIN ` are one source because they differ only in typing. `LinkedIn`
+and `LinkedIn Easy Apply` stay two, because nothing in the data model says they
+are the same and deciding that they are would be inventing a taxonomy this
+product does not have. The label shown is the spelling the student uses most,
+with ties broken on the value rather than on row order, so the table does not
+depend on what order the database returned.
+
+**Small samples** are shown, never hidden, graded, or dressed in a confidence
+interval: every rate arrives as `100% · 1 of 1`, never a bare `100%`. Rows are
+ordered by submitted count descending — never by rate, which would put one
+lucky application at the top and read as a recommendation — and the visible bar
+encodes volume rather than rate for the same reason. The `Not specified` bucket
+sorts last whatever its size: it is the residue after the real sources, not an
+answer to where applications came from.
+
+### The conversion funnel
+
+Same four metrics, same shared denominator, presented so the denominator is
+visible. `Submitted` is now a row at 100% with a rule under it, and every stage
+below shows a raw count *and* a percentage rather than a percentage alone.
+
+These remain shares of everything submitted. Stage-to-stage conversion —
+"of the applications that got a response, how many interviewed" — is a
+different and arguably useful metric, and is **deliberately not built here**;
+it is recorded in the backlog instead of being slipped in behind the same
+labels.
+
+### No chart library
+
+Recharts is permitted from Phase 3 and is still not installed, because after
+the audit it would not have improved any of these three visualisations.
+
+All three — funnel, current status, categories — are single-series magnitude
+comparisons over ten, sixteen, and five ordered rows. That is the case where a
+table is the recommended form rather than a compromise, and the page already
+renders it as a real table: row headers, values in cells, a decorative bar
+layered over numbers that are already readable. The bar occupies a real column
+and so carries a real column header, visible only to assistive technology —
+the same treatment the archive table gives its actions column. A body row with
+more cells than the header row describes is how a table stops being navigable,
+whatever those extra cells contain. The accessibility requirement
+(and the architecture plan's own rule that every chart gets a table equivalent)
+means a chart here would be rendered *in addition to* that table, so the same
+numbers would exist twice in two components that can drift.
+
+Recharts is also client-side; this page is a server component with no client
+JavaScript at all. Adding it would move values into hover tooltips, which is
+precisely what the accessibility rules forbid relying on.
+
+The bars were corrected while they were open: square at the baseline, 4px
+rounded at the data end, so each one reads as growing from a shared origin. One
+hue throughout, doing magnitude and nothing else — no value-ramp, which would
+have spent the only free channel restating the length the bar already shows.
+
+### Low-data states
+
+The existing zero-application empty state is unchanged. Two new ones sit inside
+the page rather than replacing it: with nothing submitted, the funnel and the
+source table each say so in one flat sentence instead of rendering an empty
+chart. Submitted applications with no responses yet produce real zeros, not
+blanks.
+
+The copy is deliberately unencouraging. A student with nothing submitted is not
+behind and not failing; this page's job is to say what the data shows and stop.
+
+### Verification
+
+- `npm run lint`: passed.
+- `npm run typecheck`: passed.
+- `npm run test`: passed.
+- `npm run build`: passed.
+- Credential-free `npm run test:e2e`: public and protection tests passed;
+  authenticated tests were correctly skipped for want of `E2E_USER_EMAIL` and
+  `E2E_USER_PASSWORD`.
+- Desktop (1280), tablet (834), and mobile (390) were rendered and inspected
+  from the real component with the production stylesheet. No horizontal
+  document overflow at any width; the source table becomes stacked cards below
+  `md` rather than a horizontal scroller.
+- `npm run test:db` was **not** run: it needs Docker, unavailable here. This
+  ticket adds no database behaviour and no migration, so no pgTAP suite was
+  added and the existing suites remain as previously described — unexecuted in
+  this environment.
+
+
 ## 2026-08-24 — Logos appear automatically for jobs saved through Claude
 
 ### Scope

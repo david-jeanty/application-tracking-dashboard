@@ -4,19 +4,35 @@ import { redirect } from "next/navigation";
 import {
   MetricBars,
   MetricPanel,
+  NotEnoughData,
   StatTile,
   type MetricRow,
 } from "@/components/analytics/metric-display";
+import { SourcePerformance } from "@/components/analytics/source-performance";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { summarizeApplications } from "@/lib/analytics/calculate";
+import { summarizeSourcePerformance } from "@/lib/analytics/sources";
 import {
-  listApplications,
+  listApplicationsForAnalytics,
   listStatusHistory,
 } from "@/lib/applications/repository";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Analytics" };
+
+/** Bars are drawn against the largest row, so the tallest one fills the width. */
+function toCountRows(
+  entries: readonly { label: string; count: number }[],
+): MetricRow[] {
+  const widest = Math.max(...entries.map((entry) => entry.count), 1);
+
+  return entries.map((entry) => ({
+    label: entry.label,
+    valueLabel: String(entry.count),
+    percent: (entry.count / widest) * 100,
+  }));
+}
 
 export default async function AnalyticsPage() {
   const supabase = await createClient();
@@ -26,11 +42,13 @@ export default async function AnalyticsPage() {
 
   if (!user) redirect("/login");
 
-  // Both reads are owner-scoped, and analytics covers every application the
-  // student has saved — archived ones included, because a role they tidied
-  // away still happened and dropping it would inflate every rate.
+  // Two owner-scoped reads for the whole page, and neither grows with the
+  // number of sections: every figure below is an aggregate over these same two
+  // results. Analytics covers every application the student has saved,
+  // archived ones included, because a role they tidied away still happened and
+  // dropping it would inflate every rate.
   const [applications, history] = await Promise.all([
-    listApplications(supabase, user.id, { archiveState: "all" }),
+    listApplicationsForAnalytics(supabase, user.id),
     listStatusHistory(supabase, user.id),
   ]);
 
@@ -52,10 +70,10 @@ export default async function AnalyticsPage() {
     );
   }
 
-  const summary = summarizeApplications(
-    applications.data ?? [],
-    history.data ?? [],
-  );
+  const rows = applications.data ?? [];
+  const events = history.data ?? [];
+  const summary = summarizeApplications(rows, events);
+  const sources = summarizeSourcePerformance(rows, events);
 
   if (summary.totalSaved === 0) {
     return (
@@ -80,43 +98,46 @@ export default async function AnalyticsPage() {
     );
   }
 
-  const maximumStatusCount = Math.max(
-    ...summary.statusCounts.map((entry) => entry.count),
-    1,
-  );
-  const maximumCategoryCount = Math.max(
-    ...summary.categoryCounts.map((entry) => entry.count),
-    1,
-  );
+  const hasSubmitted = summary.everSubmitted > 0;
+  const submittedNoun =
+    summary.everSubmitted === 1 ? "application" : "applications";
 
-  const statusRows: MetricRow[] = summary.statusCounts.map((entry) => ({
-    label: entry.label,
-    valueLabel: String(entry.count),
-    percent: (entry.count / maximumStatusCount) * 100,
-  }));
+  /*
+    The funnel, as one table with a visible denominator.
 
-  const categoryRows: MetricRow[] = summary.categoryCounts.map((entry) => ({
-    label: entry.label,
-    valueLabel: String(entry.count),
-    percent: (entry.count / maximumCategoryCount) * 100,
-  }));
-
-  const conversionRows: MetricRow[] = summary.conversions.map((metric) => ({
-    label: metric.label,
-    valueLabel: `${metric.percent}%`,
-    percent: metric.percent,
-  }));
+    The first row is `Submitted` at 100%, and every row below is a share of
+    that same number — the same denominator the metrics module already uses.
+    These are not stage-to-stage conversions: `Reached an interview` is a share
+    of everything submitted, not a share of the applications that got a
+    response. Making the base a row rather than a sentence is what keeps that
+    readable at a glance.
+  */
+  const funnelRows: MetricRow[] = [
+    {
+      label: "Submitted",
+      valueLabel: String(summary.everSubmitted),
+      detailLabel: "100%",
+      percent: 100,
+      isBaseline: true,
+    },
+    ...summary.conversions.map((metric) => ({
+      label: metric.label,
+      valueLabel: String(metric.reached),
+      detailLabel: `${metric.percent}%`,
+      percent: metric.percent,
+    })),
+  ];
 
   return (
     <div className="space-y-6">
       <AnalyticsHeader />
 
-      <section aria-labelledby="analytics-current">
+      <section aria-labelledby="analytics-overview">
         <h2
           className="text-base font-semibold text-slate-950"
-          id="analytics-current"
+          id="analytics-overview"
         >
-          Where things stand
+          Search overview
         </h2>
         <div className="mt-3 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatTile
@@ -142,42 +163,78 @@ export default async function AnalyticsPage() {
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <section aria-labelledby="analytics-funnel">
         <MetricPanel
-          description={`Out of ${summary.everSubmitted} submitted ${
-            summary.everSubmitted === 1 ? "application" : "applications"
-          }, counted from status history — an interview that later became a rejection still counts as an interview.`}
+          description={
+            hasSubmitted
+              ? `Every share below is out of the same ${summary.everSubmitted} submitted ${submittedNoun}, counted from status history — an interview that later became a rejection still counts as an interview.`
+              : "Counted from status history, out of every application you have submitted."
+          }
           title="How far applications got"
+          titleId="analytics-funnel"
         >
-          <MetricBars
-            caption="Share of submitted applications that ever reached each stage"
-            rows={conversionRows}
-            valueHeading="Share of submitted applications"
-          />
+          {hasSubmitted ? (
+            <MetricBars
+              caption="Applications that ever reached each stage, as a count and as a share of everything submitted"
+              detailHeading="Share of submitted applications"
+              rows={funnelRows}
+              valueHeading="Applications"
+            />
+          ) : (
+            <NotEnoughData>
+              Nothing has been submitted yet, so there is nothing to measure
+              here. These figures appear once you have submitted an application.
+            </NotEnoughData>
+          )}
         </MetricPanel>
+      </section>
 
+      <section aria-labelledby="analytics-sources">
         <MetricPanel
-          description="Current status of every saved application, including archived ones."
-          title="Current status"
+          description="Only applications you actually submitted are counted, so a job saved and never sent does not affect a source's rate. Interview rate is interviews out of that source's submitted applications."
+          title="Source performance"
+          titleId="analytics-sources"
         >
-          <MetricBars
-            caption="Number of applications at each current status"
-            rows={statusRows}
-            valueHeading="Applications"
-          />
+          {sources.length ? (
+            <SourcePerformance rows={sources} />
+          ) : (
+            <NotEnoughData>
+              Nothing has been submitted yet. A source appears here once one of
+              the applications you saved from it has been submitted.
+            </NotEnoughData>
+          )}
         </MetricPanel>
-      </div>
+      </section>
 
-      <MetricPanel
-        description="Every saved application, grouped by its normalized category."
-        title="Categories"
-      >
-        <MetricBars
-          caption="Number of applications in each category"
-          rows={categoryRows}
-          valueHeading="Applications"
-        />
-      </MetricPanel>
+      <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+        <section aria-labelledby="analytics-status">
+          <MetricPanel
+            description="Where every saved application stands today, archived ones included. These are current states, not conversion rates."
+            title="Current status"
+            titleId="analytics-status"
+          >
+            <MetricBars
+              caption="Number of applications at each current status"
+              rows={toCountRows(summary.statusCounts)}
+              valueHeading="Applications"
+            />
+          </MetricPanel>
+        </section>
+
+        <section aria-labelledby="analytics-categories">
+          <MetricPanel
+            description="Every saved application, grouped by its normalized category. Categories you have never used are left out."
+            title="Categories"
+            titleId="analytics-categories"
+          >
+            <MetricBars
+              caption="Number of applications in each category"
+              rows={toCountRows(summary.categoryCounts)}
+              valueHeading="Applications"
+            />
+          </MetricPanel>
+        </section>
+      </div>
     </div>
   );
 }

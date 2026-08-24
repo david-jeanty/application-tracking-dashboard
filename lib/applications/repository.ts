@@ -16,6 +16,7 @@ import {
   toSearchFilter,
 } from "@/lib/applications/search";
 import type {
+  ApplicationAnalyticsRow,
   ApplicationListItem,
   ApplicationRecord,
   ApplicationStatusEvent,
@@ -36,6 +37,43 @@ const APPLICATION_DETAIL_COLUMNS =
  */
 const APPLICATION_SUMMARY_COLUMNS =
   "id,company_name,company_domain,original_job_title,normalized_job_category,current_status,location,work_arrangement,work_term_season,date_applied,application_deadline,next_action,next_action_due_date,created_at,archived_at";
+
+/**
+ * The analytics projection: the five columns the metrics actually read.
+ *
+ * Deliberately not `APPLICATION_SUMMARY_COLUMNS`. Analytics needs
+ * `application_source`, which no list surface renders, and needs none of the
+ * dates, titles, or branding every list surface does. Selecting its own
+ * columns keeps that widening out of the shared list contract and keeps this
+ * read the smaller of the two.
+ */
+const APPLICATION_ANALYTICS_COLUMNS =
+  "id,current_status,normalized_job_category,application_source,archived_at";
+
+/**
+ * Every application the user has saved, projected for analytics.
+ *
+ * No archive filter, by design: analytics describes the whole search, and a
+ * rejected role a student tidied away still happened. The applications list
+ * takes the opposite view because it is a worklist rather than a record.
+ *
+ * No ordering either. Every analytics figure is an aggregate over the whole
+ * set, and the source grouping breaks its ties on the values themselves rather
+ * than on row order, so nothing downstream can depend on the sequence.
+ *
+ * Owner-scoped like every other read here, with row-level security applying
+ * again underneath.
+ */
+export async function listApplicationsForAnalytics(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+) {
+  return supabase
+    .from("applications")
+    .select(APPLICATION_ANALYTICS_COLUMNS)
+    .eq("user_id", authenticatedUserId)
+    .returns<ApplicationAnalyticsRow[]>();
+}
 
 export async function createApplication(
   supabase: SupabaseClient,

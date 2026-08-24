@@ -54,9 +54,17 @@ export type AnalyticsSummary = {
   conversions: ConversionMetric[];
 };
 
-/** The set of statuses each application has ever held. */
-function reachedByApplication(
-  history: AnalyticsHistoryEvent[],
+/**
+ * The set of statuses each application has ever held.
+ *
+ * One pass over the whole history, producing the structure every "ever
+ * reached" question is answered from. Exported because source performance asks
+ * the same question per source: with this map, a source's interview count is a
+ * set lookup per application rather than a rescan of history per source, which
+ * is the difference between one linear pass and a quadratic one.
+ */
+export function reachedStatusesByApplication(
+  history: readonly AnalyticsHistoryEvent[],
 ): Map<string, Set<ApplicationStatus>> {
   const reached = new Map<string, Set<ApplicationStatus>>();
 
@@ -69,15 +77,30 @@ function reachedByApplication(
   return reached;
 }
 
+/**
+ * Whether one application ever held any of the given statuses.
+ *
+ * The single predicate behind every "ever reached" figure on the page, so the
+ * conversion funnel and the per-source columns cannot drift into asking the
+ * question two different ways.
+ */
+export function hasEverReached(
+  reached: Map<string, Set<ApplicationStatus>>,
+  applicationId: string,
+  statuses: readonly ApplicationStatus[],
+): boolean {
+  const held = reached.get(applicationId);
+  return held ? statuses.some((status) => held.has(status)) : false;
+}
+
 function countReaching(
   applications: AnalyticsApplication[],
   reached: Map<string, Set<ApplicationStatus>>,
   statuses: readonly ApplicationStatus[],
 ): number {
-  return applications.filter((application) => {
-    const held = reached.get(application.id);
-    return held ? statuses.some((status) => held.has(status)) : false;
-  }).length;
+  return applications.filter((application) =>
+    hasEverReached(reached, application.id, statuses),
+  ).length;
 }
 
 function countGroups(values: string[]): CountedGroup[] {
@@ -117,7 +140,7 @@ export function summarizeApplications(
   applications: AnalyticsApplication[],
   history: AnalyticsHistoryEvent[],
 ): AnalyticsSummary {
-  const reached = reachedByApplication(history);
+  const reached = reachedStatusesByApplication(history);
 
   const everSubmitted = countReaching(applications, reached, SUBMITTED_STATUSES);
 

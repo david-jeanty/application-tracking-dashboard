@@ -33,25 +33,53 @@ export type MetricRow = {
   label: string;
   /** The number a reader should take away, already formatted. */
   valueLabel: string;
+  /**
+   * A second figure shown beside the first — a share of a total, say. Present
+   * so a reader never has to derive one number from another, or from a bar.
+   */
+  detailLabel?: string;
   /** How far the bar is drawn, 0–100. */
   percent: number;
+  /**
+   * Marks the row every other row is measured against.
+   *
+   * Set on the denominator of a funnel, so the shared base is visible as a row
+   * rather than only stated in prose. Distinguished by weight and a rule, not
+   * by colour: the bars stay one hue, which is doing magnitude and nothing else.
+   */
+  isBaseline?: boolean;
 };
 
 /**
  * A labelled magnitude comparison, rendered as a table with bars.
  *
- * Ten application statuses is far past the point where colour can carry
- * identity, so identity lives in the row label and the bars use one hue for
- * magnitude alone. The table is not a fallback view bolted on for screen
- * readers — it is the primary structure, with every value present as text, and
- * the bars are decoration layered on top of numbers that are already readable.
+ * Ten application statuses and sixteen categories are both far past the point
+ * where colour can carry identity, so identity lives in the row label and the
+ * bars use one hue for magnitude alone. Deliberately not a value-ramp: shading
+ * each bar darker where it is longer would spend the only free channel
+ * restating the length the bar already shows.
+ *
+ * The table is not a fallback bolted on for screen readers — it is the primary
+ * structure. Every value is present as text, in a real cell, with a row header;
+ * the bars are decoration layered over numbers that are already readable, and
+ * are hidden from assistive technology because they say nothing the cells do
+ * not. Nothing here needs hover, keyboard focus, or colour vision to read.
+ *
+ * The bar occupies a real column, so it gets a real column header: a cell whose
+ * label is visible only to assistive technology, matching how the archive
+ * table heads its actions column. Leaving it out would give every row one more
+ * body cell than the header row describes, which is how a table stops being
+ * navigable — the header row has to account for every column, including the one
+ * that only exists to be looked at.
  */
 export function MetricBars({
   caption,
+  detailHeading,
   rows,
   valueHeading,
 }: {
   caption: string;
+  detailHeading?: string;
   rows: MetricRow[];
   valueHeading: string;
 }) {
@@ -62,32 +90,59 @@ export function MetricBars({
         <tr>
           <th scope="col">Name</th>
           <th scope="col">{valueHeading}</th>
+          {detailHeading ? <th scope="col">{detailHeading}</th> : null}
+          {/*
+            The bar's column. Its cells are deliberately empty to assistive
+            technology, and this header says why rather than leaving an
+            unexplained blank at the end of every row.
+          */}
+          <th scope="col">Shown as a bar</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((row) => (
-          <tr key={row.label}>
+          <tr
+            className={
+              row.isBaseline ? "border-b border-slate-200" : undefined
+            }
+            key={row.label}
+          >
             <th
-              className="w-40 py-2 pr-3 align-middle font-medium text-slate-800"
+              className={`py-2 pr-3 align-middle sm:w-44 ${
+                row.isBaseline
+                  ? "font-semibold text-slate-950"
+                  : "font-medium text-slate-800"
+              }`}
               scope="row"
             >
               {row.label}
             </th>
+            <td className="w-14 py-2 pr-3 text-right align-middle tabular-nums font-medium text-slate-950">
+              {row.valueLabel}
+            </td>
+            {detailHeading ? (
+              <td className="w-14 py-2 pr-3 text-right align-middle tabular-nums text-slate-700">
+                {row.detailLabel}
+              </td>
+            ) : null}
             <td className="py-2 align-middle">
-              <div className="flex items-center gap-3">
+              {/*
+                Purely decorative. Every number it encodes is in a cell to its
+                left, so it carries no information of its own and is hidden
+                rather than described. The cell around it stays, because the
+                column is real and the header row names it.
+              */}
+              <span
+                aria-hidden="true"
+                className="block h-2 w-full min-w-16 overflow-hidden rounded-sm bg-slate-100"
+              >
                 <span
-                  aria-hidden="true"
-                  className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-100"
-                >
-                  <span
-                    className="block h-2 rounded-full bg-blue-600"
-                    style={{ width: `${Math.max(0, Math.min(100, row.percent))}%` }}
-                  />
-                </span>
-                <span className="w-16 shrink-0 text-right tabular-nums text-slate-700">
-                  {row.valueLabel}
-                </span>
-              </div>
+                  className="block h-2 rounded-r-sm bg-blue-600"
+                  style={{
+                    width: `${Math.max(0, Math.min(100, row.percent))}%`,
+                  }}
+                />
+              </span>
             </td>
           </tr>
         ))}
@@ -96,23 +151,48 @@ export function MetricBars({
   );
 }
 
-/** A titled panel around one breakdown, matching the rest of the interface. */
+/**
+ * A titled panel around one breakdown, matching the rest of the interface.
+ *
+ * `titleId` lets the surrounding `section` point its `aria-labelledby` at this
+ * heading, so each part of the page is a named landmark rather than an
+ * anonymous card a reader has to enter to identify.
+ */
 export function MetricPanel({
   children,
   description,
   title,
+  titleId,
 }: {
   children: React.ReactNode;
   description?: string;
   title: string;
+  titleId?: string;
 }) {
   return (
     <Card className="p-5">
-      <h2 className="text-base font-semibold text-slate-950">{title}</h2>
+      <h2 className="text-base font-semibold text-slate-950" id={titleId}>
+        {title}
+      </h2>
       {description ? (
         <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
       ) : null}
       <div className="mt-4">{children}</div>
     </Card>
+  );
+}
+
+/**
+ * What a section says when there is not enough of the right data to measure.
+ *
+ * Stated flatly, and only about the data. A student with nothing submitted is
+ * not behind, not failing, and not in need of encouragement — they simply have
+ * not sent anything yet, and this page's job is to say so and stop.
+ */
+export function NotEnoughData({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-sm leading-6 text-slate-600">
+      {children}
+    </p>
   );
 }

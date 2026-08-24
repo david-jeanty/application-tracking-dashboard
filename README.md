@@ -114,7 +114,8 @@ JobTrack is deployed and the Claude connection works today.
 - A dashboard that shows what needs your attention: follow-ups you noted that
   are due or overdue, and applications you haven't submitted yet that are about
   to close
-- Analytics: where your applications stand, and how far they got
+- Analytics: where your applications stand, how far they got, and what came of
+  the applications from each place you found a posting
 - Settings: connect an AI assistant, see what's connected, and disconnect it
 
 **Not built yet** — the pipeline page exists but is a placeholder. It doesn't
@@ -128,8 +129,7 @@ show fake data or pretend to save anything.
    properly
 3. Cleaning up the hosting setup
 4. Testing saved jobs against messier, longer, and stranger postings
-5. Richer analytics: response rates and which sources actually work
-6. The pipeline board
+5. The pipeline board
 
 ## Tech stack
 

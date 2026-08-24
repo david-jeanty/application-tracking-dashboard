@@ -85,6 +85,22 @@ Metrics are defined once in a shared module. Current-state counts use the curren
 application status. “Reached” metrics use status history. Interested and Preparing
 are not submitted applications. A zero denominator displays zero.
 
+Conversion figures all share one denominator: applications ever submitted. They
+are shares of that total, never stage-to-stage conversions — “reached an
+interview” is a share of everything submitted, not a share of the applications
+that got a response.
+
+Source performance counts **only applications that were ever submitted**, and
+each rate is out of that source’s own submitted applications. A job saved from
+a source and never sent affects nothing: a source with 20 saved, 12 submitted,
+and 2 interviews has an interview rate of 2/12, not 2/20. Sources are free text
+grouped only by trimming and case; distinct wordings stay distinct, and a blank
+source stays in its stored `Not specified` bucket. Rows are ordered by submitted
+count, never by rate, and every rate is shown with the sample behind it.
+
+The page is descriptive. It reports facts and rates and never ranks a source,
+grades one, or suggests what to do about it.
+
 Salary is excluded from analytics. Dashboard data must be real authenticated
 user data; production mock metrics are prohibited.
 
@@ -123,9 +139,12 @@ never parses free text itself. `delete_job` may follow later.
 2. **Application management:** CRUD, list/detail, search, filters, status, actions,
    deadlines, complete UI states. *(complete)*
 3. **Dashboard:** shared accurate metrics, actions, deadlines, recent activity,
-   accessible charts. *(in progress — 3A, the operational command centre, is
-   built: search summary, needs attention, pipeline snapshot, this week, recent
-   activity. 3B will cover analytics visualisation and conversion insight.)*
+   accessible charts. *(3A, the operational command centre, is built: search
+   summary, needs attention, pipeline snapshot, this week, recent activity. 3B,
+   analytics visualisation and source performance, is built: search overview,
+   conversion funnel, source performance, current status, categories. Phase 3
+   may be marked complete once 3B is reviewed, merged, and smoke-tested in
+   production.)*
 4. **Pipeline:** persistent status columns, failure recovery, keyboard alternative,
    responsive behavior.
 5. **MCP integration:** `/api/mcp` route, the four tools above, tool-input

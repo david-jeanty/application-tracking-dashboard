@@ -17,6 +17,15 @@ This file records ideas without silently expanding the approved phase.
 
 ## Decisions to revisit with evidence
 
+- **Stage-to-stage conversion on the analytics funnel.** Every share on the page
+  is out of applications ever submitted, and that is deliberate: it is one
+  denominator a reader can hold in their head, and it is the definition the
+  metrics module already shares with the dashboard. "Of the applications that
+  got a response, how many interviewed" is a different and plausibly useful
+  question, but it needs its own labels and its own explanation of which
+  denominator each row uses — adding it silently behind the existing labels
+  would make two different metrics look like one. Phase 3B deliberately did not
+  build it.
 - Structured salary fields (currency, amount/range, pay period) if salary
   analytics becomes a real requirement
 - Profile IANA timezone for consistent multi-device date presentation

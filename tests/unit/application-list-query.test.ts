@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getApplicationById,
   listActiveApplications,
+  listApplicationsForAnalytics,
   listActiveWorkTermSeasons,
   listApplications,
   listStatusHistory,
@@ -126,6 +127,36 @@ describe("every list read is owner-scoped and excludes archived rows", () => {
     expect(String(recorder.find("select")[0].args[0]).split(",")).toContain(
       "company_domain",
     );
+  });
+
+  it("gives analytics its own narrower projection, with the source", async () => {
+    // Analytics is the only surface that reads `application_source`, and it
+    // reads none of the dates, titles, or branding a list needs. Its own
+    // projection keeps that widening out of the shared list contract.
+    const recorder = recordingClient();
+
+    await listApplicationsForAnalytics(recorder.client, USER);
+
+    const columns = String(recorder.find("select")[0].args[0]).split(",");
+    expect(columns).toContain("application_source");
+    expect(columns).not.toContain("job_description");
+    expect(columns).not.toContain("notes");
+    expect(columns).not.toContain("company_name");
+    expect(columns.length).toBeLessThan(
+      String(recorder.find("select")[0].args[0]).length,
+    );
+  });
+
+  it("scopes the analytics read to the owner and covers archived rows", async () => {
+    // Every application the student saved, archived ones included: a role they
+    // tidied away still happened, and dropping it would inflate every rate.
+    const recorder = recordingClient();
+
+    await listApplicationsForAnalytics(recorder.client, USER);
+
+    expect(recorder.argsFor("eq", "user_id")).toEqual(["user_id", USER]);
+    expect(recorder.find("is")).toHaveLength(0);
+    expect(recorder.find("not")).toHaveLength(0);
   });
 
   it("carries the company domain in the detail projection", async () => {

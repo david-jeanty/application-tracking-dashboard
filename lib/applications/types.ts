@@ -68,6 +68,31 @@ export type ApplicationListItem = {
 };
 
 /**
+ * The projection the analytics page reads, and only that page.
+ *
+ * A separate, narrower shape than `ApplicationListItem` rather than a widening
+ * of it. Analytics is the one surface that needs `application_source`, and no
+ * list surface renders it; adding it to the shared summary would hand every
+ * list caller — the applications page, the archive, the dashboard, the MCP
+ * `list_jobs` tool — a column none of them asked for. The same reasoning
+ * already keeps `listStatusHistory` and `listStatusTimeline` apart.
+ *
+ * It is smaller than the list projection, not larger: five columns, none of
+ * them long free text.
+ */
+export type ApplicationAnalyticsRow = {
+  id: string;
+  current_status: ApplicationStatus;
+  normalized_job_category: JobCategory;
+  /**
+   * Free text, never null, and `Not specified` when nobody supplied one — see
+   * `lib/analytics/sources.ts` for what the analytics grouping makes of that.
+   */
+  application_source: string;
+  archived_at: string | null;
+};
+
+/**
  * One immutable status event, projected to what analytics reads.
  *
  * The initial event a database trigger writes on creation carries the status
