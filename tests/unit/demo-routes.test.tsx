@@ -132,16 +132,38 @@ describe("the demo dashboard", () => {
     }
   });
 
-  it("counts what the dataset actually holds", async () => {
+  it("counts the whole search, archived applications included", async () => {
     render(await DemoDashboardPage());
 
     const summary = within(
       screen.getByRole("heading", { level: 2, name: "Your search" })
         .closest("section") as HTMLElement,
     );
+    // 56, not 52: a role the student filed away still happened, and the
+    // summary is about the search rather than about today's worklist.
     expect(
       summary.getByText(String(dataset.applications.length)),
     ).toBeInTheDocument();
+    expect(dataset.applications.length).toBeGreaterThan(
+      dataset.activeApplications.length,
+    );
+  });
+
+  it("counts only live applications in the pipeline snapshot", async () => {
+    render(await DemoDashboardPage());
+
+    const snapshot = within(
+      screen.getByRole("heading", { level: 2, name: "Pipeline" })
+        .closest("section") as HTMLElement,
+    );
+    for (const status of ["Applied", "Screening", "Interview", "Offer"]) {
+      const expected = dataset.activeApplications.filter(
+        (a) => a.current_status === status,
+      ).length;
+      expect(
+        snapshot.getByRole("link", { name: new RegExp(`^${status}`) }),
+      ).toHaveTextContent(String(expected));
+    }
   });
 
   it("keeps every link inside the demo", async () => {
@@ -151,18 +173,35 @@ describe("the demo dashboard", () => {
 });
 
 describe("the demo applications list", () => {
-  it("renders the whole sample search", async () => {
+  it("renders the whole working search", async () => {
     const { container } = render(await applications());
 
     expect(
-      screen.getByText(`${dataset.applications.length} applications`),
+      screen.getByText(`${dataset.activeApplications.length} applications`),
     ).toBeInTheDocument();
-    expect(recordRows(container)).toHaveLength(dataset.applications.length);
+    expect(recordRows(container)).toHaveLength(
+      dataset.activeApplications.length,
+    );
+  });
+
+  it("leaves the archived applications out of the worklist", async () => {
+    const { container } = render(await applications());
+    const hrefs = new Set(
+      [...container.querySelectorAll("a[href]")].map((a) =>
+        a.getAttribute("href"),
+      ),
+    );
+
+    const archived = dataset.applications.filter((a) => a.archived_at !== null);
+    expect(archived.length).toBeGreaterThan(0);
+    for (const application of archived) {
+      expect(hrefs.has(`/demo/applications/${application.id}`)).toBe(false);
+    }
   });
 
   it("leads each record with its role", async () => {
     render(await applications());
-    const first = dataset.applications[0];
+    const first = dataset.activeApplications[0];
 
     expect(
       screen.getAllByRole("heading", { name: first.original_job_title })[0],
@@ -172,7 +211,7 @@ describe("the demo applications list", () => {
   it("narrows by status", async () => {
     const { container } = render(await applications({ status: "Offer" }));
 
-    const expected = dataset.applications.filter(
+    const expected = dataset.activeApplications.filter(
       (a) => a.current_status === "Offer",
     ).length;
     expect(recordRows(container)).toHaveLength(expected);
@@ -184,7 +223,7 @@ describe("the demo applications list", () => {
       await applications({ work_term: "Winter 2027" }),
     );
 
-    const expected = dataset.applications.filter(
+    const expected = dataset.activeApplications.filter(
       (a) => a.work_term_season === "Winter 2027",
     ).length;
     expect(recordRows(container)).toHaveLength(expected);
@@ -195,7 +234,7 @@ describe("the demo applications list", () => {
       await applications({ category: "Consulting" }),
     );
 
-    const expected = dataset.applications.filter(
+    const expected = dataset.activeApplications.filter(
       (a) => a.normalized_job_category === "Consulting",
     ).length;
     expect(recordRows(container)).toHaveLength(expected);
@@ -205,7 +244,7 @@ describe("the demo applications list", () => {
   it("searches employer, role and location", async () => {
     const { container } = render(await applications({ q: "deloitte" }));
 
-    const expected = dataset.applications.filter((a) =>
+    const expected = dataset.activeApplications.filter((a) =>
       a.company_name.toLowerCase().includes("deloitte"),
     ).length;
     expect(recordRows(container)).toHaveLength(expected);
@@ -310,6 +349,28 @@ describe("the demo application detail", () => {
     expectDemoLinks(container);
   });
 
+  it("still renders an archived record, read-only and marked as archived", async () => {
+    const archivedRecord = [...dataset.records.values()].find(
+      (record) => record.archived_at !== null,
+    );
+    expect(archivedRecord).toBeDefined();
+
+    const { container } = render(await detail(archivedRecord!.id));
+
+    // Reachable, because recent activity and analytics still refer to it.
+    expect(
+      screen.getByRole("heading", { level: 1, name: new RegExp(archivedRecord!.company_name) }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/This application is archived/)).toBeInTheDocument();
+
+    // And still read-only: no Restore, no Delete, no Edit, no quick update.
+    for (const name of [/^Restore$/, /Delete/, /^Edit$/, /^Archive$/]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name })).not.toBeInTheDocument();
+    }
+    expect(container.querySelector("form")).toBeNull();
+  });
+
   it("does not find an application that is not in the sample", async () => {
     await expect(detail("not-a-real-application")).rejects.toThrow(
       "NEXT_NOT_FOUND",
@@ -370,6 +431,41 @@ describe("the demo pipeline", () => {
   it("keeps every card link inside the demo", async () => {
     const { container } = render(await pipeline());
     expectDemoLinks(container);
+  });
+
+  it("counts only what is still in play", async () => {
+    render(await pipeline());
+
+    expect(
+      screen.getByText(`${dataset.activeApplications.length} applications`),
+    ).toBeInTheDocument();
+  });
+
+  it("gives an archived application no column", async () => {
+    const { container } = render(await pipeline());
+    const hrefs = new Set(
+      [...container.querySelectorAll("a[href]")].map((a) =>
+        a.getAttribute("href"),
+      ),
+    );
+
+    for (const application of dataset.applications.filter(
+      (a) => a.archived_at !== null,
+    )) {
+      expect(hrefs.has(`/demo/applications/${application.id}`)).toBe(false);
+    }
+  });
+
+  it("still fills every column from the active records alone", async () => {
+    render(await pipeline());
+
+    // Ten headings with a count each, and none of them zero: archiving four
+    // finished applications must not empty a status out of the board.
+    for (const status of APPLICATION_STATUSES) {
+      expect(
+        screen.getByRole("list", { name: `${status} applications` }),
+      ).toBeInTheDocument();
+    }
   });
 });
 

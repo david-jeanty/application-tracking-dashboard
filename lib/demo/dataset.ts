@@ -21,8 +21,22 @@ import { DEMO_SEEDS, type DemoSeed } from "@/lib/demo/seeds";
  * one page cannot disagree with a count on another.
  */
 export type DemoDataset = {
-  /** The summary projection, newest first, as every list read returns. */
+  /**
+   * Every application, newest first, archived ones included.
+   *
+   * The population the dashboard and analytics reason about, matching what
+   * production reads with `archiveState: "all"`. A role the student filed away
+   * still happened, and dropping it here would quietly inflate every rate.
+   */
   applications: ApplicationListItem[];
+  /**
+   * Everything still in play, in the same order.
+   *
+   * What the applications list and the pipeline board show, matching
+   * `listActiveApplications`. Derived from the same records rather than from a
+   * second fixture, so the two populations cannot disagree about a record.
+   */
+  activeApplications: ApplicationListItem[];
   /** The full records, by id, for the detail page. */
   records: Map<string, ApplicationRecord>;
   /** The analytics projection. */
@@ -122,9 +136,13 @@ function toRecord(seed: DemoSeed, today: string): ApplicationRecord {
       : null,
     created_at: `${days[0]}${EVENT_TIME}`,
     updated_at: `${days[days.length - 1]}${EVENT_TIME}`,
-    // The demo has no archive: every sample application is one the student is
-    // still working, which is what keeps all five surfaces about the same set.
-    archived_at: null,
+    // A handful of finished applications are filed away, as a real tracker's
+    // are. They keep their history and stay in the analytics; they simply stop
+    // appearing on the surfaces about what is still in play.
+    archived_at:
+      seed.archivedDaysAgo === undefined
+        ? null
+        : `${dayBefore(today, seed.archivedDaysAgo)}${EVENT_TIME}`,
   };
 }
 
@@ -189,8 +207,13 @@ export function buildDemoDataset(today: string): DemoDataset {
     });
   }
 
+  const applications = ordered.map(toListItem);
+
   return {
-    applications: ordered.map(toListItem),
+    applications,
+    activeApplications: applications.filter(
+      (application) => application.archived_at === null,
+    ),
     records: new Map(records.map((record) => [record.id, record])),
     analyticsRows: ordered.map((record) => ({
       id: record.id,

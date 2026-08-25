@@ -43,6 +43,15 @@ export type DemoSeed = {
   nextAction?: { text: string; inDays: number };
   /** Days from today the posting closes. Only meaningful before submission. */
   deadlineInDays?: number;
+  /**
+   * Days before today that the student filed this one away.
+   *
+   * Absent on all but a handful of finished records, which is what a real
+   * archive looks like. Archiving is not deletion: an archived application
+   * keeps its whole history and stays part of the search analytics describe,
+   * and it simply stops appearing on the surfaces about what is still in play.
+   */
+  archivedDaysAgo?: number;
 };
 
 export const DEMO_WORK_TERMS = [
@@ -73,12 +82,12 @@ const TORONTO = "Toronto, ON";
 export const DEMO_SEEDS: readonly DemoSeed[] = [
   // ---------------------------------------------------------------- Fall 2026
   {
-    id: "deloitte-technology-consulting-f26",
+    id: "deloitte-technology-consulting-w27",
     company: "Deloitte",
     domain: "deloitte.com",
     title: "Technology Consulting Intern",
     category: "Consulting",
-    term: "Fall 2026",
+    term: "Winter 2027",
     source: "Company website",
     path: ["Applied", "Screening", "Interview", "Offer"],
     firstEventDaysAgo: 52,
@@ -88,7 +97,7 @@ export const DEMO_SEEDS: readonly DemoSeed[] = [
     salary: "$27/hour",
     duration: "4 months",
     notes:
-      "Offer received after the second round. Asked for a week to decide while the RBC and Accenture processes finish.",
+      "Offer received after the second round. Asked for a week to decide — the TD offer is open until the end of the month and the RBC process is still running.",
     nextAction: { text: "Reply to the Deloitte offer", inDays: 1 },
   },
   {
@@ -105,7 +114,7 @@ export const DEMO_SEEDS: readonly DemoSeed[] = [
     location: TORONTO,
     arrangement: "Hybrid",
     salary: "$26/hour",
-    duration: "8 months",
+    duration: "4 months",
     url: "https://www.example.com/careers/business-technology-analyst-intern",
     notes:
       "Referred by a classmate on their second term. Two rounds: a case discussion, then a conversation with the delivery lead. Accepted — this is the Fall term sorted.",
@@ -139,6 +148,8 @@ export const DEMO_SEEDS: readonly DemoSeed[] = [
     firstEventDaysAgo: 68,
     stepDays: 14,
     location: TORONTO,
+    // Rejected, read, and tidied away. Still part of the funnel.
+    archivedDaysAgo: 41,
   },
   {
     id: "td-commercial-banking-f26",
@@ -181,6 +192,8 @@ export const DEMO_SEEDS: readonly DemoSeed[] = [
     location: "Ottawa, ON",
     arrangement: "Hybrid",
     notes: "Did the online assessment. No feedback given.",
+    // Rejected, read, and tidied away. Still part of the funnel.
+    archivedDaysAgo: 33,
   },
   {
     id: "bmo-capital-markets-operations-f26",
@@ -246,7 +259,7 @@ export const DEMO_SEEDS: readonly DemoSeed[] = [
     category: "Strategy and Operations",
     term: "Fall 2026",
     source: "Referral",
-    path: ["Applied", "Screening", "Interview", "Offer", "Accepted"],
+    path: ["Applied", "Screening", "Interview", "Offer", "Withdrawn"],
     firstEventDaysAgo: 78,
     stepDays: 12,
     location: "Montréal, QC",
@@ -254,7 +267,10 @@ export const DEMO_SEEDS: readonly DemoSeed[] = [
     salary: "$25/hour",
     duration: "4 months",
     notes:
-      "Accepted for the earlier block. Bilingual role — the interview was half in French.",
+      "Declined — took the IBM offer for the same term instead. Bilingual role; the interview was half in French, which was good practice.",
+    // Finished and filed away. It still counts in the funnel, because reaching
+    // an offer is part of what happened this cycle.
+    archivedDaysAgo: 24,
   },
   {
     id: "telus-sales-operations-f26",
@@ -365,12 +381,12 @@ export const DEMO_SEEDS: readonly DemoSeed[] = [
     notes: "Offer open until the end of the month.",
   },
   {
-    id: "accenture-technology-strategy-w27",
+    id: "accenture-technology-strategy-s27",
     company: "Accenture",
     domain: "accenture.com",
     title: "Technology Strategy Intern",
     category: "Consulting",
-    term: "Winter 2027",
+    term: "Summer 2027",
     source: "LinkedIn",
     path: ["Applied", "Screening", "Assessment", "Interview", "Offer"],
     firstEventDaysAgo: 50,
@@ -379,7 +395,8 @@ export const DEMO_SEEDS: readonly DemoSeed[] = [
     arrangement: "Hybrid",
     salary: "$28/hour",
     duration: "4 months",
-    notes: "Four stages. The longest process of the three offers.",
+    notes:
+      "Four stages, and the longest process of the three offers. A summer role, so it does not compete with the winter ones.",
   },
   {
     id: "ibm-ai-automation-business-analyst-w27",
@@ -518,6 +535,8 @@ export const DEMO_SEEDS: readonly DemoSeed[] = [
     path: ["Applied", "Rejected"],
     firstEventDaysAgo: 39,
     stepDays: 12,
+    // Rejected, read, and tidied away. Still part of the funnel.
+    archivedDaysAgo: 15,
   },
   {
     id: "shopify-revenue-operations-w27",

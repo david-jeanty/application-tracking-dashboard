@@ -117,7 +117,7 @@ export function SidebarContent({
   const renderItems = (items: readonly NavigationItem[]) =>
     items.map((item) => (
       <NavigationLink
-        active={isNavigationItemActive(pathname, item.href)}
+        active={isNavigationItemActive(pathname, item)}
         item={item}
         key={item.href}
         onNavigate={onNavigate}

@@ -235,9 +235,159 @@ describe("every record is internally coherent", () => {
     expect(rich.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("archives nothing, because the demo has no archive", () => {
-    for (const application of dataset.applications) {
+});
+
+describe("a few finished applications are filed away", () => {
+  const archived = dataset.applications.filter((a) => a.archived_at !== null);
+
+  it("archives a handful, and leaves the search intact", () => {
+    expect(dataset.applications).toHaveLength(56);
+    expect(archived.length).toBeGreaterThanOrEqual(1);
+    expect(archived).toHaveLength(4);
+    expect(dataset.activeApplications.length).toBeGreaterThanOrEqual(50);
+    expect(dataset.activeApplications).toHaveLength(52);
+  });
+
+  it("archives only finished applications", () => {
+    // Filing away something still in play would be a claim about the student's
+    // search that the rest of the fixture contradicts.
+    for (const application of archived) {
+      expect(["Rejected", "Withdrawn"]).toContain(application.current_status);
+    }
+  });
+
+  it("empties no status by archiving it", () => {
+    for (const status of ["Rejected", "Withdrawn"] as const) {
+      const remaining = dataset.activeApplications.filter(
+        (a) => a.current_status === status,
+      );
+      expect(remaining.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("leaves every live outcome in play", () => {
+    for (const application of archived) {
+      expect(["Offer", "Accepted"]).not.toContain(application.current_status);
+    }
+  });
+
+  it("dates each archive deterministically, relative to today", () => {
+    for (const application of archived) {
+      const day = application.archived_at?.slice(0, 10) ?? "";
+      expect(isDateOnly(day)).toBe(true);
+      expect(day <= TODAY).toBe(true);
+      // Filed away after it was saved, never before.
+      expect(day >= application.created_at.slice(0, 10)).toBe(true);
+    }
+  });
+
+  it("produces the same archive values for the same day", () => {
+    const again = buildDemoDataset(TODAY);
+    expect(again.applications.map((a) => a.archived_at)).toEqual(
+      dataset.applications.map((a) => a.archived_at),
+    );
+  });
+
+  it("moves the archive dates with the calendar too", () => {
+    const later = buildDemoDataset("2027-03-01");
+    const archivedLater = later.applications.filter(
+      (a) => a.archived_at !== null,
+    );
+
+    expect(archivedLater).toHaveLength(archived.length);
+    expect(archivedLater[0].archived_at).not.toBe(archived[0].archived_at);
+  });
+
+  it("keeps every archived record's history", () => {
+    for (const application of archived) {
+      const events = dataset.statusEvents.filter(
+        (event) => event.application_id === application.id,
+      );
+      // Archiving is not deletion. The events that got it to its outcome are
+      // exactly what analytics still needs from it.
+      expect(events.length).toBeGreaterThan(1);
+      expect(events.map((event) => event.new_status)).toContain(
+        application.current_status,
+      );
+    }
+  });
+
+  it("leaves the archived rows in the analytics population", () => {
+    for (const application of archived) {
+      expect(
+        dataset.analyticsRows.some((row) => row.id === application.id),
+      ).toBe(true);
+    }
+  });
+
+  it("keeps the active population out of the archive and vice versa", () => {
+    for (const application of dataset.activeApplications) {
       expect(application.archived_at).toBeNull();
+    }
+    const activeIds = new Set(dataset.activeApplications.map((a) => a.id));
+    for (const application of archived) {
+      expect(activeIds.has(application.id)).toBe(false);
+    }
+  });
+});
+
+describe("the active workspace", () => {
+  const active = dataset.activeApplications;
+  const activeByStatus = countBy(active.map((a) => a.current_status));
+
+  it("still has every canonical status in the board", () => {
+    for (const status of APPLICATION_STATUSES) {
+      expect(activeByStatus[status] ?? 0).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("keeps all three live offers and the accepted term", () => {
+    expect(activeByStatus.Offer).toBe(3);
+    expect(activeByStatus.Accepted).toBeGreaterThanOrEqual(1);
+  });
+
+  it("keeps the middle of the board dense", () => {
+    expect(activeByStatus.Interview).toBeGreaterThanOrEqual(2);
+    expect(activeByStatus.Assessment).toBeGreaterThanOrEqual(2);
+    expect(activeByStatus.Screening).toBeGreaterThanOrEqual(2);
+    expect(activeByStatus.Rejected).toBeGreaterThanOrEqual(3);
+  });
+
+  it("still spans all three recruiting periods", () => {
+    const terms = new Set(active.map((a) => a.work_term_season));
+    expect([...terms].sort()).toEqual([...DEMO_WORK_TERMS].sort());
+  });
+});
+
+describe("the search reads as one student's year", () => {
+  const records = [...dataset.records.values()];
+
+  it("has settled exactly one term", () => {
+    const accepted = records.filter((r) => r.current_status === "Accepted");
+
+    expect(accepted).toHaveLength(1);
+    expect(accepted[0].company_name).toBe("IBM");
+    expect(accepted[0].original_job_title).toBe(
+      "Business Technology Analyst Intern",
+    );
+    expect(accepted[0].work_term_season).toBe("Fall 2026");
+    // A four-month term, so taking it does not swallow the winter search the
+    // rest of this tracker is clearly still running.
+    expect(accepted[0].work_term_duration).toBe("4 months");
+  });
+
+  it("is deciding between exactly three live offers", () => {
+    const offers = records.filter((r) => r.current_status === "Offer");
+
+    expect(offers).toHaveLength(3);
+    // Three different employers: a decision, not one employer's process.
+    expect(new Set(offers.map((offer) => offer.company_name)).size).toBe(3);
+  });
+
+  it("never lets a record's notes claim an outcome its status denies", () => {
+    for (const record of records) {
+      if (record.current_status === "Accepted") continue;
+      expect(record.notes ?? "", record.id).not.toMatch(/\baccepted\b/i);
     }
   });
 });

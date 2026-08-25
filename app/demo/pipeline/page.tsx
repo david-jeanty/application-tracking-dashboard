@@ -31,8 +31,10 @@ export default async function DemoPipelinePage({
 }) {
   const filters = parsePipelineFilters(await searchParams);
   const demo = buildDemoDataset(demoToday());
+  // Active only, as the real board reads. An archived application is not
+  // sitting at a status waiting to be moved, so it has no column here.
   const board = buildPipelineBoard(
-    filterDemoApplications(demo.applications, filters),
+    filterDemoApplications(demo.activeApplications, filters),
   );
 
   return (
@@ -51,7 +53,7 @@ export default async function DemoPipelinePage({
       <PipelineFilters
         action={pipelinePath(DEMO_BASE_PATH)}
         filters={filters}
-        workTermOptions={demoWorkTermOptions(demo.applications)}
+        workTermOptions={demoWorkTermOptions(demo.activeApplications)}
       />
 
       {board.total ? (

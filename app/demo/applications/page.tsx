@@ -34,7 +34,11 @@ export default async function DemoApplicationsPage({
 }) {
   const filters = parseApplicationFilters(await searchParams);
   const demo = buildDemoDataset(demoToday());
-  const applications = filterDemoApplications(demo.applications, filters);
+  // The active population, as `listActiveApplications` returns in production:
+  // this page is a worklist, and an application the student filed away is not
+  // on it. The archived records are still in the dataset, and still in the
+  // dashboard's totals and the analytics — they are simply not here.
+  const applications = filterDemoApplications(demo.activeApplications, filters);
 
   return (
     <div className="space-y-8">
@@ -51,7 +55,7 @@ export default async function DemoApplicationsPage({
       <ApplicationFilters
         action={applicationsPath(DEMO_BASE_PATH)}
         filters={filters}
-        workTermOptions={demoWorkTermOptions(demo.applications)}
+        workTermOptions={demoWorkTermOptions(demo.activeApplications)}
       />
 
       {applications.length ? (
