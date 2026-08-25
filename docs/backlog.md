@@ -47,3 +47,18 @@ in-app chatbot, arbitrary job-board scraping, automatic job discovery, browser
 extensions, job recommendations, collaboration/social features, inbox/calendar
 synchronization, notifications, billing, native apps, employer/university
 accounts, and public profiles.
+
+## Post-MVP capture pivot (added 2026-08-25)
+
+The line above records the original MVP boundary and is intentionally retained.
+Since then, the tracker, dashboard, pipeline, analytics, and MCP AI connection
+have shipped. The remaining manual transfer from a posting into JobTrack is a
+significant source of duplicate work, so one narrow browser feature is now
+approved: an extension that saves the posting the student is currently viewing
+after an explicit user action.
+
+The approved work is capture only. Arbitrary or background scraping, autofill,
+auto-apply, submission detection, built-in AI, job classification, resume
+matching, recommendations, and automatic job discovery remain out of scope.
+See [`browser-capture.md`](browser-capture.md) for the server foundation,
+extension responsibilities, release review, and deferred work.

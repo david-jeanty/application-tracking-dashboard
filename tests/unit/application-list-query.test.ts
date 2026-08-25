@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 import {
+  findApplicationByExactUrl,
   getApplicationById,
   listActiveApplications,
   listApplicationsForAnalytics,
@@ -171,6 +172,24 @@ describe("every list read is owner-scoped and excludes archived rows", () => {
     expect(String(recorder.find("select")[0].args[0]).split(",")).toContain(
       "company_domain",
     );
+  });
+});
+
+describe("exact application URL lookup", () => {
+  it("uses the authenticated owner and exact stored URL without fuzzy matching", async () => {
+    const recorder = recordingClient();
+    const url = "https://jobs.example.com/postings/123?source=board";
+
+    await findApplicationByExactUrl(recorder.client, USER, url);
+
+    expect(recorder.argsFor("eq", "user_id")).toEqual(["user_id", USER]);
+    expect(recorder.argsFor("eq", "application_url")).toEqual([
+      "application_url",
+      url,
+    ]);
+    expect(recorder.find("ilike")).toHaveLength(0);
+    expect(recorder.find("or")).toHaveLength(0);
+    expect(recorder.find("limit")[0].args).toEqual([1]);
   });
 });
 

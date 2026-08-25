@@ -3,10 +3,10 @@ import Link from "next/link";
 /**
  * The foot of the public site.
  *
- * One line about what JobTrack is for, and the three links the header already
- * offers, for somebody who read to the bottom. No Privacy, Terms, Contact or
- * Careers: those pages do not exist, and a link to a page that does not exist
- * is worse than no link.
+ * One line about what JobTrack is for, the three links the header already
+ * offers, and the public privacy explanation for somebody who read to the
+ * bottom. Terms, Contact and Careers stay absent because those pages do not
+ * exist.
  */
 export function PublicFooter() {
   return (
@@ -25,6 +25,7 @@ export function PublicFooter() {
             { href: "/demo", label: "Demo" },
             { href: "/login", label: "Sign in" },
             { href: "/signup", label: "Create account" },
+            { href: "/privacy", label: "Privacy" },
           ].map((link) => (
             <li key={link.href}>
               <Link

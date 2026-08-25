@@ -1,8 +1,8 @@
 import "server-only";
 
 import type { AuthInfo } from "@modelcontextprotocol/server";
+import { verifyBearerToken } from "@/lib/auth/bearer-identity";
 import type { McpUserExtra } from "@/lib/mcp/user";
-import { createBearerClient } from "@/lib/supabase/bearer";
 
 /**
  * Validates the bearer token presented by an MCP client.
@@ -17,24 +17,15 @@ export async function verifySupabaseAccessToken(
   _request: Request,
   bearerToken?: string,
 ): Promise<AuthInfo | undefined> {
-  if (!bearerToken) return undefined;
-
-  const supabase = createBearerClient(bearerToken);
-  const { data, error } = await supabase.auth.getUser(bearerToken);
-
-  if (error || !data.user) return undefined;
+  const identity = await verifyBearerToken(bearerToken);
+  if (!identity) return undefined;
 
   return {
-    token: bearerToken,
-    // Supabase records the OAuth client on the token itself. Falling back to
-    // "unknown" keeps a first-party session usable during local testing.
-    clientId:
-      typeof data.user.app_metadata?.client_id === "string"
-        ? data.user.app_metadata.client_id
-        : "unknown",
+    token: identity.token,
+    clientId: identity.clientId,
     // Supabase OAuth scopes control ID-token contents, not database access.
     // Authorization comes from row-level security, so no scope is required.
     scopes: [],
-    extra: { userId: data.user.id } satisfies McpUserExtra,
+    extra: { userId: identity.userId } satisfies McpUserExtra,
   };
 }
