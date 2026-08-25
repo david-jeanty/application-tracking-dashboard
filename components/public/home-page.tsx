@@ -75,38 +75,75 @@ export function HomePage() {
 
       <main id="main-content">
         {/* ------------------------------------------------------------ hero */}
-        <section className="mx-auto max-w-[1120px] px-5 pb-14 pt-14 sm:px-8 sm:pb-20 sm:pt-20">
-          <h1 className="max-w-3xl text-[36px] font-medium leading-[1.1] tracking-tight text-foreground sm:text-[52px]">
-            A job tracker your AI assistant can actually use.
-          </h1>
-          <p className="mt-6 max-w-xl text-[17px] leading-8 text-foreground-secondary">
-            Keep your applications, statuses, deadlines and next actions in one
-            structured workspace. Connect an AI assistant you already use, and it
-            can work with those same records instead of making you retype what
-            you just told it.
-          </p>
+        {/*
+          Two panels: what JobTrack is for on the accent ground, and what to do
+          about it on the page's own cream. The split is the shape the product
+          has always introduced itself with — it began life on the sign-in
+          screen — but the right-hand side is no longer a form. Somebody who has
+          just arrived is being asked to look at JobTrack, not to join it.
 
-          <div className="mt-9 flex flex-wrap items-center gap-3">
-            <ButtonLink className="min-h-11 px-5 text-[15px]" href="/demo">
-              Try demo
-            </ButtonLink>
-            <ButtonLink
-              className="min-h-11 px-5 text-[15px]"
-              href="/signup"
-              variant="secondary"
-            >
-              Create account
-            </ButtonLink>
+          It stacks below `lg`, accent first, so a phone gets the same order and
+          Try the demo is still near the top of the page.
+        */}
+        <section className="border-b border-border lg:grid lg:min-h-[540px] lg:grid-cols-[minmax(0,57fr)_minmax(0,43fr)]">
+          {/*
+            The inner padding lines the copy up with the wordmark in the header
+            above it on a wide screen, and falls back to an ordinary gutter when
+            there is no room for that.
+          */}
+          <div className="flex flex-col justify-between gap-8 bg-accent px-5 py-10 text-accent-foreground sm:gap-10 sm:px-8 sm:py-14 lg:py-16 lg:pl-[max(3.5rem,calc((100vw-1120px)/2+2rem))] lg:pr-14">
+            <div>
+              <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-accent-foreground/75">
+                Internship and co-op applications
+              </p>
+              <h1 className="mt-5 max-w-[16ch] text-[30px] font-medium leading-[1.14] tracking-tight sm:mt-6 sm:text-[42px] sm:leading-[1.12] lg:text-[46px]">
+                Keep your search organized and know what needs attention next.
+              </h1>
+              <p className="mt-5 max-w-xl text-[15px] leading-7 text-accent-foreground/85 sm:mt-6 sm:text-[16px] sm:leading-8">
+                Every application in one place, with the deadline it closes on,
+                the next action you set yourself, and the status history that
+                shows how far each one actually got.
+              </p>
+            </div>
+            <p className="text-[14px] text-accent-foreground/75">
+              Built for students, one careful step at a time.
+            </p>
           </div>
-          <p className="mt-4 text-[14px] text-foreground-muted">
-            The demo needs no account.{" "}
-            <Link
-              className="rounded-sm text-accent hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-              href="/login"
-            >
-              Already have one? Sign in
-            </Link>
-          </p>
+
+          <div className="flex flex-col justify-center bg-background px-5 py-10 sm:px-8 sm:py-14 lg:py-16 lg:pl-14 lg:pr-[max(3.5rem,calc((100vw-1120px)/2+2rem))]">
+            <h2 className="text-[26px] font-medium leading-tight tracking-tight text-foreground sm:text-[30px]">
+              See JobTrack in action
+            </h2>
+            <p className="mt-4 max-w-md text-[15px] leading-7 text-foreground-secondary">
+              Explore a complete sample internship search — dozens of
+              applications, every pipeline stage and the analytics behind them —
+              before you decide whether to keep one of your own.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <ButtonLink className="min-h-11 px-5 text-[15px]" href="/demo">
+                Try the demo
+              </ButtonLink>
+              <ButtonLink
+                className="min-h-11 px-5 text-[15px]"
+                href="/signup"
+                variant="secondary"
+              >
+                Create account
+              </ButtonLink>
+            </div>
+
+            <p className="mt-5 text-[14px] leading-7 text-foreground-muted">
+              The demo needs no account.
+              <br />
+              <Link
+                className="rounded-sm text-accent hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                href="/login"
+              >
+                Already have an account? Sign in
+              </Link>
+            </p>
+          </div>
         </section>
 
         {/* --------------------------------------------------------- preview */}
