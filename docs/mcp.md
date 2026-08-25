@@ -320,6 +320,14 @@ is allowed to be empty; a required field cannot be emptied. There is no
 dedicated interview-date column, so a phrase like "the interview is
 September 4" is expressed as `next_action` plus `next_action_due_date`.
 
+Those two are the one pair that is not independent. Emptying `next_action`
+clears `next_action_due_date` with it, because a due date describes an action —
+the same resolution `setApplicationNextAction` applies to the detail page's
+Clear button. "I have dealt with that follow-up" is therefore
+`next_action: ""` and nothing else, not two empty fields, and a due date sent
+alongside an emptied action is dropped rather than refused. An action that
+survives the patch — supplied, or stored and left alone — keeps its date.
+
 `company_domain` is the one field the tool invites Claude to fill in on its own
 initiative: if an application has none stored and the employer can be
 reasonably identified, the guidance asks for it alongside whatever else is

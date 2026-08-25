@@ -83,6 +83,26 @@ preview before writing, to check duplicates with `list_jobs`, never to invent
 history, to send canonical values, to split large imports, and where useful
 unmapped columns may go.
 
+### Follow-up: clearing a follow-up through `update_job`
+
+Making the pairing rule a schema check exposed a case the rule itself had never
+reached. `update_job` merges its patch onto the stored record, so
+`next_action: ""` and nothing else emptied the action while keeping the stored
+due date beside it — a pair the shared rule now rejects. An assistant would
+have had to know that clearing a follow-up takes two empty fields.
+
+`mergeUpdateValues` now clears the due date whenever the patch empties the
+action, which is what `setApplicationNextAction` has always done for the detail
+page's Clear button. A due date sent alongside an emptied action is dropped for
+the same reason rather than refused: the request contradicts itself, and no
+action means no date. An action that survives the patch — supplied, or stored
+and left alone — keeps its date, because an omitted field keeping its stored
+value is this tool's whole contract and the pair stays valid.
+
+The shared rule is untouched, and the import path is untouched: what changed is
+which values reach validation from this one tool, so the forbidden state is now
+unreachable from it rather than merely refused.
+
 ### What changed
 
 - `lib/validation/mcp.ts` — `newJobRecordSchema` (with the four new fields),
@@ -92,6 +112,7 @@ unmapped columns may go.
   take the same cross-field rule, and `requireActionForDueDate`.
 - `lib/applications/repository.ts` — `createApplications`, one statement.
 - `lib/mcp/import-jobs.ts` — validate the batch, then write it once.
+- `mergeUpdateValues` — emptying a next action clears its due date.
 - `lib/mcp/tools.ts`, `lib/mcp/repository.ts` — the fifth tool, and structured
   output on `save_job`.
 - `lib/mcp/capabilities.ts`, `app/(app)/settings/page.tsx` — one example prompt

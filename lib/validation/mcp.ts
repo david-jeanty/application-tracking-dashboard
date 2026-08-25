@@ -325,6 +325,25 @@ export const UPDATE_FIELD_MAP = {
  * The stored record is the base, so a field Claude did not mention keeps its
  * value instead of being erased. The merged result is then validated by the
  * same `applicationUpdateSchema` the web edit form uses.
+ *
+ * One pair is not independent, and this is where that is honoured. A due date
+ * describes an action, so emptying the action takes its date with it — the
+ * same resolution `setApplicationNextAction` has always applied to the detail
+ * page's Clear button, applied here so the two paths mean the same thing by a
+ * student's reading of them.
+ *
+ * Without it, "I have dealt with that follow-up" — `next_action: ""` and
+ * nothing else — would merge an emptied action onto the stored date and be
+ * rejected by the shared rule, leaving an assistant to work out on its own
+ * that clearing a follow-up takes two empty fields rather than one. The rule
+ * is not weakened: what changes is which values reach it, and the state it
+ * forbids is now unreachable from this tool rather than merely refused.
+ *
+ * A due date sent *alongside* an emptied action is dropped rather than
+ * refused, again matching the existing write: the request contradicts itself,
+ * and no action means no date whichever date came with the clear. Only an
+ * action that survives the patch — one the caller supplied, or the stored one
+ * it left alone — keeps a date beside it.
  */
 export function mergeUpdateValues(
   current: ApplicationFormValues,
@@ -339,6 +358,10 @@ export function mergeUpdateValues(
     // Each mapped argument is validated to the same value set as its form
     // field, and every form field holds a string, so this write is in range.
     (merged as Record<string, string>)[UPDATE_FIELD_MAP[argument]] = value;
+  }
+
+  if (patch.next_action !== undefined && !patch.next_action.trim()) {
+    merged.nextActionDueDate = "";
   }
 
   return merged;
