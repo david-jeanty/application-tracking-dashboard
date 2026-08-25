@@ -167,30 +167,44 @@ export function ApplicationRecords({
   applications,
   basePath = "",
   history,
+  showSummary = true,
 }: {
   applications: readonly ApplicationListItem[];
   basePath?: WorkspaceBasePath;
   /** Null when the history read failed: every rail is dropped rather than guessed. */
   history: readonly ApplicationStatusEvent[] | null;
+  /**
+   * The count and the column headings above the records.
+   *
+   * On by default, because a list is about how many there are as much as what
+   * they are. The homepage turns it off: it shows a handful of real records as
+   * a picture of the interface, and "4 applications" there would be a count of
+   * the excerpt rather than of anything a visitor has.
+   */
+  showSummary?: boolean;
 }) {
   const lifecycles = buildLifecycles(applications, history);
 
   return (
     <div>
-      <p className="text-[13px] text-foreground-muted">
-        {applications.length} application{applications.length === 1 ? "" : "s"}
-      </p>
+      {showSummary ? (
+        <p className="text-[13px] text-foreground-muted">
+          {applications.length} application{applications.length === 1 ? "" : "s"}
+        </p>
+      ) : null}
 
       {/*
         A list of records, not a table. Nothing here is tabular data being
         compared column against column — each row is one application, and the
         three regions are its identity, its progress and what comes next.
       */}
-      <div className="mt-5 hidden grid-cols-[minmax(0,38fr)_minmax(0,37fr)_minmax(0,25fr)] gap-8 border-b border-border pb-2 text-[12px] text-foreground-muted md:grid">
-        <span>Application</span>
-        <span>Progress</span>
-        <span>Next</span>
-      </div>
+      {showSummary ? (
+        <div className="mt-5 hidden grid-cols-[minmax(0,38fr)_minmax(0,37fr)_minmax(0,25fr)] gap-8 border-b border-border pb-2 text-[12px] text-foreground-muted md:grid">
+          <span>Application</span>
+          <span>Progress</span>
+          <span>Next</span>
+        </div>
+      ) : null}
 
       <ul aria-label="Applications">
         {applications.map((application) => {

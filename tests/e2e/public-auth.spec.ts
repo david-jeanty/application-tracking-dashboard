@@ -42,7 +42,9 @@ test("login remains usable at a mobile viewport", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 740 });
   await page.goto("/login");
 
-  await expect(page.getByTestId("mobile-brand")).toBeVisible();
+  // One wordmark at every width now, rather than a desktop panel and a mobile
+  // copy of it.
+  await expect(page.getByTestId("brand")).toBeVisible();
   await expect(page.getByLabel("Email address")).toBeInViewport();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeInViewport();
 });
@@ -52,11 +54,58 @@ test("login fields are reachable in a predictable keyboard order", async ({
 }) => {
   await page.goto("/login");
 
-  const visibleBrandLink = page.locator('a[href="/"]:visible', {
-    hasText: "JobTrack",
-  });
-  await visibleBrandLink.focus();
+  await page.getByTestId("brand").focus();
+  // Wordmark, then the demo link in the header, then the first field.
   await page.keyboard.press("Tab");
-
+  await expect(
+    page.getByRole("banner").getByRole("link", { name: "Explore the demo" }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
   await expect(page.getByLabel("Email address")).toBeFocused();
+});
+
+test("the public homepage is the front door for a signed-out visitor", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "A job tracker your AI assistant can actually use.",
+    }),
+  ).toBeVisible();
+});
+
+test("a visitor can reach the demo from the homepage and the auth pages", async ({
+  page,
+}) => {
+  // Scoped to the header on each page: the demo is deliberately reachable from
+  // several places, so an unscoped name matches more than one link.
+  await page.goto("/");
+  await page
+    .getByRole("navigation", { name: "Public navigation" })
+    .getByRole("link", { name: "Try demo" })
+    .click();
+  await expect(page).toHaveURL(/\/demo$/);
+
+  for (const path of ["/signup", "/login"]) {
+    await page.goto(path);
+    await page
+      .getByRole("banner")
+      .getByRole("link", { name: "Explore the demo" })
+      .click();
+    await expect(page, path).toHaveURL(/\/demo$/);
+  }
+});
+
+test("the demo offers the way back to the homepage", async ({ page }) => {
+  await page.goto("/demo");
+  await page.getByRole("main").getByRole("link", { name: "Back to JobTrack" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(
+    "A job tracker",
+  );
 });
