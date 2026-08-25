@@ -2,12 +2,14 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import type {
   ApplicationListFilters,
   ApplicationUpdateResult,
+  CreatedApplication,
 } from "@/lib/applications/repository";
 import type {
   ApplicationListItem,
   ApplicationRecord,
 } from "@/lib/applications/types";
 import { runGetJob } from "@/lib/mcp/get-job";
+import { runImportJobs } from "@/lib/mcp/import-jobs";
 import { runListJobs } from "@/lib/mcp/list-jobs";
 import { runUpdateJob } from "@/lib/mcp/update-job";
 import { readUserId } from "@/lib/mcp/user";
@@ -18,10 +20,14 @@ import {
 } from "@/lib/validation/application";
 import {
   getJobInputSchema,
+  IMPORT_JOBS_MAXIMUM_BATCH,
+  importJobsInputSchema,
+  importJobsOutputSchema,
   jobDetailSchema,
   listJobsInputSchema,
   listJobsOutputSchema,
   saveJobInputSchema,
+  saveJobOutputSchema,
   toApplicationCreationValues,
   updateJobInputSchema,
   updateJobOutputSchema,
@@ -46,6 +52,10 @@ export type JobTrackRepository = {
     data: { id: string } | null;
     error: ReadError;
   }>;
+  /** One statement for the whole batch, so an import cannot half-succeed. */
+  createApplications: (
+    inputs: readonly ApplicationCreationInput[],
+  ) => Promise<{ data: CreatedApplication[] | null; error: ReadError }>;
   getApplication: (applicationId: string) => Promise<{
     data: ApplicationRecord | null;
     error: ReadError;
@@ -107,6 +117,7 @@ export function registerJobTrackTools(
       description:
         "Saves a job to the student's application tracker. Use this when they share a job posting and want it recorded, or say they have applied somewhere. Pass the full job description verbatim when it is available so they can reread it later. Fill in company_domain with the employer's own website whenever you can identify the employer, so the saved application shows its logo without the student having to ask for it.",
       inputSchema: saveJobInputSchema,
+      outputSchema: saveJobOutputSchema,
     },
     async (args, ctx) => {
       const authInfo = ctx.http?.authInfo;
@@ -140,6 +151,9 @@ export function registerJobTrackTools(
         );
       }
 
+      // The sentence a student reads, and the same facts as data for a client
+      // that would otherwise have to list the tracker again to find the id it
+      // just created. No ownership column is in either.
       return {
         content: [
           {
@@ -147,6 +161,62 @@ export function registerJobTrackTools(
             text: `Saved ${parsed.data.originalJobTitle} at ${parsed.data.companyName} with status ${parsed.data.currentStatus}.`,
           },
         ],
+        structuredContent: {
+          application_id: data.id,
+          company: parsed.data.companyName,
+          job_title: parsed.data.originalJobTitle,
+          status: parsed.data.currentStatus,
+        },
+      };
+    },
+  );
+
+  server.registerTool(
+    "import_jobs",
+    {
+      title: "Import job applications",
+      description:
+        `Adds several already-normalized applications to the student's tracker in one write. Use this when they want to migrate an existing tracker — a Google Sheets or Excel export, a CSV, a list they have been keeping elsewhere — or otherwise add many applications at once. This tool takes records, never files: read the spreadsheet yourself and send JobTrack what you concluded. Before calling it: work out what each column means, and resolve anything ambiguous with the student rather than guessing — a status like "OA", "Ghosted" or "Phone screen" must become one of JobTrack's own statuses, and a date like 03/04/2026 must become an unambiguous YYYY-MM-DD, which means asking which convention their spreadsheet used. Show them what you found before writing anything. Check for likely duplicates with list_jobs, narrowing by company where that helps, and when an employer and title already look present, ask whether to skip that row or import another copy — JobTrack will not merge or skip anything on its own. Never invent history: send the status each application is at now, with its recorded date_applied, and do not manufacture the stages it passed through on the way. Useful information from columns JobTrack has no field for can go in that record's notes, once you have told the student you are doing that. Send at most ${IMPORT_JOBS_MAXIMUM_BATCH} applications per call and split a larger tracker into several calls, keeping the mapping the student agreed to identical across every batch. Each call is all-or-nothing: if one record is invalid, nothing in that batch is saved.`,
+      inputSchema: importJobsInputSchema,
+      outputSchema: importJobsOutputSchema,
+    },
+    async (args, ctx) => {
+      const authInfo = ctx.http?.authInfo;
+      const userId = readUserId(authInfo);
+
+      if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
+
+      // Bound to the token's user before the runner is reached, exactly as
+      // every other tool is. Row-level security checks again underneath.
+      const repository = repositoryFor({ token: authInfo.token, userId });
+      const result = await runImportJobs(args, {
+        createApplications: (inputs) => repository.createApplications(inputs),
+      });
+
+      if (result.outcome === "invalid") {
+        return toolError(
+          `Nothing was imported. ${result.message} Fix that record with the student and send the batch again.`,
+        );
+      }
+      if (result.outcome === "error") {
+        return toolError(
+          `Nothing was imported. Database error ${result.code ?? "unknown"}.`,
+        );
+      }
+
+      const imported = result.applications.length;
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Imported ${imported} application${imported === 1 ? "" : "s"} into JobTrack.`,
+          },
+        ],
+        structuredContent: {
+          imported,
+          applications: result.applications,
+        },
       };
     },
   );

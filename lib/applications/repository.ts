@@ -93,6 +93,55 @@ export async function createApplication(
     .single();
 }
 
+/**
+ * What a bulk creation hands back about each row it wrote.
+ *
+ * Enough to name the application to whoever asked for the import, and nothing
+ * more: no ownership column, no timestamps, no status. It is returned by the
+ * insert itself, so identifying a batch of twenty-five costs no second query.
+ */
+export type CreatedApplication = {
+  id: string;
+  company_name: string;
+  original_job_title: string;
+};
+
+/**
+ * Creates several applications in one statement.
+ *
+ * One `insert` carrying an array of rows, not a loop and not a
+ * `Promise.all` of single inserts. That is what makes a batch atomic: a single
+ * INSERT is one statement in one implicit transaction, so a row that violates
+ * a constraint or a row-level security policy takes the whole statement down
+ * and leaves nothing behind. A student importing an old tracker gets all of it
+ * or none of it, never the first sixteen rows of a spreadsheet.
+ *
+ * Rows are built by the same `toApplicationInsert` mapper every other write
+ * uses, so an imported application takes exactly the same defaults as one
+ * typed into the web form — `Unknown` work arrangement, the `Not specified`
+ * sentinel for a missing location or source, nulls elsewhere.
+ *
+ * `user_id` is absent from every row, deliberately. The column defaults to
+ * `auth.uid()`, resolved from the caller's own access token, and the insert
+ * policy checks it again, so a caller cannot write a row owned by somebody
+ * else however the input was constructed.
+ *
+ * No status history is written here, and none could be: the creation trigger
+ * fires per inserted row and records the status each application arrived at,
+ * which is the truth. Nothing invents the transitions an application went
+ * through before JobTrack existed.
+ */
+export async function createApplications(
+  supabase: SupabaseClient,
+  inputs: readonly ApplicationCreationInput[],
+) {
+  return supabase
+    .from("applications")
+    .insert(inputs.map(toApplicationInsert))
+    .select("id,company_name,original_job_title")
+    .returns<CreatedApplication[]>();
+}
+
 /** Which side of the archive line a list read covers. */
 export type ArchiveState = "active" | "archived" | "all";
 

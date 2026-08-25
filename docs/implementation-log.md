@@ -1,5 +1,127 @@
 # Implementation log
 
+## 2026-08-25 — Importing a tracker a student already keeps
+
+### Scope
+
+One new MCP tool, `import_jobs`, taking the tool set from four to five. A
+student exports their Google Sheets or Excel tracker as CSV, uploads it to
+their assistant, and asks for it to be imported. The assistant reads the file,
+settles what its columns, statuses and dates meant with the student, and sends
+JobTrack canonical records.
+
+No CSV reaches JobTrack, and none ever will: no upload control, no parser, no
+column-mapping screen, no spreadsheet dependency. The assistant interprets;
+JobTrack validates and stores.
+
+### Audit findings
+
+- **`saveJobInputSchema` could not express four fields the database already
+  holds**: `work_arrangement`, `salary`, `next_action`, `next_action_due_date`.
+  `toApplicationCreationValues` passed `undefined` for all four. A tracker
+  import would have silently dropped exactly the columns a spreadsheet is most
+  likely to carry, so `save_job` gained them too. Every addition is optional,
+  so an existing caller's arguments stay valid.
+- **`applicationCreationSchema` was already the single gate**, and `save_job`
+  already mapped into it. The import needed no second validation layer — it
+  needed to use that one, per record, before writing anything.
+- **The next-action pairing rule was enforced in only one place.**
+  `setApplicationNextAction` drops a due date that arrives without an action,
+  and the detail page says so under the field, but nothing stopped a *creation*
+  from storing a date describing an action that did not exist. That rule is now
+  a cross-field check on the shared schema, so the web form, the edit form,
+  `save_job`, `update_job` and every imported record obey it. It is the one
+  place existing validation was made stricter rather than left alone.
+- **`createApplication` inserts exactly one row** and ends in `.single()`, so a
+  bulk primitive was genuinely required. `createApplications` was added: one
+  `insert` carrying every row.
+- **Ownership needed nothing new.** No insert names `user_id`; the column
+  defaults to `auth.uid()` from the caller's own token and the insert policy
+  checks it again. The MCP repository factory binds identity before a tool body
+  is reached, so the import inherits the boundary rather than restating it.
+- **No migration.** No column, constraint, index, table or policy changed. The
+  history trigger is `after insert ... for each row`, so it already does the
+  right thing for a multi-row insert: one truthful creation event per imported
+  application.
+
+### Decisions
+
+**One record schema, shared by object identity.** `newJobRecordSchema` is what
+`save_job` takes one of and `import_jobs` takes an array of —
+`saveJobInputSchema === newJobRecordSchema`, asserted in a test. Two lists of
+fields kept in step by hand would drift, and the tool that drifted behind would
+quietly store less than the other.
+
+**A batch is 25.** Deliberately `LIST_JOBS_DEFAULT_LIMIT`: the assistant is
+told to check for likely duplicates with `list_jobs` first, and that read hands
+back a page of this size, so a batch is as much as the student and the
+assistant just looked at together. A hundred-row tracker arrives as four
+batches a student can watch land.
+
+**All-or-nothing, twice.** Every record is validated through the shared
+creation schema before anything is written, and the first failure returns
+naming the record by position *and* identity — "Import record 17 (RBC —
+Business Analyst Intern)" — because a position alone is useless against a file
+open in another window and a name alone is ambiguous when a tracker holds three
+roles at one bank. Then the whole batch is one `insert`, which is one statement
+in one implicit transaction. There is no per-record write to partially succeed.
+
+**Duplicates stay with the student.** No fuzzy matching, no silent merge, no
+silent skip. The tool description tells the assistant to check `list_jobs` and
+ask. A deduplication guess made inside a database write is one nobody can see.
+
+**No invented history.** An application imported at Interview is stored at
+Interview with the `date_applied` the student recorded. The trigger writes the
+one creation event saying it entered JobTrack at that status, which is true.
+`created_at` is import time and is never backdated: historical meaning comes
+from fields the student actually filled in, not from timestamps we made up.
+
+**The workflow lives in the tool description, once.** Not spread across
+eighteen field descriptions. It tells the client this tool takes records rather
+than files, to resolve headers, statuses and dates with the student first, to
+preview before writing, to check duplicates with `list_jobs`, never to invent
+history, to send canonical values, to split large imports, and where useful
+unmapped columns may go.
+
+### What changed
+
+- `lib/validation/mcp.ts` — `newJobRecordSchema` (with the four new fields),
+  `importJobsInputSchema`, `importJobsOutputSchema`, `saveJobOutputSchema`,
+  `IMPORT_JOBS_MAXIMUM_BATCH`.
+- `lib/validation/application.ts` — the fields split out so both schemas can
+  take the same cross-field rule, and `requireActionForDueDate`.
+- `lib/applications/repository.ts` — `createApplications`, one statement.
+- `lib/mcp/import-jobs.ts` — validate the batch, then write it once.
+- `lib/mcp/tools.ts`, `lib/mcp/repository.ts` — the fifth tool, and structured
+  output on `save_job`.
+- `lib/mcp/capabilities.ts`, `app/(app)/settings/page.tsx` — one example prompt
+  and one sentence, in the card that already lists what to say. No new card and
+  no upload control.
+- `README.md`, `docs/mcp.md` — the workflow, with an example conversation.
+
+### Verification
+
+- `npm run lint`, `npm run typecheck`: passed.
+- `npm run test`: 1,020 tests across 50 files passed — 43 new, covering the
+  shared creation contract and backward compatibility, the batch bounds,
+  canonical-versus-free-text statuses, ISO-versus-ambiguous dates, validation
+  before any write, the named failing record, one bulk insert per batch, no
+  owner column in any row, no history write in the import path, and
+  `import_jobs` driven over a real MCP server.
+- `npm run build`: passed.
+- `npm run test:e2e`: 34 passed, 8 skipped — the skipped ones need real account
+  credentials, which this environment does not have.
+- Database tests were not run: nothing in the schema changed, and no Docker is
+  available here.
+- The intended AI workflow was reasoned through outside the runtime against a
+  messy five-row fixture tracker (`Interviewing`, `OA`, `Ghosted`, `Submitted`,
+  `08/12/2026`). The raw values are refused at the boundary, one per row; the
+  records an assistant would produce after settling them with the student are
+  accepted and written as one batch; and a plausible-looking but impossible
+  date the assistant might produce (`2026-16-08`) is caught by the shared
+  schema, named by record, before any write. The fixture is not committed —
+  JobTrack has no knowledge that those source strings exist.
+
 ## 2026-08-24 — Phase 4: the pipeline board
 
 ### Scope

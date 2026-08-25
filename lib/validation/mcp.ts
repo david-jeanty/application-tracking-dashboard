@@ -32,7 +32,7 @@ const COMPANY_DOMAIN_GUIDANCE =
 const CLEARABLE_DATE_PATTERN = /^(\d{4}-\d{2}-\d{2})?$/;
 
 /**
- * The wire contract for `save_job`.
+ * One new application, as it crosses the MCP boundary.
  *
  * Argument names are the ones a student would say out loud rather than our
  * column names, and the shape stays plain so it converts cleanly to the JSON
@@ -40,8 +40,17 @@ const CLEARABLE_DATE_PATTERN = /^(\d{4}-\d{2}-\d{2})?$/;
  * `applicationCreationSchema`, so an MCP write obeys exactly the same rules as
  * a web-form write. Deliberately absent: `user_id`. Ownership comes from the
  * access token and can never be supplied by the caller.
+ *
+ * `save_job` and `import_jobs` are the same record, one at a time and many at
+ * a time, so they share this schema rather than each declaring their own. One
+ * saved through a conversation and one carried in from an old spreadsheet are
+ * the same kind of thing, and a field either tool could not express would be a
+ * field the other quietly stored better.
+ *
+ * Every field is a value JobTrack already stores. Nothing was added to the
+ * schema to make an import look richer.
  */
-export const saveJobInputSchema = z.object({
+export const newJobRecordSchema = z.object({
   company: z
     .string()
     .min(1)
@@ -113,14 +122,57 @@ export const saveJobInputSchema = z.object({
     .max(80)
     .optional()
     .describe("Length of the work term, for example '4 months' or '8 months'."),
+  work_arrangement: z
+    .enum(WORK_ARRANGEMENTS)
+    .optional()
+    .describe(
+      "Whether the role is Remote, Hybrid, or On-site. Defaults to 'Unknown'.",
+    ),
+  salary: z
+    .string()
+    .max(100)
+    .optional()
+    .describe("Pay as the posting states it, for example '$22/hour'."),
   notes: z
     .string()
     .max(20000)
     .optional()
     .describe("Anything else worth remembering about this application."),
+  next_action: z
+    .string()
+    .max(500)
+    .optional()
+    .describe(
+      "What the student needs to do next, for example 'Follow up with the recruiter'.",
+    ),
+  next_action_due_date: z
+    .string()
+    .regex(DATE_ONLY_PATTERN)
+    .optional()
+    .describe(
+      "When that next action is due, as YYYY-MM-DD. Only kept alongside a next_action.",
+    ),
 });
 
-export type SaveJobInput = z.infer<typeof saveJobInputSchema>;
+export type NewJobRecord = z.infer<typeof newJobRecordSchema>;
+
+/**
+ * The wire contract for `save_job`: exactly one new job record.
+ *
+ * The same schema `import_jobs` carries an array of, so the two tools cannot
+ * drift apart in what they accept.
+ */
+export const saveJobInputSchema = newJobRecordSchema;
+
+export type SaveJobInput = NewJobRecord;
+
+/** What `save_job` reports back, so a client need not re-read the record. */
+export const saveJobOutputSchema = z.object({
+  application_id: z.string(),
+  company: z.string(),
+  job_title: z.string(),
+  status: z.enum(APPLICATION_STATUSES),
+});
 
 /** Accepts a status however Claude phrased it, then matches our enum exactly. */
 function normalizeStatus(value: string | undefined): ApplicationStatus {
@@ -145,8 +197,12 @@ function normalizeCategory(value: string | undefined): JobCategory {
  * `work_term_season` is required by the schema but is not something a job
  * description reliably states, so it falls back to the same sentinel the web
  * form uses for unspecified values rather than forcing Claude to invent one.
+ *
+ * Used by both `save_job` and every record of an `import_jobs` batch, so a job
+ * saved in conversation and a job carried in from an old tracker reach the
+ * database through the same mapping and the same defaults.
  */
-export function toApplicationCreationValues(input: SaveJobInput) {
+export function toApplicationCreationValues(input: NewJobRecord) {
   return {
     companyName: input.company,
     // Validated and normalized by the shared creation schema, exactly as a
@@ -157,17 +213,17 @@ export function toApplicationCreationValues(input: SaveJobInput) {
     currentStatus: normalizeStatus(input.status),
     workTermSeason: input.work_term?.trim() || UNSPECIFIED_DATABASE_VALUE,
     location: input.location,
-    workArrangement: undefined,
+    workArrangement: input.work_arrangement,
     applicationUrl: input.job_url,
     applicationSource: input.source,
     jobDescription: input.job_description,
     applicationDeadline: input.deadline,
     dateApplied: input.date_applied,
     workTermDuration: input.duration,
-    salary: undefined,
+    salary: input.salary,
     notes: input.notes,
-    nextAction: undefined,
-    nextActionDueDate: undefined,
+    nextAction: input.next_action,
+    nextActionDueDate: input.next_action_due_date,
   };
 }
 
@@ -452,4 +508,60 @@ export const updateJobOutputSchema = z.object({
   status_history_recorded: z
     .boolean()
     .describe("True when the status moved, which records a history event."),
+});
+
+/**
+ * How many applications one `import_jobs` call may carry.
+ *
+ * Twenty-five, which is `LIST_JOBS_DEFAULT_LIMIT` — deliberately the same
+ * number. The assistant is told to check for likely duplicates with `list_jobs`
+ * before importing, and that read hands back a page of this size, so a batch is
+ * exactly as much as the student and the assistant just looked at together.
+ *
+ * A bound is what makes the write reviewable and recoverable. One call is one
+ * all-or-nothing insert, so a hundred-row tracker arrives as four batches a
+ * student can watch land, rather than as a single statement whose failure
+ * leaves nobody sure how much of their old spreadsheet made it.
+ */
+export const IMPORT_JOBS_MAXIMUM_BATCH = 25;
+
+/**
+ * The wire contract for `import_jobs`: a batch of the same new job record
+ * `save_job` takes one of.
+ *
+ * There is no file, no CSV, no delimiter, and no column mapping here, and that
+ * is the whole design: the assistant reads the student's spreadsheet, resolves
+ * what its headers, statuses and dates meant with them, and sends canonical
+ * records. JobTrack validates and stores. Anything this schema cannot express
+ * is an interpretation the assistant still owes the student.
+ *
+ * Deliberately absent: `user_id`. Ownership comes from the access token.
+ */
+export const importJobsInputSchema = z.object({
+  applications: z
+    .array(newJobRecordSchema)
+    .min(1)
+    .max(IMPORT_JOBS_MAXIMUM_BATCH)
+    .describe(
+      `The applications to import, already normalized to JobTrack's own values. Between 1 and ${IMPORT_JOBS_MAXIMUM_BATCH} per call; split a larger tracker into several calls and keep the mapping you agreed with the student identical across all of them.`,
+    ),
+});
+
+export type ImportJobsInput = z.infer<typeof importJobsInputSchema>;
+
+/** One imported application, named well enough for the assistant to report it. */
+const importedApplicationSchema = z.object({
+  application_id: z.string(),
+  company: z.string(),
+  job_title: z.string(),
+});
+
+export type ImportedApplication = z.infer<typeof importedApplicationSchema>;
+
+export const importJobsOutputSchema = z.object({
+  imported: z
+    .number()
+    .int()
+    .describe("How many applications this batch added to the tracker."),
+  applications: z.array(importedApplicationSchema),
 });

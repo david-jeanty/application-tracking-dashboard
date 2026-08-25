@@ -11,10 +11,14 @@
  * is ever added or removed, this list changes with it.
  */
 
-/** Derived from the registered tools: list_jobs, get_job, save_job, update_job. */
+/**
+ * Derived from the registered tools: list_jobs, get_job, save_job, import_jobs,
+ * update_job.
+ */
 export const ASSISTANT_CAN = [
   "See the job applications in your tracker",
   "Add a new application",
+  "Add several at once, such as a tracker you already keep elsewhere",
   "Update an application's details, dates, and status",
 ] as const;
 

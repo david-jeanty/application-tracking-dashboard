@@ -60,8 +60,54 @@ You never have to look up an ID or remember exactly what you called something.
 You describe the job the way you'd describe it to a friend, and the assistant
 figures out which one you mean.
 
-Today the assistant can save jobs, list your applications, pull up the full
-details of one, and update its tracked information.
+Today the assistant can save jobs, bring in a tracker you already keep
+elsewhere, list your applications, pull up the full details of one, and update
+its tracked information.
+
+### Bringing an old tracker with you
+
+If you already track applications in Google Sheets or Excel, you don't retype
+them. Export that sheet as a CSV, upload it **to your assistant** — not to
+JobTrack — and ask:
+
+> **You:** Import this old tracker into JobTrack. *(CSV attached)*
+>
+> **Assistant:** I found 34 rows. Your "Stage" column has values I want to
+> check: "OA" appears 5 times — should that be Assessment? And "Interviewing"
+> — Interview?
+>
+> **You:** Yes to both.
+>
+> **Assistant:** Your dates look like 08/12/2026. Is that August 12th or
+> December 8th?
+>
+> **You:** August 12th. Day is second.
+>
+> **Assistant:** One more thing: RBC — Business Analyst Intern is already in
+> JobTrack from last week. Skip that row?
+>
+> **You:** Skip it.
+>
+> **Assistant:** Importing 33 applications in two batches. Your "Recruiter" and
+> "Resume version" columns have no JobTrack field, so I'll keep them in each
+> application's notes. *…* Imported 33 applications into JobTrack.
+
+The division of labour is deliberate:
+
+- **Your assistant interprets.** It reads the spreadsheet, works out what the
+  columns meant, and settles anything ambiguous with you first.
+- **JobTrack validates and stores.** It never sees the CSV, never parses one,
+  and has no upload button.
+- **Dates arrive unambiguous.** `03/04/2026` must become a real calendar date
+  before it crosses over, because only you know which convention your sheet
+  used.
+- **Statuses arrive as JobTrack's own.** "OA" and "Ghosted" are questions for
+  you, not guesses for a tracker to make.
+- **Nothing is invented.** An application imported at Interview is stored at
+  Interview with the date you applied. JobTrack does not manufacture the
+  Applied → Screening → Interview trail it never saw.
+- **Duplicates are yours to decide.** Your assistant checks what is already in
+  JobTrack and asks; nothing is merged or skipped behind your back.
 
 ## How it works
 
@@ -106,8 +152,8 @@ JobTrack is deployed and the Claude connection works today.
 - Adding, viewing, and editing applications
 - Your application list, with search and filters for status, work term, and
   category
-- The AI connection: saving jobs, listing applications, getting full details,
-  and updating applications
+- The AI connection: saving jobs, importing an existing tracker, listing
+  applications, getting full details, and updating applications
 - Status history recorded automatically as an application moves
 - Quick status and next-action updates without opening the full edit form
 - Archiving and restoring applications, and permanently deleting archived ones

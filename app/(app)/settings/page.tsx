@@ -20,6 +20,7 @@ export const metadata: Metadata = { title: "Settings" };
 /** What the student can ask for once connected. Kept to the registered tools. */
 const EXAMPLE_PROMPTS = [
   "Save this job to JobTrack.",
+  "Import this old tracker into JobTrack.",
   "What RBC jobs am I tracking?",
   "Show me the details for that Business Analyst role.",
   "I applied to it today.",
@@ -188,6 +189,17 @@ export default async function SettingsPage({
                 </li>
               ))}
             </ul>
+            {/*
+              One sentence, in the card that already lists what to say. The
+              spreadsheet never comes to JobTrack — it goes to the assistant,
+              which reads it and sends back finished applications — so there is
+              no upload control here to add.
+            */}
+            <p className="mt-4 text-sm leading-6 text-foreground-secondary">
+              Already have a tracker? Export it as a CSV, upload that to your
+              connected assistant, and ask it to import the tracker into
+              JobTrack. It will check the columns and dates with you first.
+            </p>
           </Card>
 
           <Card className="p-5 sm:p-6">
