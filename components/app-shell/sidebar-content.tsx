@@ -6,6 +6,7 @@ import { LogOut } from "lucide-react";
 import { signOutAction } from "@/lib/auth/actions";
 import { cn } from "@/lib/utils";
 import {
+  demoNavigationItems,
   isNavigationItemActive,
   primaryNavigationItems,
   secondaryNavigationItems,
@@ -13,9 +14,20 @@ import {
   type NavigationItem,
 } from "@/components/app-shell/navigation";
 
+/**
+ * Whose workspace this is.
+ *
+ * `account` is the signed-in student's, and nothing about it has changed. `demo`
+ * is the public sample workspace: four surfaces, no archive, no settings, and
+ * no sign-out, because there is no session to end. The union is what keeps the
+ * two from being one component with six optional props.
+ */
+export type WorkspaceIdentity =
+  | { kind: "account"; displayName: string; email: string }
+  | { kind: "demo" };
+
 type SidebarContentProps = {
-  displayName: string;
-  email: string;
+  identity: WorkspaceIdentity;
   onNavigate?: () => void;
 };
 
@@ -72,9 +84,32 @@ function NavigationLink({
   );
 }
 
+/**
+ * The foot of the demo sidebar, where the account row sits in the real one.
+ *
+ * It says what this workspace is in words rather than with a badge, and offers
+ * the one thing a visitor might want next. `Create account` is a quiet link
+ * rather than a filled button: the sidebar is not where the product should be
+ * selling itself.
+ */
+function DemoIdentity({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <div className="border-t border-border px-5 py-4">
+      <p className="text-[13px] font-medium text-foreground">Demo workspace</p>
+      <p className="mt-0.5 text-[11px] text-foreground-muted">Sample data</p>
+      <Link
+        className="mt-2.5 inline-flex rounded-sm text-[13px] text-accent hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        href="/signup"
+        onClick={onNavigate}
+      >
+        Create account
+      </Link>
+    </div>
+  );
+}
+
 export function SidebarContent({
-  displayName,
-  email,
+  identity,
   onNavigate,
 }: SidebarContentProps) {
   const pathname = usePathname();
@@ -93,7 +128,7 @@ export function SidebarContent({
     <div className="flex h-full flex-col">
       <Link
         className="font-wordmark px-5 py-6 text-[26px] leading-none text-foreground"
-        href="/dashboard"
+        href={identity.kind === "demo" ? "/demo" : "/dashboard"}
         onClick={onNavigate}
       >
         JobTrack
@@ -103,33 +138,46 @@ export function SidebarContent({
         aria-label="Primary navigation"
         className="flex flex-1 flex-col gap-1 px-3 pb-3"
       >
-        <ul className="flex flex-col gap-0.5">
-          {renderItems(primaryNavigationItems)}
-        </ul>
+        {identity.kind === "demo" ? (
+          <ul className="flex flex-col gap-0.5">
+            {renderItems(demoNavigationItems)}
+          </ul>
+        ) : (
+          <>
+            <ul className="flex flex-col gap-0.5">
+              {renderItems(primaryNavigationItems)}
+            </ul>
 
-        {/* Archive is finished work, so it sits apart from the live workflow. */}
-        <ul className="mt-6 flex flex-col gap-0.5">
-          {renderItems(secondaryNavigationItems)}
-        </ul>
+            {/* Archive is finished work, so it sits apart from the live workflow. */}
+            <ul className="mt-6 flex flex-col gap-0.5">
+              {renderItems(secondaryNavigationItems)}
+            </ul>
 
-        <ul className="mt-auto flex flex-col gap-0.5 pt-6">
-          {renderItems(utilityNavigationItems)}
-        </ul>
+            <ul className="mt-auto flex flex-col gap-0.5 pt-6">
+              {renderItems(utilityNavigationItems)}
+            </ul>
+          </>
+        )}
       </nav>
 
+      {identity.kind === "demo" ? (
+        <DemoIdentity onNavigate={onNavigate} />
+      ) : (
       <div className="border-t border-border px-3 py-2.5">
         <div className="flex items-center gap-2.5">
           <span
             aria-hidden="true"
             className="grid size-7 shrink-0 place-items-center rounded-full bg-surface-muted text-[11px] font-semibold text-foreground-secondary"
           >
-            {initials(displayName)}
+            {initials(identity.displayName)}
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-medium text-foreground">
-              {displayName}
+              {identity.displayName}
             </p>
-            <p className="truncate text-[11px] text-foreground-muted">{email}</p>
+            <p className="truncate text-[11px] text-foreground-muted">
+              {identity.email}
+            </p>
           </div>
           <form action={signOutAction}>
             <button
@@ -143,6 +191,7 @@ export function SidebarContent({
           </form>
         </div>
       </div>
+      )}
     </div>
   );
 }

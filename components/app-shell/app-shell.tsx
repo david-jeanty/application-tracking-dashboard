@@ -2,12 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
-import { SidebarContent } from "@/components/app-shell/sidebar-content";
+import {
+  SidebarContent,
+  type WorkspaceIdentity,
+} from "@/components/app-shell/sidebar-content";
 
 type AppShellProps = {
   children: React.ReactNode;
-  displayName: string;
-  email: string;
+  /**
+   * The signed-in student, or the public demo workspace. Only the sidebar's
+   * navigation and its foot differ between the two — the drawer, the skip
+   * link, the escape handling and the workspace measure are the same frame.
+   */
+  identity: WorkspaceIdentity;
 };
 
 /**
@@ -18,7 +25,7 @@ type AppShellProps = {
  * printed the same word twice. Mobile keeps a slim bar because the drawer
  * still needs somewhere to be opened from.
  */
-export function AppShell({ children, displayName, email }: AppShellProps) {
+export function AppShell({ children, identity }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
@@ -41,7 +48,7 @@ export function AppShell({ children, displayName, email }: AppShellProps) {
       </a>
 
       <aside className="fixed inset-y-0 left-0 hidden w-[248px] border-r border-border bg-surface-muted lg:block">
-        <SidebarContent displayName={displayName} email={email} />
+        <SidebarContent identity={identity} />
       </aside>
 
       {mobileOpen ? (
@@ -65,8 +72,7 @@ export function AppShell({ children, displayName, email }: AppShellProps) {
               <X aria-hidden="true" className="size-5" />
             </button>
             <SidebarContent
-              displayName={displayName}
-              email={email}
+              identity={identity}
               onNavigate={() => setMobileOpen(false)}
             />
           </aside>

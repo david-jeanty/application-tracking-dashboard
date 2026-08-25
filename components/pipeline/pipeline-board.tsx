@@ -12,15 +12,20 @@ import {
   type PipelineBoard as Board,
   type PipelineColumn,
 } from "@/lib/pipeline/board";
+import { applicationsPath, pipelinePath, type WorkspaceBasePath } from "@/lib/demo/paths";
 import { createClient } from "@/lib/supabase/server";
 
 /** One status column, with everything currently sitting at it. */
 function Column({
+  basePath,
   column,
   filters,
+  readOnly,
 }: {
+  basePath: WorkspaceBasePath;
   column: PipelineColumn;
   filters: ActiveApplicationFilters;
+  readOnly: boolean;
 }) {
   const headingId = `pipeline-${column.status.toLowerCase()}`;
 
@@ -53,8 +58,10 @@ function Column({
           {column.applications.map((application) => (
             <PipelineCard
               application={application}
+              basePath={basePath}
               filters={filters}
               key={application.id}
+              readOnly={readOnly}
             />
           ))}
         </ul>
@@ -92,11 +99,16 @@ export function PipelineBoardLoading() {
  * of fixtures under visual review. It holds no data access of its own.
  */
 export function PipelineColumns({
+  basePath = "",
   board,
   filters = {},
+  readOnly = false,
 }: {
+  basePath?: WorkspaceBasePath;
   board: Board;
   filters?: ActiveApplicationFilters;
+  /** Passed to every card. Production leaves it false and keeps its Move form. */
+  readOnly?: boolean;
 }) {
   return (
     <div>
@@ -115,7 +127,13 @@ export function PipelineColumns({
       */}
       <div className="mt-5 flex flex-col gap-8 md:-mx-1 md:flex-row md:items-start md:gap-4 md:overflow-x-auto md:px-1 md:pb-3">
         {board.columns.map((column) => (
-          <Column column={column} filters={filters} key={column.status} />
+          <Column
+            basePath={basePath}
+            column={column}
+            filters={filters}
+            key={column.status}
+            readOnly={readOnly}
+          />
         ))}
       </div>
     </div>
@@ -179,7 +197,7 @@ export async function PipelineBoard({
           Try changing or clearing your search.
         </p>
         <div className="mt-5">
-          <ButtonLink href="/pipeline" variant="secondary">
+          <ButtonLink href={pipelinePath()} variant="secondary">
             Clear filters
           </ButtonLink>
         </div>
@@ -198,7 +216,7 @@ export async function PipelineBoard({
           that 404s would be worse than not offering the way in at all.
         */}
         <div className="mt-5">
-          <ButtonLink href="/applications" variant="secondary">
+          <ButtonLink href={applicationsPath()} variant="secondary">
             Add an application
           </ButtonLink>
         </div>

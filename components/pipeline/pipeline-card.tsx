@@ -14,6 +14,7 @@ import {
 } from "@/lib/applications/search-params";
 import type { ApplicationListItem } from "@/lib/applications/types";
 import { formatDateOnly } from "@/lib/dates/date-only";
+import { applicationPath, type WorkspaceBasePath } from "@/lib/demo/paths";
 
 /*
  * Quiet until it is wanted, and a full-sized target when it is.
@@ -107,10 +108,23 @@ function CardNext({ application }: { application: ApplicationListItem }) {
  */
 export function PipelineCard({
   application,
+  basePath = "",
   filters,
+  readOnly = false,
 }: {
   application: ApplicationListItem;
+  basePath?: WorkspaceBasePath;
   filters: ActiveApplicationFilters;
+  /**
+   * A board nobody can write to.
+   *
+   * The move control is *absent* rather than disabled. A greyed-out select
+   * would still be announced, still be tabbed to, and would tell a visitor
+   * that the demo is a broken workspace rather than a read-only one. What is
+   * left is the card: the same role, employer, placement and context date the
+   * real board shows.
+   */
+  readOnly?: boolean;
 }) {
   const moveId = `move-${application.id}`;
 
@@ -139,7 +153,7 @@ export function PipelineCard({
           <h3 className="text-[14px] font-medium leading-snug text-foreground">
             <Link
               className="after:absolute after:inset-0 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-              href={`/applications/${application.id}`}
+              href={applicationPath(application.id, basePath)}
             >
               {application.original_job_title}{" "}
               <span className="mt-0.5 block text-[12px] font-normal text-foreground-secondary">
@@ -153,6 +167,8 @@ export function PipelineCard({
 
       <CardNext application={application} />
 
+      {readOnly ? null : (
+      <>
       {/*
         A native select and a submit button: the status menu is reachable by
         keyboard because it is a real form control, not because a drag was
@@ -237,6 +253,8 @@ export function PipelineCard({
           </span>
         </Button>
       </form>
+      </>
+      )}
     </li>
   );
 }

@@ -1,4 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
+import { CompanyLogo } from "@/components/branding/company-logo";
 import {
   Archive,
   Banknote,
@@ -123,6 +124,58 @@ function LongText({ value }: { value: string | null }) {
     </p>
   ) : (
     <p className="text-[14px] text-foreground-muted">Not set</p>
+  );
+}
+
+/**
+ * The employer, the role, and the two or three facts that place it.
+ *
+ * The employer leads on this page, where there is one record and the question
+ * is which company it is — the reverse of the list, where the role leads
+ * because the student is choosing between many.
+ *
+ * Extracted so the authenticated record and the public demo's record are the
+ * same hero rather than two that have to be kept in step. It renders identity
+ * only: whatever actions belong beside it are the page's to place, which is
+ * what lets the demo show a record with no write controls without this
+ * component knowing the demo exists.
+ */
+export function ApplicationIdentity({
+  application,
+}: {
+  application: ApplicationRecord;
+}) {
+  const location = displayOptionalText(application.location);
+  const context = [location, application.work_term_season]
+    .concat(
+      application.work_arrangement === "Unknown"
+        ? []
+        : [application.work_arrangement],
+    )
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div className="flex min-w-0 items-start gap-5">
+      <CompanyLogo
+        companyName={application.company_name}
+        domain={application.company_domain}
+        size="lg"
+      />
+      <div className="min-w-0">
+        <h1 className="min-w-0">
+          <span className="block text-[30px] font-medium leading-tight tracking-tight text-foreground">
+            {application.company_name}
+          </span>{" "}
+          <span className="mt-1 block break-words text-[19px] leading-snug text-foreground-secondary">
+            {application.original_job_title}
+          </span>
+        </h1>
+        {context ? (
+          <p className="mt-3 text-[13px] text-foreground-muted">{context}</p>
+        ) : null}
+      </div>
+    </div>
   );
 }
 

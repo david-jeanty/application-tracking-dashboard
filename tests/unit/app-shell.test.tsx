@@ -17,7 +17,7 @@ const { AppShell } = await import("@/components/app-shell/app-shell");
 function renderShell(at = "/applications") {
   pathname.current = at;
   return render(
-    <AppShell displayName="Alex Chen" email="student@uottawa.ca">
+    <AppShell identity={{ kind: "account", displayName: "Alex Chen", email: "student@uottawa.ca" }}>
       <h1>Applications</h1>
     </AppShell>,
   );

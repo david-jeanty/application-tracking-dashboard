@@ -28,9 +28,15 @@ const selectClassName =
  * `work_term_season` is free text rather than an enum.
  */
 export function PipelineFilters({
+  action = "/pipeline",
+  clearHref = action,
   filters,
   workTermOptions,
 }: {
+  /** Where the GET form submits. The demo narrows its own board at its own route. */
+  action?: string;
+  /** Where Clear goes. The same route by default, with no query string. */
+  clearHref?: string;
   filters: ActiveApplicationFilters;
   workTermOptions: string[];
 }) {
@@ -46,7 +52,7 @@ export function PipelineFilters({
 
   return (
     <form
-      action="/pipeline"
+      action={action}
       className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center"
       method="get"
     >
@@ -117,7 +123,7 @@ export function PipelineFilters({
         {hasActiveFilters(filters) ? (
           <Link
             className="inline-flex min-h-9 items-center justify-center rounded-control px-3 text-sm text-foreground-secondary transition-colors hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            href="/pipeline"
+            href={clearHref}
           >
             Clear
           </Link>

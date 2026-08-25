@@ -142,6 +142,32 @@ actions, notes, your dashboard, and analytics.
 Both sides work on the same data. Anything the assistant saves shows up on the
 site, and anything you edit on the site is what the assistant sees next time.
 
+## Try it without an account
+
+`/demo` is a public, read-only JobTrack workspace: a sample search of 56
+internship and co-op applications across the dashboard, the applications list,
+an application's details, the pipeline board and analytics.
+
+- **No account required, and nothing to sign in to.** Every demo route renders
+  signed out, and works even where Supabase is not configured at all.
+- **The applications are fictional.** Familiar employers appear so the dataset
+  reads like a real recruiting spreadsheet, but no application, title,
+  description, date or outcome describes anything that happened, and none of
+  those organisations has any connection to JobTrack.
+- **Static, in-memory data.** The sample search is generated in the app from a
+  fixture, deterministically, with dates expressed as offsets from the current
+  day so it stays current instead of aging. There is no demo database, no
+  shared demo account, and no credentials of any kind.
+- **No Supabase reads and no writes.** Not a single demo module imports the
+  database client or a server action.
+- **Read-only.** You can navigate, search, filter, switch the analytics lens and
+  open every disclosure. There is nothing to add, edit, move, archive or delete
+  — those controls are absent rather than disabled.
+- **The same code as the real thing.** The demo feeds its fixture through the
+  production dashboard, analytics, funnel and pipeline calculations and renders
+  it with the production components, so what a visitor sees is the product
+  rather than a mock-up of it.
+
 ## Current status
 
 JobTrack is deployed and the Claude connection works today.
@@ -166,6 +192,8 @@ JobTrack is deployed and the Claude connection works today.
   status it's at, and a control on each card that moves it to another status
   without leaving the board
 - Settings: connect an AI assistant, see what's connected, and disconnect it
+- A public read-only demo workspace at `/demo`, with a sample search of 56
+  fictional applications
 
 ## What's next
 
