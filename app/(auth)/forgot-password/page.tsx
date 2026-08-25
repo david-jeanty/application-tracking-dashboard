@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { AuthForm } from "@/components/auth/auth-form";
-import { AuthShell } from "@/components/auth/auth-shell";
+import { AuthShell, authLinkClassName } from "@/components/auth/auth-shell";
 import { forgotPasswordAction } from "@/lib/auth/actions";
 
 export const metadata: Metadata = { title: "Reset password" };
@@ -13,7 +13,7 @@ export default function ForgotPasswordPage() {
       description="Enter your email. If it matches an account, we’ll send a secure reset link."
       footer={
         <Link
-          className="inline-flex items-center gap-2 font-semibold text-accent hover:underline"
+          className={`inline-flex items-center gap-2 ${authLinkClassName}`}
           href="/login"
         >
           <ArrowLeft aria-hidden="true" className="size-4" />

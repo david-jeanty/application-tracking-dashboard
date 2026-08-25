@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { CheckCircle2, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import type { AuthActionState } from "@/lib/auth/state";
 import { initialAuthState } from "@/lib/auth/state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Notice } from "@/components/ui/notice";
 
 type AuthFormProps = {
   action: (
@@ -63,21 +64,18 @@ export function AuthForm({ action, kind, nextPath }: AuthFormProps) {
     <form action={formAction} className="space-y-5" noValidate>
       {nextPath ? <input name="next" type="hidden" value={nextPath} /> : null}
 
+      {/*
+        The same flat notice every other surface uses. The role and the live
+        region are unchanged — only the box around them is.
+      */}
       {state.message ? (
-        <div
+        <Notice
           aria-live="polite"
-          className={
-            state.status === "success"
-              ? "flex gap-2 rounded-control border border-success/30 bg-success-soft p-3 text-sm text-success"
-              : "rounded-control border border-danger/30 bg-danger-soft p-3 text-sm text-danger"
-          }
           role={state.status === "error" ? "alert" : "status"}
+          tone={state.status === "success" ? "success" : "error"}
         >
-          {state.status === "success" ? (
-            <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          ) : null}
-          <span>{state.message}</span>
-        </div>
+          {state.message}
+        </Notice>
       ) : null}
 
       {kind === "signup" ? (
@@ -131,7 +129,7 @@ export function AuthForm({ action, kind, nextPath }: AuthFormProps) {
             </label>
             {kind === "login" ? (
               <Link
-                className="text-sm font-medium text-accent hover:text-accent-hover hover:underline"
+                className="rounded-sm text-sm text-accent transition-colors hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
                 href="/forgot-password"
               >
                 Forgot password?
