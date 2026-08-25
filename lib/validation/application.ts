@@ -93,7 +93,14 @@ const optionalCompanyDomain = z.preprocess(
     .optional(),
 );
 
-export const applicationCreationSchema = z.object({
+/**
+ * Every field of an application, before the rules that span two of them.
+ *
+ * Split from `applicationCreationSchema` only so the update schema can add its
+ * version field and then take the same cross-field rules, rather than
+ * extending an already-refined schema.
+ */
+const applicationFieldsSchema = z.object({
   companyName: requiredText("Company name", 160),
   companyDomain: optionalCompanyDomain,
   originalJobTitle: requiredText("Original job title", 200),
@@ -123,14 +130,46 @@ export const applicationCreationSchema = z.object({
   nextActionDueDate: optionalDateOnly,
 });
 
+/**
+ * A due date describes an action, so it cannot stand on its own.
+ *
+ * The rule already existed in the product — `setApplicationNextAction` drops a
+ * due date that arrives without an action, and the detail page says so under
+ * the field — but nothing enforced it on the paths that create or replace a
+ * whole record. A row could therefore be stored holding a date for an action
+ * that did not exist, which the dashboard would have had to decide what to do
+ * with. Stating it here means every writer obeys it: the web form, the edit
+ * form, `save_job`, `update_job`, and every record of an `import_jobs` batch.
+ *
+ * The error is attached to the due date rather than to the action, because the
+ * due date is the field with nothing to describe.
+ */
+function requireActionForDueDate(
+  values: { nextAction?: string; nextActionDueDate?: string },
+  ctx: z.RefinementCtx,
+) {
+  if (values.nextActionDueDate && !values.nextAction) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["nextActionDueDate"],
+      message: "Next action due date requires a next action.",
+    });
+  }
+}
+
+export const applicationCreationSchema =
+  applicationFieldsSchema.superRefine(requireActionForDueDate);
+
 export const applicationIdSchema = z.uuid("Invalid application identifier.");
 
-export const applicationUpdateSchema = applicationCreationSchema.extend({
-  expectedUpdatedAt: z.iso.datetime({
-    offset: true,
-    error: "The application version is missing or invalid.",
-  }),
-});
+export const applicationUpdateSchema = applicationFieldsSchema
+  .extend({
+    expectedUpdatedAt: z.iso.datetime({
+      offset: true,
+      error: "The application version is missing or invalid.",
+    }),
+  })
+  .superRefine(requireActionForDueDate);
 
 export type ApplicationCreationInput = z.infer<
   typeof applicationCreationSchema

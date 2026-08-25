@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   createApplication,
+  createApplications,
   getApplicationById,
   listApplications,
   updateApplication,
@@ -26,6 +27,10 @@ export const createSupabaseJobTrackRepository: JobTrackRepositoryFactory = ({
 
   return {
     createApplication: (input) => createApplication(supabase, input),
+    // No `userId` argument, and none is possible: the rows carry no owner
+    // column, so `auth.uid()` from this request's own token fills it in and
+    // the insert policy checks it again.
+    createApplications: (inputs) => createApplications(supabase, inputs),
     getApplication: (applicationId) =>
       getApplicationById(supabase, userId, applicationId),
     listApplications: (filters) =>

@@ -126,7 +126,13 @@ RFC 8414 metadata is deliberately **not** served at our origin. See
 
 ## Tools
 
-All four tools exist: `save_job`, `list_jobs`, `get_job`, and `update_job`.
+All five tools exist: `save_job`, `import_jobs`, `list_jobs`, `get_job`, and
+`update_job`.
+
+`save_job` and `import_jobs` accept the **same record**, `newJobRecordSchema` —
+one at a time and many at a time. They share the schema object itself rather
+than two lists of fields kept in step by hand, so a field either tool could not
+express would be a field the other quietly stored better.
 
 ### `save_job`
 
@@ -139,7 +145,14 @@ All four tools exist: `save_job`, `list_jobs`, `get_job`, and `update_job`.
 | `category` | no | Defaults to `Other` |
 | `deadline`, `date_applied` | no | `YYYY-MM-DD` |
 | `work_term`, `duration` | no | e.g. `Summer 2027`, `4 months` |
+| `work_arrangement` | no | `Remote`, `Hybrid`, `On-site`; defaults to `Unknown` |
+| `salary` | no | As the posting states it |
+| `next_action`, `next_action_due_date` | no | A due date is only kept alongside an action |
 | `company_domain` | no | The employer's canonical domain, e.g. `shopify.com`. Claude fills this in |
+
+It returns structured output as well as its sentence:
+`{ application_id, company, job_title, status }`, so a client need not list the
+tracker again to find what it just created.
 
 `work_term_season` is a required column that a posting rarely states, so it
 falls back to the same `Not specified` sentinel the web form uses.
@@ -176,6 +189,74 @@ net rather than an oversight: an employer that genuinely cannot be identified
 confidently produces a save with no domain and a local lettermark, never a
 failed save and never a guess. A student can always correct or clear the value
 on the edit form.
+
+### `import_jobs`
+
+For migrating a tracker the student already keeps somewhere else.
+
+| Argument | Required | Notes |
+|---|---|---|
+| `applications` | yes | 1–25 records, each exactly a `save_job` record |
+
+Returns `{ imported, applications: [{ application_id, company, job_title }] }`
+and the sentence `Imported 23 applications into JobTrack.`
+
+**The CSV never reaches JobTrack.** The student uploads their export to their
+assistant; the assistant reads it, works out what the columns meant, resolves
+the ambiguities with them, and sends canonical records. JobTrack validates and
+stores. That division is the whole design, and it is why there is no upload
+control on the website, no CSV parser in this repository, and no spreadsheet
+dependency in `package.json`.
+
+What must already be resolved before the call:
+
+- **Statuses** are JobTrack's own ten. `OA`, `Interviewing`, `Ghosted`,
+  `Submitted` and `Phone screen` are rejected by the schema, because deciding
+  that `Ghosted` means `Rejected` is a claim about an employer that only the
+  student can make.
+- **Dates** are `YYYY-MM-DD`. `03/04/2026` is March 4th or April 3rd depending
+  on whose spreadsheet it is, and JobTrack must never be the one guessing.
+- **Duplicates** have been reviewed. The assistant is told to check with
+  `list_jobs` — narrowing by company where that helps — and to ask the student
+  whether a row that looks present already should be skipped or imported again.
+  JobTrack does no fuzzy matching, no silent merge, and no silent skip: a
+  deduplication guess made inside a database write is one nobody can see.
+- **Unmapped columns** are the assistant's to place. A recruiter name or a
+  resume version has no JobTrack column and is not getting one; the assistant
+  may fold what is useful into that record's `notes`, having told the student
+  it is doing so.
+
+Batch size is capped at 25, which is `LIST_JOBS_DEFAULT_LIMIT` — deliberately
+the same number, so a batch is as much as the duplicate check just showed the
+student. A hundred-row tracker arrives as four batches they can watch land, and
+the tool description tells the assistant to keep the agreed mapping identical
+across all of them.
+
+**All-or-nothing, twice over.** Every record is validated through
+`applicationCreationSchema` — the same schema the web form uses — before
+anything is written, and the first failure returns without a write:
+
+```text
+Nothing was imported. Import record 17 (RBC — Business Analyst Intern) could not
+be validated: Next action due date requires a next action. Fix that record with
+the student and send the batch again.
+```
+
+Then the whole batch goes through `createApplications`, one `insert` carrying
+every row. One statement is one implicit transaction, so a constraint or policy
+violation takes the batch down whole. There is no per-record write to partially
+succeed — no loop, and no `Promise.all` of single inserts.
+
+**No history is fabricated.** An application imported at `Interview` is stored
+at `Interview`, with whatever `date_applied` the student recorded. The database
+trigger writes the one creation event saying it entered JobTrack at that
+status, which is true. The stages it passed through before JobTrack existed are
+not ours to invent, `created_at` is import time and is never backdated, and no
+application code writes to `application_status_history` at all.
+
+Ownership is the same as everywhere else: no `user_id` argument exists, the
+inserted rows carry no owner column, `auth.uid()` from the caller's own token
+fills it in, and the insert policy checks it again.
 
 ### `list_jobs`
 
@@ -238,6 +319,14 @@ An omitted field keeps its stored value. An empty string clears a field that
 is allowed to be empty; a required field cannot be emptied. There is no
 dedicated interview-date column, so a phrase like "the interview is
 September 4" is expressed as `next_action` plus `next_action_due_date`.
+
+Those two are the one pair that is not independent. Emptying `next_action`
+clears `next_action_due_date` with it, because a due date describes an action —
+the same resolution `setApplicationNextAction` applies to the detail page's
+Clear button. "I have dealt with that follow-up" is therefore
+`next_action: ""` and nothing else, not two empty fields, and a due date sent
+alongside an emptied action is dropped rather than refused. An action that
+survives the patch — supplied, or stored and left alone — keeps its date.
 
 `company_domain` is the one field the tool invites Claude to fill in on its own
 initiative: if an application has none stored and the employer can be

@@ -16,7 +16,10 @@ import {
   registerJobTrackTools,
   type JobTrackRepositoryFactory,
 } from "@/lib/mcp/tools";
-import { LIST_JOBS_MAXIMUM_LIMIT } from "@/lib/validation/mcp";
+import {
+  IMPORT_JOBS_MAXIMUM_BATCH,
+  LIST_JOBS_MAXIMUM_LIMIT,
+} from "@/lib/validation/mcp";
 
 const STUDENT = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const ANOTHER_STUDENT = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -127,6 +130,25 @@ function fakeRepositoryFactory(
       const row = stored(userId, { ...insert, id: MISSING_ID });
       rows.push(row);
       return { data: { id: row.id }, error: null };
+    },
+    // One call for the whole batch, as the real statement is, and owned by the
+    // bound user rather than by anything the caller sent.
+    createApplications: async (inputs) => {
+      const created = inputs.map((input, index) =>
+        stored(userId, {
+          ...toApplicationInsert(input),
+          id: `9999999${index}-9999-4999-8999-999999999999`,
+        }),
+      );
+      rows.push(...created);
+      return {
+        data: created.map((row) => ({
+          id: row.id,
+          company_name: row.company_name,
+          original_job_title: row.original_job_title,
+        })),
+        error: null,
+      };
     },
     getApplication: async (applicationId) => ({
       data:
@@ -274,13 +296,13 @@ async function connectServer(repositoryFactory = fakeRepositoryFactory()) {
 }
 
 describe("MCP tool registration", () => {
-  it("registers all four tools on a real MCP server", async () => {
+  it("registers all five tools on a real MCP server", async () => {
     const connection = await connectServer();
 
     const names = (await connection.listTools()).map((tool) => tool.name);
 
     expect(names.sort()).toEqual(
-      ["get_job", "list_jobs", "save_job", "update_job"].sort(),
+      ["get_job", "import_jobs", "list_jobs", "save_job", "update_job"].sort(),
     );
     await connection.close();
   });
@@ -616,8 +638,8 @@ describe("company domain over MCP", () => {
     expect(properties("list_jobs")).not.toContain("company_domain");
     expect(properties("get_job")).not.toContain("company_domain");
 
-    // Still exactly the four tools, with the field added to existing schemas.
-    expect(tools).toHaveLength(4);
+    // Still exactly the five tools, with the field added to existing schemas.
+    expect(tools).toHaveLength(5);
     await connection.close();
   });
 
@@ -938,6 +960,254 @@ describe("the company_domain guidance Claude reads", () => {
 
     expect(saved.isError).toBeUndefined();
     expect(read.structuredContent).toMatchObject({ company_domain: null });
+    await connection.close();
+  });
+});
+
+describe("import_jobs served by the real server", () => {
+  const application = (overrides: Record<string, unknown> = {}) => ({
+    company: "RBC",
+    job_title: "Business Analyst Intern",
+    status: "Applied",
+    category: "Business Analysis",
+    location: "Toronto, ON",
+    work_arrangement: "Hybrid",
+    date_applied: "2026-08-12",
+    source: "LinkedIn",
+    work_term: "Winter 2027",
+    notes: "Imported from previous tracker.",
+    ...overrides,
+  });
+
+  it("advertises applications as its only argument, with no user_id", async () => {
+    const connection = await connectServer();
+
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "import_jobs",
+    );
+
+    expect(Object.keys(tool!.inputSchema.properties)).toEqual(["applications"]);
+    expect(tool!.inputSchema.required).toEqual(["applications"]);
+    await connection.close();
+  });
+
+  it("tells the assistant it takes records rather than a file", async () => {
+    const connection = await connectServer();
+
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "import_jobs",
+    );
+    const description = tool!.description ?? "";
+
+    // The workflow is stated once, at the tool level, where a client reads it.
+    expect(description).toContain("takes records, never files");
+    expect(description).toContain("list_jobs");
+    expect(description).toContain("YYYY-MM-DD");
+    expect(description).toContain(String(IMPORT_JOBS_MAXIMUM_BATCH));
+    expect(description.toLowerCase()).toContain("never invent history");
+    await connection.close();
+  });
+
+  it("imports a batch and reports what it stored", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool("import_jobs", {
+      applications: [
+        application(),
+        application({
+          company: "Deloitte",
+          job_title: "Consulting Intern",
+          status: "Interview",
+          date_applied: "2026-08-03",
+        }),
+      ],
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toBe("Imported 2 applications into JobTrack.");
+    expect(result.structuredContent).toMatchObject({ imported: 2 });
+
+    const summaries = result.structuredContent!.applications as {
+      application_id: string;
+      company: string;
+      job_title: string;
+    }[];
+    expect(summaries.map((summary) => summary.company)).toEqual([
+      "RBC",
+      "Deloitte",
+    ]);
+    for (const summary of summaries) {
+      expect(Object.keys(summary)).toEqual([
+        "application_id",
+        "company",
+        "job_title",
+      ]);
+    }
+    await connection.close();
+  });
+
+  it("puts what it imported into the student's own tracker", async () => {
+    const connection = await connectServer();
+
+    await connection.callTool("import_jobs", {
+      applications: [
+        application({ company: "Wealthsimple", job_title: "Growth Intern" }),
+      ],
+    });
+
+    const mine = await connection.callTool("list_jobs", {
+      company: "Wealthsimple",
+    });
+    const theirs = await connection.callTool(
+      "list_jobs",
+      { company: "Wealthsimple" },
+      ANOTHER_STUDENT,
+    );
+
+    expect(mine.structuredContent!.returned).toBe(1);
+    // Imported into the caller's tracker, and only theirs.
+    expect(theirs.structuredContent!.returned).toBe(0);
+    await connection.close();
+  });
+
+  it("keeps the status an application arrived at", async () => {
+    const connection = await connectServer();
+
+    await connection.callTool("import_jobs", {
+      applications: [
+        application({
+          company: "Deloitte",
+          job_title: "Consulting Intern",
+          status: "Interview",
+          date_applied: "2026-08-03",
+        }),
+      ],
+    });
+
+    const listed = await connection.callTool("list_jobs", {
+      company: "Deloitte",
+    });
+    const [imported] = listed.structuredContent!.applications as {
+      status: string;
+      date_applied: string | null;
+    }[];
+
+    expect(imported.status).toBe("Interview");
+    expect(imported.date_applied).toBe("2026-08-03");
+    await connection.close();
+  });
+
+  it("stores nothing when one record in the batch is invalid", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool("import_jobs", {
+      applications: [
+        application({ company: "Faire", job_title: "Ops Intern" }),
+        application({
+          company: "Ada",
+          job_title: "Marketing Intern",
+          next_action_due_date: "2026-09-04",
+        }),
+      ],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Nothing was imported.");
+    expect(result.content[0].text).toContain(
+      "Import record 2 (Ada — Marketing Intern)",
+    );
+
+    // The valid first record was not left behind.
+    const listed = await connection.callTool("list_jobs", { company: "Faire" });
+    expect(listed.structuredContent!.returned).toBe(0);
+    await connection.close();
+  });
+
+  it("refuses a free-text status before any handler runs", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool("import_jobs", {
+      applications: [application({ status: "Ghosted" })],
+    });
+
+    expect(result.isError).toBe(true);
+    await connection.close();
+  });
+
+  it("refuses an empty batch and one beyond the maximum", async () => {
+    const connection = await connectServer();
+
+    const empty = await connection.callTool("import_jobs", { applications: [] });
+    const tooMany = await connection.callTool("import_jobs", {
+      applications: Array.from({ length: IMPORT_JOBS_MAXIMUM_BATCH + 1 }, () =>
+        application(),
+      ),
+    });
+    const full = await connection.callTool("import_jobs", {
+      applications: Array.from({ length: IMPORT_JOBS_MAXIMUM_BATCH }, (_, index) =>
+        application({ job_title: `Intern ${index}` }),
+      ),
+    });
+
+    expect(empty.isError).toBe(true);
+    expect(tooMany.isError).toBe(true);
+    expect(full.isError).toBeUndefined();
+    expect(full.structuredContent!.imported).toBe(IMPORT_JOBS_MAXIMUM_BATCH);
+    await connection.close();
+  });
+
+  it("refuses to import for a caller who is not signed in", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool(
+      "import_jobs",
+      { applications: [application()] },
+      null,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("Not signed in");
+    await connection.close();
+  });
+});
+
+describe("save_job reports what it created", () => {
+  it("returns the new application's id, employer, title and status", async () => {
+    const connection = await connectServer();
+
+    const saved = await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
+      status: "Applied",
+    });
+
+    expect(saved.structuredContent).toEqual({
+      application_id: MISSING_ID,
+      company: "Nokia",
+      job_title: "Marketing Student",
+      status: "Applied",
+    });
+    // The sentence a student reads is unchanged.
+    expect(saved.content[0].text).toBe(
+      "Saved Marketing Student at Nokia with status Applied.",
+    );
+    await connection.close();
+  });
+
+  it("can now save the fields only the website could set before", async () => {
+    const connection = await connectServer();
+
+    const saved = await connection.callTool("save_job", {
+      company: "Telus",
+      job_title: "Business Operations Intern",
+      work_arrangement: "Remote",
+      salary: "$24/hour",
+      next_action: "Follow up with the recruiter",
+      next_action_due_date: "2026-09-04",
+    });
+
+    expect(saved.isError).toBeUndefined();
+    expect(saved.structuredContent!.company).toBe("Telus");
     await connection.close();
   });
 });

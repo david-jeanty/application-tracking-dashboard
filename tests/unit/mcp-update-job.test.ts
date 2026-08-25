@@ -511,3 +511,109 @@ describe("update_job result", () => {
     expect(changes[0].to?.endsWith("…")).toBe(true);
   });
 });
+
+describe("clearing a follow-up clears the date that described it", () => {
+  const withFollowUp = () =>
+    record({
+      next_action: "Follow up with the recruiter",
+      next_action_due_date: "2026-09-04",
+    });
+
+  it("clears both when the action alone is emptied", async () => {
+    const deps = dependencies({ stored: withFollowUp() });
+
+    const result = await runUpdateJob(
+      { application_id: APPLICATION_ID, next_action: "" },
+      deps,
+    );
+
+    // The same semantics the detail page's Clear button has: emptying the
+    // action is how a student is rid of the follow-up, and the date it
+    // described goes with it. Nobody has to remember to send two empty fields.
+    expect(result.outcome).toBe("updated");
+    const [, written] = deps.writeApplication.mock.calls[0];
+    expect(written.nextAction).toBeUndefined();
+    expect(written.nextActionDueDate).toBeUndefined();
+  });
+
+  it("clears both when the action is emptied with only whitespace", async () => {
+    const deps = dependencies({ stored: withFollowUp() });
+
+    await runUpdateJob(
+      { application_id: APPLICATION_ID, next_action: "   " },
+      deps,
+    );
+
+    const [, written] = deps.writeApplication.mock.calls[0];
+    expect(written.nextAction).toBeUndefined();
+    expect(written.nextActionDueDate).toBeUndefined();
+  });
+
+  it("drops a due date sent alongside an emptied action, rather than failing", async () => {
+    const deps = dependencies({ stored: withFollowUp() });
+
+    const result = await runUpdateJob(
+      {
+        application_id: APPLICATION_ID,
+        next_action: "",
+        next_action_due_date: "2026-10-01",
+      },
+      deps,
+    );
+
+    // Contradictory, and resolved the way `setApplicationNextAction` resolves
+    // it: no action means no date, whichever date came with the clear.
+    expect(result.outcome).toBe("updated");
+    const [, written] = deps.writeApplication.mock.calls[0];
+    expect(written.nextAction).toBeUndefined();
+    expect(written.nextActionDueDate).toBeUndefined();
+  });
+
+  it("leaves a stored follow-up untouched when the patch is about something else", async () => {
+    const deps = dependencies({ stored: withFollowUp() });
+
+    await runUpdateJob(
+      { application_id: APPLICATION_ID, status: "Interview" },
+      deps,
+    );
+
+    const [, written] = deps.writeApplication.mock.calls[0];
+    expect(written.currentStatus).toBe("Interview");
+    expect(written.nextAction).toBe("Follow up with the recruiter");
+    expect(written.nextActionDueDate).toBe("2026-09-04");
+  });
+
+  it("keeps the stored due date when a new action replaces the old one", async () => {
+    const deps = dependencies({ stored: withFollowUp() });
+
+    await runUpdateJob(
+      { application_id: APPLICATION_ID, next_action: "Prepare for the panel" },
+      deps,
+    );
+
+    // Decided, not incidental: an omitted field keeps its stored value, which
+    // is this tool's whole contract, and the pair stays valid because the date
+    // still describes an action. A student who also wants the date moved says
+    // so; a student who renames the follow-up has not moved the deadline.
+    const [, written] = deps.writeApplication.mock.calls[0];
+    expect(written.nextAction).toBe("Prepare for the panel");
+    expect(written.nextActionDueDate).toBe("2026-09-04");
+  });
+
+  it("still refuses a due date when nothing describes it", async () => {
+    const deps = dependencies({ stored: record() });
+
+    const result = await runUpdateJob(
+      { application_id: APPLICATION_ID, next_action_due_date: "2026-09-04" },
+      deps,
+    );
+
+    // The shared rule is untouched: this record has no next action, so a date
+    // on its own is still rejected, and nothing is written.
+    expect(result.outcome).toBe("invalid");
+    expect(result.outcome === "invalid" && result.message).toContain(
+      "Next action due date requires a next action.",
+    );
+    expect(deps.writeApplication).not.toHaveBeenCalled();
+  });
+});
