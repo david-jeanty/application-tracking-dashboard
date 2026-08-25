@@ -28,6 +28,7 @@ function Explanation({
 }) {
   return (
     <section>
+      <span aria-hidden="true" className="mb-4 block h-0.5 w-8 bg-accent" />
       <h2 className="border-b border-border pb-2 text-[17px] font-medium text-foreground">
         {title}
       </h2>
@@ -149,7 +150,7 @@ export function HomePage() {
         {/* --------------------------------------------------------- preview */}
         <section
           aria-labelledby="preview-heading"
-          className="border-t border-border bg-surface"
+          className="border-t border-border bg-brand-soft"
         >
           <div className="mx-auto max-w-[1120px] px-5 py-12 sm:px-8 sm:py-16">
             {/*
@@ -181,7 +182,7 @@ export function HomePage() {
         </section>
 
         {/* -------------------------------------------------- what it is for */}
-        <div className="mx-auto grid max-w-[1120px] gap-10 px-5 py-14 sm:px-8 sm:py-20 lg:grid-cols-3 lg:gap-12">
+        <div className="mx-auto grid max-w-[1120px] gap-10 bg-background px-5 py-14 sm:px-8 sm:py-20 lg:grid-cols-3 lg:gap-12">
           <Explanation
             body={
               <p>
@@ -220,12 +221,12 @@ export function HomePage() {
         </div>
 
         {/* ---------------------------------------------------- the boundary */}
-        <section className="border-y border-border bg-surface">
+        <section className="border-y border-brand-strong bg-brand-strong text-brand-strong-foreground">
           <div className="mx-auto max-w-[1120px] px-5 py-14 sm:px-8 sm:py-20">
-            <h2 className="max-w-2xl text-[26px] font-medium leading-tight tracking-tight text-foreground sm:text-[30px]">
+            <h2 className="max-w-2xl text-[26px] font-medium leading-tight tracking-tight sm:text-[30px]">
               AI does the reasoning. JobTrack stores the truth.
             </h2>
-            <p className="mt-4 max-w-2xl text-[15px] leading-7 text-foreground-secondary">
+            <p className="mt-4 max-w-2xl text-[15px] leading-7 text-brand-strong-foreground/85">
               JobTrack does not provide an AI and does not charge you for one.
               You bring an assistant you already have, and the two do different
               jobs.
@@ -233,20 +234,20 @@ export function HomePage() {
 
             <div className="mt-10 grid gap-10 sm:grid-cols-2 sm:gap-12">
               <div>
-                <h3 className="border-b border-border pb-2 text-[15px] font-medium text-foreground">
+                <h3 className="border-b border-brand-strong-foreground/30 pb-2 text-[15px] font-medium">
                   Your assistant
                 </h3>
-                <ul className="mt-4 space-y-2 text-[15px] leading-7 text-foreground-secondary">
+                <ul className="mt-4 space-y-2 text-[15px] leading-7 text-brand-strong-foreground/85">
                   <li>Understands the conversation you are having with it</li>
                   <li>Reads job postings and messy spreadsheets</li>
                   <li>Works out what you meant, and asks when it cannot tell</li>
                 </ul>
               </div>
               <div>
-                <h3 className="border-b border-border pb-2 text-[15px] font-medium text-foreground">
+                <h3 className="border-b border-brand-strong-foreground/30 pb-2 text-[15px] font-medium">
                   JobTrack
                 </h3>
-                <ul className="mt-4 space-y-2 text-[15px] leading-7 text-foreground-secondary">
+                <ul className="mt-4 space-y-2 text-[15px] leading-7 text-brand-strong-foreground/85">
                   <li>Stores your applications as structured records</li>
                   <li>Checks what goes in before it is saved</li>
                   <li>
@@ -257,7 +258,7 @@ export function HomePage() {
               </div>
             </div>
 
-            <p className="mt-10 max-w-2xl text-[15px] leading-7 text-foreground-secondary">
+            <p className="mt-10 max-w-2xl text-[15px] leading-7 text-brand-strong-foreground/85">
               You talk to your assistant. Your assistant works with JobTrack.
               JobTrack keeps the record.
             </p>
@@ -265,7 +266,7 @@ export function HomePage() {
         </section>
 
         {/* --------------------------------------------------------- late CTA */}
-        <section className="mx-auto max-w-[1120px] px-5 py-16 sm:px-8 sm:py-24">
+        <section className="mx-auto max-w-[1120px] bg-background px-5 py-16 sm:px-8 sm:py-24">
           <h2 className="max-w-2xl text-[26px] font-medium leading-tight tracking-tight text-foreground sm:text-[30px]">
             See what a real search looks like.
           </h2>
@@ -276,7 +277,7 @@ export function HomePage() {
             nothing to sign up for.
           </p>
           <div className="mt-8">
-            <ButtonLink className="min-h-11 px-5 text-[15px]" href="/demo">
+            <ButtonLink className="min-h-12 px-6 text-[15px] font-medium" href="/demo">
               Try the demo
             </ButtonLink>
           </div>

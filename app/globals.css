@@ -118,6 +118,17 @@
   --accent-foreground: var(--accent-on-light);
   --focus: var(--accent-light);
 
+  /*
+    Full-bleed brand surfaces keep the deeper accent value in both themes.
+    Controls still use the theme-adjusted `--accent`; `--brand-strong` is
+    reserved for the few public-facing moments that need white-on-colour
+    contrast. The soft surface mixes the selected tint toward the current
+    neutral so small muted product labels keep AA contrast.
+  */
+  --brand-strong: var(--accent-light);
+  --brand-strong-foreground: var(--accent-on-light);
+  --brand-soft: color-mix(in srgb, var(--accent-soft) 60%, var(--surface));
+
   --success: #2f6b4f;
   --success-soft: #e7efe9;
   --warning: #8a5a1c;
@@ -303,6 +314,10 @@
   --color-accent-soft: var(--accent-soft);
   --color-accent-foreground: var(--accent-foreground);
   --color-focus: var(--focus);
+
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-strong-foreground: var(--brand-strong-foreground);
+  --color-brand-soft: var(--brand-soft);
 
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
