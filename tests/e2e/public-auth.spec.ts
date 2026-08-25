@@ -78,6 +78,22 @@ test("the public homepage is the front door for a signed-out visitor", async ({
   ).toBeVisible();
 });
 
+test("the privacy page is public and linked from the homepage footer", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("contentinfo").getByRole("link", { name: "Privacy" }).click();
+
+  await expect(page).toHaveURL(/\/privacy$/);
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Your application records stay yours.",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText(/extension is not publicly released/i)).toBeVisible();
+});
+
 test("a visitor can reach the demo from the homepage and the auth pages", async ({
   page,
 }) => {

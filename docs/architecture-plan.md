@@ -886,3 +886,38 @@ Proceed to Phase 1 only after reviewing these four decisions:
 4. use archive plus explicit permanent deletion rather than ambiguous deletion.
 
 No application code or packages were created during Phase 0.
+
+## 20. Browser-capture foundation (added 2026-08-25)
+
+The original plan classified all browser extensions as out of MVP scope. That
+was the right sequencing decision and remains recorded in the specification and
+backlog. The tracker, dashboard, pipeline, analytics, and MCP connection now
+exist, while manually copying a currently viewed posting into those records
+still duplicates work. A narrowly scoped, explicitly invoked capture extension
+is therefore approved as a post-MVP feature.
+
+Its server foundation is a new authenticated caller of the existing application
+domain, not a second product or persistence path:
+
+```text
+future extension
+  → POST /api/browser-capture + Supabase bearer token
+  → generic bearer verification resolves the user
+  → shared external job-record schema
+  → existing applicationCreationSchema
+  → exact owner-scoped stored-URL check
+  → existing createApplication repository write
+  → Postgres RLS
+```
+
+MCP `save_job` and browser capture share the same external record schema and
+mapping/defaults. The established MCP export remains an alias of that exact
+schema object, so its wire contract does not change. Neither boundary accepts
+an ownership field; `applications.user_id` still comes from `auth.uid()` and
+the insert policy still checks it.
+
+This work does not add a browser extension, database migration, service-role
+client, JWT secret, classifier, built-in AI, source inference, employer-domain
+inference, background scraping, autofill, auto-apply, discovery, or submission
+detection. The detailed request/response, trust, privacy, duplicate, and release
+boundaries live in [`browser-capture.md`](browser-capture.md).

@@ -9,6 +9,9 @@ vi.mock("@/lib/supabase/bearer", () => ({
 }));
 
 const { verifySupabaseAccessToken } = await import("@/lib/mcp/identity");
+const { readBearerToken, verifyBearerToken } = await import(
+  "@/lib/auth/bearer-identity"
+);
 
 const USER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const request = new Request("https://tracker.example.com/api/mcp");
@@ -73,6 +76,39 @@ describe("a request without a usable token is not authenticated", () => {
     await verifySupabaseAccessToken(request, "the-real-token");
 
     expect(getUser).toHaveBeenCalledWith("the-real-token");
+  });
+});
+
+describe("generic HTTP bearer parsing", () => {
+  it("accepts one well-formed bearer credential", () => {
+    const bearerRequest = new Request("https://tracker.example.com/api/browser-capture", {
+      headers: { authorization: "Bearer good-token" },
+    });
+
+    expect(readBearerToken(bearerRequest)).toBe("good-token");
+  });
+
+  it.each([
+    undefined,
+    "Basic credentials",
+    "Bearer",
+    "Bearer ",
+    "Bearer two tokens",
+  ])("rejects a missing or malformed credential: %s", (authorization) => {
+    const bearerRequest = new Request("https://tracker.example.com/api/browser-capture", {
+      headers: authorization ? { authorization } : undefined,
+    });
+
+    expect(readBearerToken(bearerRequest)).toBeUndefined();
+  });
+
+  it("fails closed when Supabase rejects a bearer token", async () => {
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: { message: "invalid JWT" },
+    });
+
+    expect(await verifyBearerToken("invalid-token")).toBeUndefined();
   });
 });
 

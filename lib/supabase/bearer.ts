@@ -6,9 +6,10 @@ import { getPublicEnvironment } from "@/lib/env";
 /**
  * A Supabase client that acts as the holder of a Supabase-issued access token.
  *
- * This is the MCP equivalent of `lib/supabase/server.ts`, which reads the
- * browser session from cookies. An MCP request has no cookies: it carries an
- * OAuth 2.1 access token issued by Supabase Auth for one of our own users.
+ * This is the bearer-request equivalent of `lib/supabase/server.ts`, which
+ * reads the browser session from cookies. MCP and browser-capture requests have
+ * no cookies: they carry an access token issued by Supabase Auth for one of our
+ * own users.
  *
  * That token is an ordinary Supabase JWT (`sub` = user id, `role` =
  * `authenticated`), so every query made through this client runs under that

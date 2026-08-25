@@ -93,6 +93,42 @@ export async function createApplication(
     .single();
 }
 
+/** The bounded record returned by browser capture's exact-URL check. */
+export type ApplicationUrlMatch = {
+  id: string;
+  company_name: string;
+  original_job_title: string;
+  application_url: string;
+};
+
+/**
+ * Finds the newest application with exactly the supplied stored URL.
+ *
+ * This is deliberately not fuzzy deduplication: it does not compare titles or
+ * employers, strip query parameters, follow redirects, or merge repostings.
+ * The value has already passed `applicationCreationSchema`, whose trimming is
+ * the only normalization applied. Archived records count too, because they are
+ * still records in the student's tracker.
+ *
+ * `limit(1)` also makes the read safe for trackers that legitimately already
+ * contain more than one copy of a URL; this policy does not add a global unique
+ * constraint or retroactively make those records invalid.
+ */
+export async function findApplicationByExactUrl(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+  applicationUrl: string,
+) {
+  return supabase
+    .from("applications")
+    .select("id,company_name,original_job_title,application_url")
+    .eq("user_id", authenticatedUserId)
+    .eq("application_url", applicationUrl)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<ApplicationUrlMatch>();
+}
+
 /**
  * What a bulk creation hands back about each row it wrote.
  *

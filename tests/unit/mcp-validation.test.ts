@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applicationCreationSchema } from "@/lib/validation/application";
+import { externalJobRecordSchema } from "@/lib/applications/external-record";
 import { toApplicationInsert } from "@/lib/applications/mapper";
 import {
   newJobRecordSchema,
@@ -140,6 +141,7 @@ describe("save_job and import_jobs share one record contract", () => {
   it("is literally the same schema, so the two cannot drift", () => {
     // Not "the same fields, kept in step by hand" — the same object.
     expect(saveJobInputSchema).toBe(newJobRecordSchema);
+    expect(saveJobInputSchema).toBe(externalJobRecordSchema);
   });
 
   it("still accepts every payload an older caller could send", () => {

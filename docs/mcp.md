@@ -50,7 +50,8 @@ Claude ──1── POST /api/mcp  (no token)
 | `lib/mcp/list-jobs.ts` | `list_jobs` orchestration and summary shaping |
 | `lib/mcp/get-job.ts` | `get_job` orchestration and record shaping |
 | `lib/mcp/update-job.ts` | `update_job` read-merge-write orchestration |
-| `lib/mcp/identity.ts` | Validates the bearer token, resolves the user |
+| `lib/auth/bearer-identity.ts` | Generic bearer parsing, token validation, and user resolution |
+| `lib/mcp/identity.ts` | Adapts a verified bearer identity to MCP `AuthInfo` |
 | `lib/mcp/user.ts` | Reads the verified user id off a request |
 | `lib/supabase/bearer.ts` | Token-scoped Supabase client (no cookies) |
 | `lib/validation/mcp.ts` | Every tool's wire contract and field mapping |
@@ -89,6 +90,15 @@ Note that OAuth *scopes* do not restrict database access — Supabase states tha
 screen therefore describes access truthfully but does not enforce it. To
 genuinely restrict what an MCP client may do relative to the website, add
 policies keyed on `auth.jwt() ->> 'client_id'`.
+
+The same limitation applies to browser capture: the foundation endpoint accepts
+a valid Supabase-issued bearer token and relies on the existing owner RLS, but
+that token's nominal OAuth scopes are not a write-only database capability. A
+public Chrome Web Store release therefore requires a dedicated extension OAuth
+client and an explicit least-privilege review, including whether `client_id`-
+aware policies should restrict that client to the intended capture operation.
+The current Settings grant list and consent copy describe/revoke OAuth clients;
+they do not create database-level capability restrictions.
 
 ## Client compatibility aliases (`/authorize`, `/token`)
 
