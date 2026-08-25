@@ -1,10 +1,10 @@
 "use client";
 
 import { useActionState, useEffect, useRef } from "react";
-import { AlertTriangle, LoaderCircle } from "lucide-react";
+import { LoaderCircle } from "lucide-react";
 import { ApplicationFields } from "@/components/applications/application-fields";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Notice } from "@/components/ui/notice";
 import { updateApplicationAction } from "@/lib/applications/actions";
 import { initialApplicationState } from "@/lib/applications/state";
 import type { ApplicationFormValues } from "@/lib/applications/types";
@@ -30,7 +30,11 @@ export function ApplicationEditForm({
   }, [state]);
 
   return (
-    <Card className="p-5 sm:p-6">
+    /*
+      The form is the page, on a readable measure. It used to sit inside a
+      card, which drew a box around the only thing on the screen.
+    */
+    <div className="mt-8 max-w-[760px] border-t border-border pt-6">
       <form
         action={formAction}
         className="space-y-6"
@@ -50,17 +54,9 @@ export function ApplicationEditForm({
         />
 
         {state.message ? (
-          <div
-            aria-live="polite"
-            className="flex gap-2 rounded-control border border-danger/30 bg-danger-soft p-3 text-sm text-danger"
-            role="alert"
-          >
-            <AlertTriangle
-              aria-hidden="true"
-              className="mt-0.5 size-4 shrink-0"
-            />
-            <span>{state.message}</span>
-          </div>
+          <Notice aria-live="polite" tone="error">
+            {state.message}
+          </Notice>
         ) : null}
 
         <ApplicationFields
@@ -87,6 +83,6 @@ export function ApplicationEditForm({
           </Button>
         </div>
       </form>
-    </Card>
+    </div>
   );
 }

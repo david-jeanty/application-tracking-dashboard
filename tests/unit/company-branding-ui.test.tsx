@@ -169,17 +169,20 @@ describe("company branding across the product", () => {
       company_domain: "deloitte.com",
     });
 
+    // One mark and one link per archived application: the archive renders a
+    // single composition at every width, not a table and a set of cards.
     it("gives archived applications the same subtle mark", () => {
       const { container } = render(
         <ArchivedApplicationsList applications={[archived]} />,
       );
 
       const sources = logoSources(container);
-      expect(sources).toHaveLength(2);
-      for (const source of sources) {
-        expect(source).toContain(`https://${LOGO_DEV_HOST}/deloitte.com?`);
-      }
-      expect(screen.getAllByRole("link", { name: "Deloitte" })).toHaveLength(2);
+      expect(sources).toHaveLength(1);
+      expect(sources[0]).toContain(`https://${LOGO_DEV_HOST}/deloitte.com?`);
+      expect(
+        screen.getAllByRole("link", { name: "Data Analyst Intern" }),
+      ).toHaveLength(1);
+      expect(screen.getAllByText("Deloitte")).toHaveLength(1);
     });
 
     it("renders an archived application with no domain", () => {
@@ -190,7 +193,10 @@ describe("company branding across the product", () => {
       );
 
       expect(logoSources(container)).toHaveLength(0);
-      expect(screen.getAllByRole("link", { name: "Deloitte" })).toHaveLength(2);
+      expect(
+        screen.getAllByRole("link", { name: "Data Analyst Intern" }),
+      ).toHaveLength(1);
+      expect(screen.getAllByText("Deloitte")).toHaveLength(1);
     });
   });
 

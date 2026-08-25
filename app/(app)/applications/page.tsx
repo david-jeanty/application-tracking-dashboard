@@ -53,8 +53,12 @@ export default async function ApplicationsPage({
         One page title, and a sentence that says what the page is for. The
         count belongs with the records it counts rather than up here, where
         showing it would mean a second query or waiting on the streamed list.
+
+        The row wraps so that the create panel, which is a button until it is
+        opened, can take a full-width line of its own once it holds a form
+        instead of being squeezed into the button's column.
       */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-6">
         <div>
           <h1 className="text-[34px] font-medium leading-tight tracking-tight text-foreground sm:text-[38px]">
             Applications
