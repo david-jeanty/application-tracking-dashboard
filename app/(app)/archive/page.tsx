@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { redirect } from "next/navigation";
 import {
   ArchivedApplicationsEmptyState,
   ArchivedApplicationsList,
 } from "@/components/applications/archived-list";
-import { Card } from "@/components/ui/card";
+import { Notice } from "@/components/ui/notice";
 import { toDeleteNotice } from "@/lib/applications/archive-notice";
 import { listApplications } from "@/lib/applications/repository";
 import { createClient } from "@/lib/supabase/server";
@@ -33,48 +32,33 @@ export default async function ArchivePage({
   });
 
   return (
-    <div className="space-y-6">
-      <header>
-        <p className="text-sm font-semibold text-accent">Archive</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-          Archived applications
+    <div className="space-y-8">
+      {/*
+        One page title, at the scale every other page uses, and a sentence
+        saying what the page is for. The accent eyebrow that used to sit above
+        it printed the word "Archive" a second time.
+      */}
+      <div>
+        <h1 className="text-[34px] font-medium leading-tight tracking-tight text-foreground sm:text-[38px]">
+          Archive
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
-          Archiving is not deletion. These applications keep their status and
-          history, and restoring one puts it back in your list.
+        <p className="mt-2 max-w-2xl text-[15px] text-foreground-secondary">
+          What you have put away. Archiving is not deletion — these
+          applications keep their status and history, and restoring one puts it
+          back in your list.
         </p>
-      </header>
+      </div>
 
       {deleteNotice ? (
-        <div
-          className={
-            deleteNotice.tone === "success"
-              ? "flex gap-2 rounded-record border border-success/30 bg-success-soft p-4 text-sm text-success"
-              : "flex gap-2 rounded-record border border-danger/30 bg-danger-soft p-4 text-sm text-danger"
-          }
-          role="status"
-        >
-          {deleteNotice.tone === "success" ? (
-            <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          ) : (
-            <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-          )}
+        <Notice role="status" tone={deleteNotice.tone}>
           {deleteNotice.message}
-        </div>
+        </Notice>
       ) : null}
 
       {error ? (
-        <Card className="flex gap-3 border-danger/30 bg-danger-soft p-5 text-danger">
-          <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
-          <div>
-            <h2 className="font-semibold">
-              Archived applications could not be loaded
-            </h2>
-            <p className="mt-1 text-sm">
-              Nothing has been lost. Refresh the page to try again.
-            </p>
-          </div>
-        </Card>
+        <Notice heading="Archived applications could not be loaded" tone="error">
+          Nothing has been lost. Refresh the page to try again.
+        </Notice>
       ) : data?.length ? (
         <ArchivedApplicationsList applications={data} />
       ) : (

@@ -28,14 +28,21 @@ export function AppearanceSettings() {
 
   return (
     <section aria-labelledby="appearance-heading" className="space-y-5">
-      <h2
-        className="text-base font-semibold text-foreground"
-        id="appearance-heading"
-      >
-        Appearance
-      </h2>
+      {/*
+        The section heading and its rule, in the same language every other
+        section of the product uses. The first row below sits straight under
+        that rule rather than drawing a second one of its own.
+      */}
+      <div className="border-b border-border pb-2">
+        <h2
+          className="text-[17px] font-medium text-foreground"
+          id="appearance-heading"
+        >
+          Appearance
+        </h2>
+      </div>
 
-      <div className="flex flex-col gap-3 border-t border-border pt-5 sm:flex-row sm:items-start sm:justify-between sm:gap-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-8">
         <div className="max-w-sm">
           <h3 className="text-sm font-medium text-foreground" id="mode-label">
             Mode

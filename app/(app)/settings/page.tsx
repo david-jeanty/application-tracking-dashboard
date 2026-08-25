@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
-import { AlertCircle, CheckCircle2, Sparkles } from "lucide-react";
+import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import {
   ConnectedClients,
   type ConnectedClient,
 } from "@/components/settings/connected-clients";
-import { Card } from "@/components/ui/card";
+import { Notice } from "@/components/ui/notice";
 import {
   ASSISTANT_CAN,
   ASSISTANT_CANNOT,
@@ -41,6 +41,29 @@ const DISCONNECT_MESSAGES = {
     text: "That disconnect request was not valid. Try again from the list below.",
   },
 } as const;
+
+/**
+ * One part of the page, below the section it belongs to.
+ *
+ * A heading and the space under it. These used to be five separate `Card`s,
+ * which made a paragraph about how connectors work look like a bounded object
+ * a student could act on. Nothing here is an object; it is an explanation, and
+ * an explanation needs a heading, not a box.
+ */
+function Subsection({
+  children,
+  title,
+}: {
+  children: ReactNode;
+  title: string;
+}) {
+  return (
+    <div>
+      <h3 className="text-[15px] font-medium text-foreground">{title}</h3>
+      {children}
+    </div>
+  );
+}
 
 export default async function SettingsPage({
   searchParams,
@@ -77,57 +100,37 @@ export default async function SettingsPage({
 
   return (
     <div className="space-y-10">
-      <header>
-        <h1 className="text-[26px] font-semibold tracking-tight text-foreground">
+      <div>
+        <h1 className="text-[34px] font-medium leading-tight tracking-tight text-foreground sm:text-[38px]">
           Settings
         </h1>
-        <p className="mt-1 text-sm text-foreground-secondary">
+        <p className="mt-2 max-w-2xl text-[15px] text-foreground-secondary">
           Personalize JobTrack and manage connected assistants.
         </p>
-      </header>
+      </div>
 
       <AppearanceSettings />
 
-      <section aria-labelledby="assistants-heading" className="space-y-6">
-        <div className="border-t border-border pt-5">
-          <h2
-            className="text-base font-semibold text-foreground"
-            id="assistants-heading"
-          >
-            Connect an AI assistant
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-foreground-secondary">
+      <section aria-labelledby="assistants-heading" className="space-y-8">
+        <div>
+          <div className="border-b border-border pb-2">
+            <h2
+              className="text-[17px] font-medium text-foreground"
+              id="assistants-heading"
+            >
+              Connected assistant
+            </h2>
+          </div>
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-foreground-secondary">
             JobTrack works completely on its own. If you already use an AI
             assistant, you can also let it read and update your applications, so
             you stop retyping what you just discussed with it.
           </p>
         </div>
 
-        {notice ? (
-          <Card
-            className={
-              notice.tone === "success"
-                ? "flex gap-3 border-success bg-success-soft p-4 text-success"
-                : "flex gap-3 border-danger bg-danger-soft p-4 text-danger"
-            }
-            role="status"
-          >
-            {notice.tone === "success" ? (
-              <CheckCircle2
-                aria-hidden="true"
-                className="mt-0.5 size-5 shrink-0"
-              />
-            ) : (
-              <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
-            )}
-            <p className="text-sm leading-6">{notice.text}</p>
-          </Card>
-        ) : null}
+        {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
 
-        <Card className="p-5 sm:p-6">
-          <h3 className="text-base font-semibold text-foreground">
-            How this works
-          </h3>
+        <Subsection title="How this works">
           <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
             JobTrack does not provide an AI and never charges you for one. You
             bring an assistant you already have; JobTrack gives it your
@@ -135,27 +138,29 @@ export default async function SettingsPage({
             assistant, and the record stays here.
           </p>
 
-          <h4 className="mt-5 text-sm font-semibold text-foreground">
+          <h4 className="mt-5 text-sm font-medium text-foreground">
             Your JobTrack connection address
           </h4>
           <p className="mt-1 text-sm leading-6 text-foreground-secondary">
             Your assistant will ask for this. Copy it exactly.
           </p>
-          <p className="mt-2 overflow-x-auto rounded-record border border-border bg-surface-muted px-3 py-2 font-mono text-sm text-foreground">
+          {/*
+            The one bounded thing on this page, and it earns the box: it is a
+            literal value the student has to select and copy, so its edges say
+            where it begins and ends.
+          */}
+          <p className="mt-2 max-w-2xl overflow-x-auto rounded-record border border-border bg-surface-muted px-3 py-2 font-mono text-[13px] text-foreground">
             {mcpUrl}
           </p>
-        </Card>
+        </Subsection>
 
-        <Card className="p-5 sm:p-6">
-          <h3 className="text-base font-semibold text-foreground">
-            Setting it up in Claude
-          </h3>
-          <p className="mt-2 text-sm leading-6 text-foreground-secondary">
+        <Subsection title="Setting it up in Claude">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
             Claude is the assistant this has been tested with. Other
             MCP-compatible assistants may work the same way, using the same
             address.
           </p>
-          <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm leading-6 text-foreground-secondary marker:font-semibold marker:text-foreground-muted">
+          <ol className="mt-4 max-w-2xl list-decimal space-y-2 pl-5 text-sm leading-6 text-foreground-secondary marker:text-foreground-muted">
             <li>In Claude, open Settings, then Connectors.</li>
             <li>Choose to add a custom connector.</li>
             <li>Paste the connection address above.</li>
@@ -165,53 +170,44 @@ export default async function SettingsPage({
             </li>
             <li>Return to Claude and start asking about your applications.</li>
           </ol>
-          <p className="mt-4 text-sm leading-6 text-foreground-secondary">
+          <p className="mt-4 max-w-2xl text-sm leading-6 text-foreground-secondary">
             Some Claude accounts allow only one custom connector at a time.
           </p>
-        </Card>
+        </Subsection>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="p-5 sm:p-6">
-            <h3 className="text-base font-semibold text-foreground">
-              Try saying
-            </h3>
-            <ul className="mt-3 space-y-2">
+        <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
+          <Subsection title="Try saying">
+            {/*
+              The prompts, and nothing beside them. Each line used to carry an
+              accent sparkle, which decorated a sentence that is already a
+              quotation and made this the only place in JobTrack that dresses
+              its content up.
+            */}
+            <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground-secondary">
               {EXAMPLE_PROMPTS.map((prompt) => (
-                <li
-                  className="flex gap-2 text-sm leading-6 text-foreground-secondary"
-                  key={prompt}
-                >
-                  <Sparkles
-                    aria-hidden="true"
-                    className="mt-1 size-4 shrink-0 text-accent"
-                  />
-                  <span>&ldquo;{prompt}&rdquo;</span>
-                </li>
+                <li key={prompt}>&ldquo;{prompt}&rdquo;</li>
               ))}
             </ul>
             {/*
-              One sentence, in the card that already lists what to say. The
-              spreadsheet never comes to JobTrack — it goes to the assistant,
-              which reads it and sends back finished applications — so there is
-              no upload control here to add.
+              One sentence, beside the prompts it belongs with. The spreadsheet
+              never comes to JobTrack — it goes to the assistant, which reads it
+              and sends back finished applications — so there is no upload
+              control here to add.
             */}
             <p className="mt-4 text-sm leading-6 text-foreground-secondary">
               Already have a tracker? Export it as a CSV, upload that to your
               connected assistant, and ask it to import the tracker into
               JobTrack. It will check the columns and dates with you first.
             </p>
-          </Card>
+          </Subsection>
 
-          <Card className="p-5 sm:p-6">
-            <h3 className="text-base font-semibold text-foreground">
-              What a connected assistant can do
-            </h3>
+          <Subsection title="What a connected assistant can do">
             <ul className="mt-3 space-y-1 text-sm leading-6 text-foreground-secondary">
               {ASSISTANT_CAN.map((capability) => (
                 <li key={capability}>{capability}</li>
               ))}
             </ul>
-            <h4 className="mt-4 text-sm font-semibold text-foreground">
+            <h4 className="mt-4 text-sm font-medium text-foreground">
               What it cannot do
             </h4>
             <ul className="mt-2 space-y-1 text-sm leading-6 text-foreground-secondary">
@@ -219,16 +215,13 @@ export default async function SettingsPage({
                 <li key={limit}>{limit}</li>
               ))}
             </ul>
-            <p className="mt-3 text-xs leading-5 text-foreground-muted">
+            <p className="mt-3 text-[13px] leading-6 text-foreground-muted">
               {ASSISTANT_OWNERSHIP_NOTE}
             </p>
-          </Card>
+          </Subsection>
         </div>
 
-        <Card className="p-5 sm:p-6">
-          <h3 className="text-base font-semibold text-foreground">
-            Connected assistants
-          </h3>
+        <Subsection title="Assistants you have connected">
           <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
             Disconnecting takes access away immediately. Your applications are
             not affected — only the assistant&apos;s permission to reach them.
@@ -236,21 +229,15 @@ export default async function SettingsPage({
 
           <div className="mt-4">
             {grantsError ? (
-              <div className="flex gap-3 rounded-record border border-danger bg-danger-soft p-4 text-danger">
-                <AlertCircle
-                  aria-hidden="true"
-                  className="mt-0.5 size-5 shrink-0"
-                />
-                <p className="text-sm leading-6">
-                  Your connected assistants could not be loaded. Refresh the page
-                  to try again.
-                </p>
-              </div>
+              <Notice tone="error">
+                Your connected assistants could not be loaded. Refresh the page
+                to try again.
+              </Notice>
             ) : (
               <ConnectedClients clients={clients} />
             )}
           </div>
-        </Card>
+        </Subsection>
       </section>
     </div>
   );

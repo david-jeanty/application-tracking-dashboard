@@ -1,4 +1,3 @@
-import { PlugZap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDateTime } from "@/lib/dates/date-time";
 import { revokeGrantAction } from "@/lib/oauth/actions";
@@ -31,14 +30,11 @@ function describeGrantedAt(value: string): string | null {
 export function ConnectedClients({ clients }: { clients: ConnectedClient[] }) {
   if (clients.length === 0) {
     return (
-      <div className="rounded-surface border border-dashed border-border-strong bg-surface-muted px-5 py-8 text-center">
-        <span className="mx-auto grid size-10 place-items-center rounded-record bg-surface text-foreground-muted">
-          <PlugZap aria-hidden="true" className="size-5" />
-        </span>
-        <p className="mt-3 text-sm font-medium text-foreground">
-          No assistants connected yet
-        </p>
-        <p className="mx-auto mt-1 max-w-sm text-sm leading-6 text-foreground-secondary">
+      // A rule and two lines. The dashed box with an icon inside it was the
+      // loudest thing in Settings, and it was announcing an absence.
+      <div className="border-t border-border pt-5">
+        <p className="text-sm text-foreground">No assistants connected yet</p>
+        <p className="mt-1 max-w-md text-sm leading-6 text-foreground-secondary">
           Once you connect one using the steps above, it will appear here and
           you can disconnect it at any time.
         </p>
@@ -47,14 +43,17 @@ export function ConnectedClients({ clients }: { clients: ConnectedClient[] }) {
   }
 
   return (
-    <ul className="divide-y divide-border rounded-record border border-border">
+    // Flat records on hairlines, like every other list in the product.
+    <ul className="divide-y divide-border border-y border-border">
       {clients.map((client) => (
         <li
-          className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
           key={client.id}
         >
           <div className="min-w-0">
-            <p className="font-medium text-foreground">{client.name}</p>
+            <p className="text-[15px] font-medium text-foreground">
+              {client.name}
+            </p>
             {describeGrantedAt(client.grantedAt) ? (
               <p className="mt-0.5 text-[13px] text-foreground-secondary">
                 Connected {describeGrantedAt(client.grantedAt)}

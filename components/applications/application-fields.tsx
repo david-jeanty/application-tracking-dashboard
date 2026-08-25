@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   APPLICATION_STATUSES,
@@ -7,10 +8,18 @@ import {
 } from "@/lib/applications/constants";
 import type { ApplicationFormValues } from "@/lib/applications/types";
 
+/*
+ * The native controls, borrowing `Input`'s border language rather than their
+ * own. They used to carry `border-strong` and a `foreground-muted` hover while
+ * the text input beside them in the same grid row carried a hairline, so half
+ * of every row of this form was outlined more heavily than the other half.
+ * Their height is unchanged: 44px is a comfortable target for a select on a
+ * phone, and nothing about the borders required shrinking it.
+ */
 const selectClassName =
-  "min-h-11 w-full rounded-control border border-border-strong bg-surface px-3.5 text-base text-foreground hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
+  "min-h-11 w-full rounded-control border border-border bg-surface px-3 text-base text-foreground transition-colors hover:border-border-strong focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
 const textareaClassName =
-  "min-h-28 w-full resize-y rounded-control border border-border-strong bg-surface px-3.5 py-3 text-base text-foreground placeholder:text-foreground-muted hover:border-foreground-muted focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
+  "min-h-28 w-full resize-y rounded-control border border-border bg-surface px-3 py-3 text-base text-foreground transition-colors placeholder:text-foreground-muted hover:border-border-strong focus:border-accent focus:outline-none focus-visible:outline-none sm:text-sm";
 
 function Field({
   children,
@@ -180,14 +189,23 @@ export function ApplicationFields({
         </Field>
       </div>
 
-      <details
-        className="rounded-record border border-border bg-surface-muted"
-        open={optionalDetailsOpen}
-      >
-        <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-foreground">
+      {/*
+        Still a native disclosure — the browser gives it a focusable summary,
+        keyboard operation and an announced expanded state for nothing. What
+        changed is the box: a filled, bordered panel made a section of one form
+        look like a second card, so it is a rule and a heading now, the same
+        shape the detail page's disclosures use.
+      */}
+      <details className="group border-t border-border pt-4" open={optionalDetailsOpen}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-medium text-foreground [&::-webkit-details-marker]:hidden">
           Optional details
+          <ChevronRight
+            aria-hidden="true"
+            className="size-4 shrink-0 text-foreground-muted transition-transform group-open:rotate-90"
+            strokeWidth={1.5}
+          />
         </summary>
-        <div className="grid gap-5 border-t border-border p-4 sm:grid-cols-2">
+        <div className="grid gap-5 pt-5 sm:grid-cols-2">
           <Field error={errors.location} id="location" label="Location">
             <Input
               aria-describedby={describedBy("location")}
