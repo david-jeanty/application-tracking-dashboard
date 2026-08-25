@@ -49,7 +49,7 @@ describe("the root route", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "A job tracker your AI assistant can actually use.",
+        name: "Keep your search organized and know what needs attention next.",
       }),
     ).toBeInTheDocument();
     expect(redirect).not.toHaveBeenCalled();
@@ -74,7 +74,7 @@ describe("the root route", () => {
       // reason to show a visitor a login screen or an error.
       expect(
         screen.getByRole("heading", { level: 1 }),
-      ).toHaveTextContent("A job tracker your AI assistant can actually use.");
+      ).toHaveTextContent("Keep your search organized and know what needs attention next.");
       expect(getUser).not.toHaveBeenCalled();
     });
   });
@@ -116,6 +116,40 @@ describe("the homepage's front door", () => {
     expect(screen.getByText(/The demo needs no account/)).toBeInTheDocument();
   });
 
+  it("puts the reason to look at JobTrack beside the reason to join it", () => {
+    render(<HomePage />);
+
+    // The hero's two halves: what the product is for, then what to do next.
+    expect(
+      screen.getByText("Internship and co-op applications"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "See JobTrack in action" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Built for students, one careful step at a time/),
+    ).toBeInTheDocument();
+  });
+
+  it("leads the call to action with the demo", () => {
+    render(<HomePage />);
+
+    // Scoped to the hero: the same words close the page, which is the point.
+    const hero = screen
+      .getByRole("heading", { name: "See JobTrack in action" })
+      .closest("div") as HTMLElement;
+
+    expect(
+      within(hero).getByRole("link", { name: "Try the demo" }),
+    ).toHaveAttribute("href", "/demo");
+    expect(
+      within(hero).getByRole("link", { name: "Create account" }),
+    ).toHaveAttribute("href", "/signup");
+    expect(
+      within(hero).getByRole("link", { name: "Already have an account? Sign in" }),
+    ).toHaveAttribute("href", "/login");
+  });
+
   it("offers both ways into an account", () => {
     render(<HomePage />);
 
@@ -130,11 +164,13 @@ describe("the homepage's front door", () => {
   it("closes with the demo rather than with a sign-up wall", () => {
     render(<HomePage />);
 
+    const closing = screen
+      .getByRole("heading", { name: "See what a real search looks like." })
+      .closest("section") as HTMLElement;
+
+    expect(closing).not.toBeNull();
     expect(
-      screen.getByRole("heading", { name: "See what a real search looks like." }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Try the demo" }),
+      within(closing).getByRole("link", { name: "Try the demo" }),
     ).toHaveAttribute("href", "/demo");
   });
 });

@@ -73,7 +73,7 @@ test("the public homepage is the front door for a signed-out visitor", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "A job tracker your AI assistant can actually use.",
+      name: "Keep your search organized and know what needs attention next.",
     }),
   ).toBeVisible();
 });
@@ -106,6 +106,6 @@ test("the demo offers the way back to the homepage", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "A job tracker",
+    "Keep your search organized",
   );
 });
