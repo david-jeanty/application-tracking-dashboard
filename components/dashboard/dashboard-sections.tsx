@@ -12,6 +12,12 @@ import {
   type WeekSummary,
 } from "@/lib/dashboard/calculate";
 import { formatDateOnly } from "@/lib/dates/date-only";
+import {
+  analyticsPath,
+  applicationPath,
+  applicationsPath,
+  type WorkspaceBasePath,
+} from "@/lib/demo/paths";
 
 /**
  * A section heading and the rule under it.
@@ -107,7 +113,13 @@ export function SearchSummaryMetrics({
  * Each stage stays a link, because filtering the applications list by status
  * is genuinely useful and the URL parameter already exists.
  */
-export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
+export function PipelineSnapshot({
+  basePath = "",
+  stages,
+}: {
+  basePath?: WorkspaceBasePath;
+  stages: PipelineStage[];
+}) {
   const total = stages.reduce((sum, stage) => sum + stage.count, 0);
 
   return (
@@ -119,7 +131,7 @@ export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
           <li key={stage.status}>
             <Link
               className="group block rounded-control focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
-              href={`/applications?${STATUS_PARAM}=${encodeURIComponent(stage.status)}`}
+              href={`${applicationsPath(basePath)}?${STATUS_PARAM}=${encodeURIComponent(stage.status)}`}
             >
               <span className="block text-[11px] leading-tight text-foreground-secondary group-hover:text-accent sm:text-[13px]">
                 {stage.status}
@@ -185,9 +197,11 @@ export function PipelineSnapshot({ stages }: { stages: PipelineStage[] }) {
  * company can be told apart.
  */
 export function RecentActivity({
+  basePath = "",
   entries,
   today,
 }: {
+  basePath?: WorkspaceBasePath;
   entries: ActivityEntry[];
   today: string;
 }) {
@@ -231,7 +245,7 @@ export function RecentActivity({
                       <p className="text-[14px] font-medium leading-snug text-foreground">
                         <Link
                           className="after:absolute after:inset-0 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                          href={`/applications/${entry.applicationId}`}
+                          href={applicationPath(entry.applicationId, basePath)}
                         >
                           {entry.companyName}
                         </Link>
@@ -262,9 +276,11 @@ export function RecentActivity({
  * a number a student is failing to hit would make this the section they avoid.
  */
 export function ThisWeek({
+  basePath = "",
   week,
   weekStartLabel,
 }: {
+  basePath?: WorkspaceBasePath;
   week: WeekSummary;
   weekStartLabel: string;
 }) {
@@ -285,7 +301,9 @@ export function ThisWeek({
   return (
     <section aria-labelledby="dashboard-week">
       <SectionHeading
-        action={<SectionLink href="/analytics">View analytics</SectionLink>}
+        action={
+          <SectionLink href={analyticsPath(basePath)}>View analytics</SectionLink>
+        }
         id="dashboard-week"
       >
         This week
@@ -335,7 +353,13 @@ const URGENT_REASONS: readonly AttentionReason[] = [
  * Nothing here is inferred. Every row is either an action the student wrote
  * down or a deadline on an application they have not sent yet.
  */
-export function Upcoming({ items }: { items: AttentionItem[] }) {
+export function Upcoming({
+  basePath = "",
+  items,
+}: {
+  basePath?: WorkspaceBasePath;
+  items: AttentionItem[];
+}) {
   return (
     <section aria-labelledby="dashboard-upcoming">
       <SectionHeading id="dashboard-upcoming">Upcoming</SectionHeading>
@@ -364,7 +388,7 @@ export function Upcoming({ items }: { items: AttentionItem[] }) {
                   <p className="text-[14px] font-medium leading-snug text-foreground">
                     <Link
                       className="after:absolute after:inset-0 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                      href={`/applications/${item.applicationId}`}
+                      href={applicationPath(item.applicationId, basePath)}
                     >
                       {item.companyName}
                     </Link>

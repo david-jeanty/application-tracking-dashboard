@@ -4,19 +4,18 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
   ApplicationDetail,
+  ApplicationIdentity,
   ApplicationRecordMeta,
 } from "@/components/applications/application-detail";
 import { ApplicationStatusDot } from "@/components/applications/application-status";
 import { LifecycleRail } from "@/components/applications/lifecycle-rail";
 import { QuickUpdate } from "@/components/applications/quick-update";
-import { CompanyLogo } from "@/components/branding/company-logo";
 import { Button, ButtonLink } from "@/components/ui/button";
 import {
   archiveApplicationAction,
   restoreApplicationAction,
 } from "@/lib/applications/actions";
 import { buildLifecycle } from "@/lib/applications/lifecycle";
-import { displayOptionalText } from "@/lib/applications/mapper";
 import { toQuickUpdateNotice } from "@/lib/applications/quick-update-notice";
 import {
   getApplicationById,
@@ -74,16 +73,6 @@ export default async function ApplicationDetailPage({
         (history.data ?? []).map((event) => event.new_status),
       );
 
-  const location = displayOptionalText(application.location);
-  const context = [location, application.work_term_season]
-    .concat(
-      application.work_arrangement === "Unknown"
-        ? []
-        : [application.work_arrangement],
-    )
-    .filter(Boolean)
-    .join(" · ");
-
   return (
     <div className="w-full">
       <Link
@@ -94,32 +83,8 @@ export default async function ApplicationDetailPage({
         Back to applications
       </Link>
 
-      {/*
-        The employer leads on this page, where there is one record and the
-        question is which company it is — the reverse of the list, where the
-        role leads because the student is choosing between many.
-      */}
       <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 items-start gap-5">
-          <CompanyLogo
-            companyName={application.company_name}
-            domain={application.company_domain}
-            size="lg"
-          />
-          <div className="min-w-0">
-            <h1 className="min-w-0">
-              <span className="block text-[30px] font-medium leading-tight tracking-tight text-foreground">
-                {application.company_name}
-              </span>{" "}
-              <span className="mt-1 block break-words text-[19px] leading-snug text-foreground-secondary">
-                {application.original_job_title}
-              </span>
-            </h1>
-            {context ? (
-              <p className="mt-3 text-[13px] text-foreground-muted">{context}</p>
-            ) : null}
-          </div>
-        </div>
+        <ApplicationIdentity application={application} />
 
         <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
           <div className="flex items-center gap-2">

@@ -298,7 +298,12 @@ describe("the whole dashboard comes together", () => {
 
 
 describe("the dashboard page contract", () => {
-  const page = readFileSync("app/(app)/dashboard/page.tsx", "utf8");
+  // The page authenticates and reads; `DashboardView` renders what came back.
+  // The contract below is about the dashboard as a whole, so it reads both.
+  const page = [
+    readFileSync("app/(app)/dashboard/page.tsx", "utf8"),
+    readFileSync("components/dashboard/dashboard-view.tsx", "utf8"),
+  ].join("\n");
   const sections = readFileSync(
     "components/dashboard/dashboard-sections.tsx",
     "utf8",
@@ -328,7 +333,10 @@ describe("the dashboard page contract", () => {
   });
 
   it("links to analytics from This week instead", () => {
-    expect(sections).toContain('href="/analytics"');
+    // The href is built from the workspace's base path so the demo's copy of
+    // this section stays inside the demo; in the signed-in workspace the base
+    // is empty and it resolves to `/analytics` exactly as before.
+    expect(sections).toContain("analyticsPath(basePath)");
     expect(sections).toContain("View analytics");
   });
 

@@ -30,7 +30,7 @@ export default async function ProtectedLayout({
     "Student";
 
   return (
-    <AppShell displayName={displayName} email={email}>
+    <AppShell identity={{ kind: "account", displayName, email }}>
       {children}
     </AppShell>
   );
