@@ -222,9 +222,9 @@ export function reduce(state: PopupState, event: PopupEvent): PopupState {
 /**
  * What the popup says about the page it just read.
  *
- * One line, and it never claims more than happened: a posting with no
- * structured data says so, so a student who sees three empty boxes knows why
- * and knows that typing into them is the expected next step.
+ * One line, and it never claims more than happened: a page that yielded
+ * nothing says so, so a student who sees three empty boxes knows why and knows
+ * that typing into them is the expected next step.
  */
 export function describeExtraction(job: ExtractedJob): string {
   if (job.warnings.includes("no_job_posting_found")) {
@@ -238,4 +238,74 @@ export function describeExtraction(job: ExtractedJob): string {
   if (job.jobDescription) return "Job description found";
 
   return "No job description found on this page";
+}
+
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/**
+ * `2026-09-13` as `Sep 13, 2026`, read as written.
+ *
+ * Built from the parts rather than through `Date`, because parsing the string
+ * and formatting it back would put it through a timezone — and a deadline that
+ * shifts a day in the display is the same bug the extractor refuses to create.
+ */
+export function formatCaptureDate(value: string): string {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!parts) return value;
+
+  const month = MONTHS[Number(parts[2]) - 1];
+
+  return month ? `${month} ${Number(parts[3])}, ${parts[1]}` : value;
+}
+
+/** One line of the read-only summary, as the popup will show it. */
+export type FoundFact = { label: string; value: string };
+
+/**
+ * The facts that will be saved without the student having typed them.
+ *
+ * The popup asks them to confirm a company, a title, a location and a status.
+ * It was also quietly sending a description, a deadline, a salary, a source and
+ * the posting URL — real data, entering their tracker invisibly, which is how a
+ * wrong deadline or a bogus salary survives unnoticed. This is the compact,
+ * read-only answer to "what else is going in".
+ *
+ * It lists only what will actually be stored, so a deadline the extractor
+ * refused never appears here as a promise. It is not the JobTrack form: no
+ * category, no work term, no confidence score, nothing editable.
+ */
+export function alsoFound(job: ExtractedJob): FoundFact[] {
+  const facts: FoundFact[] = [];
+
+  if (job.jobDescription) {
+    facts.push({
+      label: "Job description",
+      value: job.warnings.includes("description_too_long")
+        ? "Saved, shortened"
+        : "Saved",
+    });
+  }
+
+  if (job.deadline) {
+    facts.push({ label: "Deadline", value: formatCaptureDate(job.deadline) });
+  }
+
+  if (job.salary) facts.push({ label: "Salary", value: job.salary });
+  if (job.source) facts.push({ label: "Source", value: job.source });
+  if (job.jobUrl) facts.push({ label: "Original posting", value: "Saved" });
+
+  return facts;
 }

@@ -185,3 +185,116 @@ describe("accessibility of the capture form", () => {
     expect(company?.textContent).toBe("<img src=x onerror=alert(1)>Acme");
   });
 });
+
+/**
+ * What the student is told is being saved on their behalf.
+ *
+ * They confirm a company, a title, a location and a status. A description, a
+ * deadline, a salary, a source and the posting URL go with it untouched, and
+ * before this section they went silently. Important data should not enter a
+ * tracker invisibly — least of all a deadline or a salary, which are exactly
+ * the values a wrong extraction makes plausible and costly.
+ */
+describe("the read-only summary of what else is saved", () => {
+  function summaryRows(): [string, string][] {
+    const list = document.querySelector("#also-found-list");
+    const terms = Array.from(list?.querySelectorAll("dt") ?? []);
+    const values = Array.from(list?.querySelectorAll("dd") ?? []);
+
+    return terms.map((term, index) => [
+      term.textContent ?? "",
+      values[index]?.textContent ?? "",
+    ]);
+  }
+
+  it("names each fact that will be stored without being typed", () => {
+    const state = reduce(
+      { view: "extracting" },
+      {
+        type: "extracted",
+        job: {
+          ...job,
+          deadline: "2026-09-13",
+          salary: "CAD 25 per hour",
+          source: "LinkedIn",
+          jobUrl: "https://www.linkedin.com/jobs/view/4123456789/",
+        },
+      },
+    );
+
+    render(document, state);
+
+    expect(summaryRows()).toEqual([
+      ["Job description", "Saved"],
+      ["Deadline", "Sep 13, 2026"],
+      ["Salary", "CAD 25 per hour"],
+      ["Source", "LinkedIn"],
+      ["Original posting", "Saved"],
+    ]);
+  });
+
+  it("says a description was shortened rather than only that it was saved", () => {
+    const state = reduce(
+      { view: "extracting" },
+      {
+        type: "extracted",
+        job: { ...job, warnings: ["description_too_long"] },
+      },
+    );
+
+    render(document, state);
+
+    expect(summaryRows()).toEqual([["Job description", "Saved, shortened"]]);
+  });
+
+  it("lists only what will actually be stored", () => {
+    render(document, ready());
+
+    // No deadline was extracted, so none is promised here.
+    expect(summaryRows().map(([label]) => label)).toEqual([
+      "Job description",
+    ]);
+  });
+
+  it("disappears entirely when there is nothing extra to report", () => {
+    const state = reduce(
+      { view: "extracting" },
+      { type: "extracted", job: { company: "IBM", warnings: [] } },
+    );
+
+    render(document, state);
+
+    expect(document.querySelector<HTMLElement>("#also-found")?.hidden).toBe(
+      true,
+    );
+  });
+
+  it("is a labelled region rather than a loose list", () => {
+    render(document, ready());
+
+    const summary = document.querySelector("#also-found");
+
+    expect(summary?.getAttribute("aria-labelledby")).toBe("also-found-heading");
+    expect(document.querySelector("#also-found-heading")?.textContent).toBe(
+      "Also found",
+    );
+  });
+
+  it("writes page values as text, never as markup", () => {
+    const state = reduce(
+      { view: "extracting" },
+      {
+        type: "extracted",
+        job: { ...job, source: "<img src=x onerror=alert(1)>" },
+      },
+    );
+
+    render(document, state);
+
+    expect(document.querySelector("#also-found-list img")).toBeNull();
+    expect(summaryRows()).toContainEqual([
+      "Source",
+      "<img src=x onerror=alert(1)>",
+    ]);
+  });
+});

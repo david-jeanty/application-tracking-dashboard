@@ -179,9 +179,12 @@ extension/
   src/
     background.ts        service worker: the only holder of credentials
     popup.ts             wiring; popup-render.ts draws; popup-state.ts decides
-    page-collector.ts    the injected reader — self-contained, by necessity
-    extractor.ts         JSON-LD, then metadata, then a title; json-ld.ts,
-                         html-text.ts and source.ts are its parts
+    page-collector.ts    the injected reader — self-contained, by necessity,
+                         and knowing no site: its selectors arrive as an argument
+    extractor.ts         structured data, then a recognized site, then a
+                         corroborated title; json-ld.ts, html-text.ts,
+                         source.ts and sites.ts are its parts
+    sites.ts             the only file naming LinkedIn, Indeed or Workday
     auth.ts pkce.ts      Authorization Code + PKCE
     tokens.ts            credential storage and token-response validation
     capture.ts           the POST to /api/browser-capture
@@ -248,21 +251,99 @@ in that page.
 
 ### Extraction hierarchy
 
-1. **`schema.org` JobPosting JSON-LD.** Handles a single object, a top-level
-   array, `@graph`, several script blocks, `@type` as a string or an array, and
-   a full IRI type. A block that is not valid JSON is skipped, not fatal —
-   pages ship one broken block beside good ones routinely.
-2. **Standard metadata.** Open Graph, Twitter card, `meta description`,
-   `<link rel="canonical">`.
-3. **The page's own headings.** The first `<h1>`, then `document.title`, with a
-   trailing site name removed only when it matches the page's declared
-   `og:site_name`.
+```text
+extractJob(pageSignals)
+        │
+        ├── structured data the publisher asserts   (JSON-LD, then microdata)
+        │
+        ├── a recognized site's own read path       (LinkedIn, Indeed, Workday)
+        │
+        └── a conservative generic fallback         (a title, with corroboration)
+```
 
-Below that, nothing. There are no site-specific selectors, and none were added
-for LinkedIn, Workday, Greenhouse, Lever, Indeed or Glassdoor. A selector guess
-on an unfamiliar site produces a confident wrong record, and the student — who
-asked to save one job and got a filled-in form — has no reason to doubt it.
-Fields that cannot be established are left empty for the student to type.
+Every path returns the same neutral `ExtractedJob`. Nothing below the first
+level knows that JobTrack, Supabase, OAuth, `applicationCreationSchema` or MCP
+exist; site rules extract facts from a page and stop there.
+
+1. **`schema.org` JobPosting.** As JSON-LD — a single object, a top-level array,
+   `@graph`, several script blocks, `@type` as a string or an array, a full IRI
+   type, malformed blocks skipped — and as microdata, read from `itemprop`
+   attributes under the posting's own `itemscope` and flattened to the same
+   property paths. Employer careers sites publish microdata far more often than
+   job boards do, and reading it costs no site knowledge.
+2. **A recognized site.** `extension/src/sites.ts` names LinkedIn, Indeed and
+   Workday, and nothing else. It holds a table of selectors and a little URL
+   arithmetic. The injected collector receives the selectors for the current
+   address as an argument, so it stays a generic reader and every site is
+   described in exactly one file.
+3. **The page's own headings**, but only on an unrecognized site, and only with
+   corroboration (below).
+
+Below that, nothing — and on a recognized site level 3 does not run at all. A
+named read path that finds nothing has found nothing, and the page's first
+heading is not a second opinion.
+
+#### Why three sites and not none
+
+Site-specific extraction was deliberately absent from the first version, and
+real-Chrome testing showed the boundary was drawn one notch too tight. The
+generic path did produce blanks where it should have — but the fallback beneath
+it stored "Welcome back" from a signed-in Indeed page and "Search for Jobs" from
+a Workday page as job titles. A confident wrong title is worse than the blank it
+replaced.
+
+LinkedIn, Indeed and Workday carry most of a student's search. Greenhouse,
+Lever and everything else stay out: the adapter seam exists now, so adding one
+later is a table entry, and adding one now without evidence would be inventing
+selectors.
+
+#### Selector rules
+
+In order of preference: structured data; semantic and accessibility attributes;
+stable data attributes a site maintains for its own automation (`data-testid` on
+Indeed, `data-automation-id` on Workday); narrowly scoped component containers;
+and human-visible text only inside a container that is trustworthy on its own.
+Nothing keys off generated class hashes, `nth-child`, layout position, colour,
+or nesting depth. A site that cannot be read reliably returns blanks.
+
+#### Per-site notes
+
+- **LinkedIn.** Title, company, location and description are read from the job
+  detail pane, scoped so a result-list card or a recommendations rail cannot
+  supply them. LinkedIn is a single-page application, so the student may move
+  between postings without a navigation; the extension runs only on an explicit
+  click and reads whatever is selected at that moment. No observer, no
+  background listener, nothing watching navigation. Source is `LinkedIn`, which
+  the hostname settles.
+- **Indeed.** Employer, title, location and description from Indeed's own test
+  attributes and the stable description id. Source is `Indeed`.
+- **Workday.** Title, location and description from `data-automation-id`.
+  **Source is never set to `Workday`**: Workday is an applicant-tracking system,
+  not where a student found the opportunity. **A Workday hostname is never a
+  company domain**, and the employer is left empty unless the posting itself
+  establishes it — a tenant hostname names whoever bought Workday.
+
+#### The generic fallback, and what stops it
+
+A heading becomes a job title only when at least two of these agree that the
+page is a posting:
+
+- the address names one posting — a job-shaped path segment followed by
+  something that identifies a particular job, or an explicit job-id parameter;
+- the page offers a control that applies for something;
+- the page declares itself a job page in `og:type`.
+
+A structured JobPosting is corroboration on its own, so a publisher who declared
+a posting but omitted `title` still gets a title from the heading.
+
+Beneath that there is a short backstop that refuses whole-string page furniture
+— `Home`, `Jobs`, `Careers`, `Search for Jobs`, `Welcome back`, `Sign in` and
+about a dozen more — and refuses a candidate that is only the site's own name.
+It is a backstop, not the mechanism: the structural test above is what does the
+work, and the list is deliberately not a growing corpus of English phrases.
+
+When the evidence is not there, `jobTitle` is `undefined`. That is the correct
+answer.
 
 Specific rules worth stating:
 
@@ -273,13 +354,54 @@ Specific rules worth stating:
   with no `innerHTML`, no `DOMParser`, and no element built from posting
   content. A description over JobTrack's 50,000-character limit is shortened
   and says so, in the text and in the popup, rather than being cut silently.
-- **The stored URL** prefers a canonical link, but only one on the same host as
-  the page being viewed; a canonical pointing elsewhere is refused, because it
-  would file the posting under an address the student never visited.
-- **`validThrough`** becomes a deadline only when it is a real date;
-  `2026-02-31` is discarded rather than normalized into a different day.
-- **`baseSalary`** is read only when it maps cleanly — a currency with a value
-  or a range. A bare number with no currency is left out.
+- **The stored URL** prefers a recognized site's per-posting address, then a
+  canonical link, and only ever one on the same host as the page being viewed.
+  LinkedIn and Indeed both show a selected posting inside a search page whose
+  own URL and canonical link describe the search; filing every job opened from
+  one result list under that single address would make them all look like one
+  job to the exact-URL duplicate check.
+
+#### `validThrough` is an expiry, not a deadline
+
+Real-site testing found a posting whose page said "apply by September 13" while
+its `validThrough` produced September 14. Neither party was lying, and there is
+no generic way to tell which is right:
+
+- `validThrough` is defined as when the **posting** expires, not when the
+  student must apply. A publisher who means "the last day to apply is the 13th"
+  routinely writes the exclusive end of that day, `2026-09-14T00:00:00`.
+- A timestamp also carries a zone, stated or implied. `2026-09-13T23:59-04:00`
+  is `2026-09-14T03:59Z`, and which calendar day that is depends on whose clock
+  is asked.
+
+Both mechanisms are ordinary, both are invisible in the value itself, and both
+are off by exactly one day — the worst possible size of error for a deadline.
+
+**The decision: a `validThrough` carrying any time component is not stored as an
+application deadline.** A bare `YYYY-MM-DD` is, because there is no boundary and
+no zone left to disagree about. Anything else is omitted, and the student can
+type a deadline they can see on the page. There is no site-specific correction
+anywhere, and no attempt to infer a publisher's intent from the shape of a
+timestamp. A deadline that is quietly a day late is the kind of wrong nobody
+notices until it has cost them the application.
+
+#### Salary is refused unless it is money
+
+The same testing found a posting publishing `baseSalary.value.value: 0`, which
+the first version stored as `USD 0 per year` — not an unknown salary but a false
+one, in a field a student would use to compare offers.
+
+- Zero, negative and non-finite amounts are refused; they are template
+  placeholders, never compensation.
+- A range whose maximum is below its minimum is refused. A range whose bounds
+  are equal collapses to one figure.
+- A half-stated range is qualified rather than rounded into a figure: a lone
+  `minValue` becomes `CAD 50,000+ per year`, a lone `maxValue` becomes
+  `CAD up to 80,000 per year`. Rendering either as a bare figure would read as
+  the salary, and it is not.
+- A written-out `baseSalary` string is kept as the publisher wrote it, unless
+  every number in it is zero.
+- A bare number with no currency is still left out.
 
 ### Popup
 
@@ -300,9 +422,23 @@ all return to the form with the reason beside it and everything the student
 typed intact. `popup-state.ts` holds this as pure data so each state can be
 asserted without a browser.
 
-Accessibility: every control has a `<label>`, one polite live region announces
-each state change, focus is visible, controls are at least 36px high, and long
-employer and role names wrap rather than overflow.
+Below the status control, a compact read-only **Also found** list names what is
+being saved that the student did not type: whether a job description was saved
+(and whether it was shortened), a deadline, a salary, a source, and that the
+original posting URL was stored. It lists only what will actually be stored, so
+a deadline the extractor refused never appears there as a promise, and it
+disappears entirely when there is nothing extra to report.
+
+It is not a second copy of the JobTrack form. Category, work term, work
+arrangement, every other stored field, and any notion of extraction confidence
+stay out of it. The point is narrow: important data should not enter a tracker
+invisibly, and a wrong deadline or a bogus salary is exactly the kind that
+survives unnoticed when nobody is shown it.
+
+Accessibility: every control has a `<label>`, the summary is a labelled region
+with a real heading, one polite live region announces each state change, focus
+is visible, controls are at least 36px high, and long employer and role names
+wrap rather than overflow.
 
 ### Authentication
 
@@ -384,26 +520,68 @@ round trip.
 
 ### Real-site compatibility
 
-Not yet established. The development environment's network policy denies
-outbound connections to job sites, so no posting on LinkedIn, Indeed,
-Greenhouse, Lever, Workday, Glassdoor or an employer careers page has been
-captured. Extraction has been verified against synthetic pages carrying the
-markup shapes those sites publish, and the whole loop has been verified in real
-Chromium against a local stub — but neither is evidence about a real posting.
+Partly established, by hand, in real Chrome — and the results are the reason
+this document's extraction section reads the way it does.
 
-This is the first thing to do before PR #29 and the main reason PR #29 exists.
-The procedure:
+**What was tested, and what happened**
+
+| Surface | Result |
+| --- | --- |
+| KPMG direct careers page | Company, title, location, description, posting URL and status all correct. Two faults: a bogus `USD 0 per year` salary, and a deadline one day later than the page's own. |
+| LinkedIn | Title correct. Company, location and description missing. Source correct from the hostname. |
+| Indeed | Title **wrong** — the page's "Welcome back" greeting. Company, location, description missing. |
+| BMO on Workday | Title **wrong** — "Search for Jobs". Company, location, description missing. |
+| L3Harris direct careers page | Title correct. Company, location, description missing. |
+
+Two different problems. The blanks were the design working: nothing was
+established, so nothing was claimed. The two wrong titles were the design
+failing — the generic fallback was willing to promote any first heading, and a
+confident wrong title is worse than the blank it replaced.
+
+**What changed as a result**
+
+- Named read paths for LinkedIn, Indeed and Workday, and the generic heading
+  fallback switched off on all three.
+- JobPosting microdata read generically, which is the class of signal an
+  employer careers page such as L3Harris is most likely to publish.
+- The generic fallback now requires structural corroboration, and refuses page
+  furniture and the site's own name.
+- Zero and structurally meaningless salaries refused.
+- `validThrough` accepted only as a bare calendar date.
+
+**What is and is not verified against live pages**
+
+The development environment's network policy denies outbound connections to job
+sites — `www.linkedin.com`, `ca.indeed.com` and `*.myworkdayjobs.com` all fail
+at CONNECT — so no live DOM was inspected while writing the selectors above.
+
+- **Verified by the manual QA in real Chrome:** the failure modes in the table.
+  Those are evidence about behaviour, not about markup.
+- **Verified by tests:** every extraction rule, against minimal synthetic
+  fixtures carrying the container, attribute and nesting each read path depends
+  on. Structure is what a parser is proved by; no real posting is committed,
+  because a real one would be somebody else's copyrighted text.
+- **Not verified:** that the selectors in `sites.ts` match what LinkedIn, Indeed
+  and Workday actually serve today. They are chosen from the most stable
+  category each site offers — Indeed's `data-testid`, Workday's
+  `data-automation-id`, LinkedIn's detail-pane component classes — and every one
+  of them fails safe: a stale selector yields a blank field, never a wrong one.
+
+**Still required, in real Chrome, locally**
 
 1. Load the unpacked extension and connect it to a real JobTrack account.
-2. Open a public posting on each of: an employer careers page, LinkedIn,
-   Indeed, Greenhouse, Lever, Workday.
+2. Open a public posting on each of LinkedIn (both `/jobs/view/` and a job
+   selected inside `/jobs/search/`), Indeed, a Workday tenant, and the KPMG and
+   L3Harris careers pages.
 3. Record, per site: which fields extracted correctly, which were absent, which
-   were wrong, and whether the editable popup made the result usable anyway.
-4. Record nothing else. Do not commit captured descriptions — they are somebody
-   else's copyrighted text.
+   were wrong, and whether the popup made the result usable anyway.
+4. Confirm specifically that the KPMG posting no longer stores a salary, that
+   its deadline is now absent rather than a day late, and that Indeed and
+   Workday store no title rather than a wrong one.
+5. Record nothing else. Do not commit captured descriptions.
 
-A site that extracts nothing is a finding for PR #29, not a reason to add a
-selector to this one.
+A site that still extracts nothing is a finding for PR #29. A site that extracts
+something **wrong** is a bug in this one.
 
 ### The open least-privilege question
 
@@ -422,9 +600,10 @@ Chrome Web Store submission.
 
 ## Explicitly deferred
 
-Not part of the server foundation and not part of the extension: site-specific
-adapters for LinkedIn, Workday, Greenhouse, Lever, Indeed or Glassdoor; a
-generalized scraping framework; background monitoring; built-in AI;
+Not part of the server foundation and not part of the extension: read paths for
+any site other than LinkedIn, Indeed and Workday — Greenhouse, Lever, Glassdoor
+and the rest wait for evidence, and the table in `sites.ts` is where one would
+go; a generalized scraping framework; background monitoring; built-in AI;
 classification; resume matching or tailoring; cover letters; autofill;
 auto-apply; submission detection; recommendations; job discovery;
 email or calendar integration; notifications; fuzzy deduplication; global URL

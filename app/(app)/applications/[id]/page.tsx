@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import {
   ApplicationDetail,
   ApplicationIdentity,
+  ApplicationOriginalPosting,
   ApplicationRecordMeta,
 } from "@/components/applications/application-detail";
 import { ApplicationStatusDot } from "@/components/applications/application-status";
@@ -87,7 +88,13 @@ export default async function ApplicationDetailPage({
         <ApplicationIdentity application={application} />
 
         <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/*
+              The posting first: it is the one action a student takes while
+              reading the record rather than while changing it.
+            */}
+            <ApplicationOriginalPosting application={application} />
+
             <ButtonLink
               href={`/applications/${application.id}/edit`}
               variant="secondary"

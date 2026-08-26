@@ -95,6 +95,16 @@
           </select>
         </div>
 
+        <!--
+          What is being saved that the student did not type. Read-only and
+          secondary: it exists so nothing important enters their tracker
+          invisibly, not to become a second copy of the JobTrack form.
+        -->
+        <section aria-labelledby="also-found-heading" class="also-found" id="also-found" hidden>
+          <h2 class="also-found__heading" id="also-found-heading">Also found</h2>
+          <dl class="also-found__list" id="also-found-list"></dl>
+        </section>
+
         <p class="problem" id="save-problem" hidden></p>
         <ul class="problem-list" id="save-issues" hidden></ul>
 

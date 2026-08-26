@@ -1,4 +1,9 @@
-import { canSave, describeExtraction, type PopupState } from "./popup-state.js";
+import {
+  alsoFound,
+  canSave,
+  describeExtraction,
+  type PopupState,
+} from "./popup-state.js";
 
 /**
  * Draws one popup state, and nothing else.
@@ -87,6 +92,23 @@ export function render(root: Document, state: PopupState): void {
       const item = root.createElement("li");
       item.textContent = issue;
       issues.append(item);
+    }
+
+    // Every value here is written with `textContent`, like the rest of the
+    // popup: a salary or a source that came off a page never becomes markup.
+    const facts = alsoFound(state.job);
+    const summary = element(root, "#also-found");
+    const list = element<HTMLDListElement>(root, "#also-found-list");
+
+    summary.hidden = facts.length === 0;
+    list.replaceChildren();
+
+    for (const fact of facts) {
+      const label = root.createElement("dt");
+      label.textContent = fact.label;
+      const value = root.createElement("dd");
+      value.textContent = fact.value;
+      list.append(label, value);
     }
 
     element<HTMLButtonElement>(root, "#save").disabled = !canSave(state);

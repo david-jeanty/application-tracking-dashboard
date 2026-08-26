@@ -23,6 +23,33 @@ export type PageSignals = {
   documentTitle?: string;
   /** The first non-empty `<h1>`, trimmed. */
   headingText?: string;
+  /**
+   * `schema.org` JobPosting microdata, flattened to dotted property paths.
+   *
+   * The same vocabulary as the JSON-LD path, expressed in attributes on the
+   * page instead of in a script block. Employer careers sites publish it far
+   * more often than job boards do, and reading it costs no site knowledge.
+   */
+  microdata?: Record<string, string>;
+  /**
+   * Markup read through a recognized site's selector table, by field name.
+   *
+   * Raw inner HTML, bounded. It is turned into text by the same string-only
+   * converter the description path uses; nothing is parsed as markup.
+   */
+  siteFields?: Record<string, string>;
+  /**
+   * Structural facts used to decide whether a page is a posting at all.
+   *
+   * The generic fallback needs corroboration before it will call a heading a
+   * job title, and these are the cheap, non-textual signals available for it.
+   */
+  evidence?: {
+    /** A control on the page offers to apply for something. */
+    applyAffordance?: boolean;
+    /** The page carries `schema.org` JobPosting microdata. */
+    jobPostingMicrodata?: boolean;
+  };
 };
 
 /** Why a field could not be filled, so the popup can say so honestly. */

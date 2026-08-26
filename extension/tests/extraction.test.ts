@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { extractJob, DESCRIPTION_LIMIT } from "../src/extractor.js";
-import { jobPosting, jsonLd, page, rawJsonLd, readPage } from "./fixtures.js";
+import {
+  applyControl,
+  jobPosting,
+  jsonLd,
+  page,
+  rawJsonLd,
+  readPage,
+} from "./fixtures.js";
 
 /**
  * What the extension is willing to claim about a page.
@@ -81,13 +88,18 @@ describe("structured JobPosting data", () => {
   });
 
   it("survives a page whose only JSON-LD is unparseable", () => {
-    const html = page(rawJsonLd("<<<"), "<h1>Analytics Intern</h1>");
+    const html = page(
+      rawJsonLd("<<<"),
+      `<h1>Analytics Intern</h1>${applyControl()}`,
+    );
 
     const job = extractJob(readPage(html));
 
-    expect(job.warnings).toContain("no_job_posting_found");
     expect(job.jobTitle).toBe("Analytics Intern");
     expect(job.company).toBeUndefined();
+    expect(job.warnings).toContain("missing_company");
+    // Something was found, so the popup must not claim the page was empty.
+    expect(job.warnings).not.toContain("no_job_posting_found");
   });
 });
 
@@ -228,10 +240,8 @@ describe("missing information", () => {
 });
 
 describe("dates and pay", () => {
-  it("reads a valid validThrough as a date-only deadline", () => {
-    const html = page(
-      jsonLd(jobPosting({ validThrough: "2026-11-30T23:59:59Z" })),
-    );
+  it("reads a bare-date validThrough as the deadline", () => {
+    const html = page(jsonLd(jobPosting({ validThrough: "2026-11-30" })));
 
     expect(extractJob(readPage(html)).deadline).toBe("2026-11-30");
   });
@@ -240,6 +250,27 @@ describe("dates and pay", () => {
     const html = page(jsonLd(jobPosting({ validThrough: "2026-02-31" })));
 
     expect(extractJob(readPage(html)).deadline).toBeUndefined();
+  });
+
+  /**
+   * The real failure this rule exists for: a posting whose page said "apply by
+   * September 13" while its `validThrough` read September 14. A timestamp is an
+   * expiry instant, and both the exclusive-midnight convention and the zone it
+   * is written in move it across a calendar boundary — invisibly, and by
+   * exactly one day.
+   */
+  it("refuses a timestamped validThrough rather than guessing its day", () => {
+    for (const validThrough of [
+      "2026-09-14T00:00:00",
+      "2026-09-14T00:00:00Z",
+      "2026-09-13T23:59:59-04:00",
+      "2026-09-14T03:59:59Z",
+      "2026-09-14 00:00:00",
+    ]) {
+      const html = page(jsonLd(jobPosting({ validThrough })));
+
+      expect(extractJob(readPage(html)).deadline).toBeUndefined();
+    }
   });
 
   it("reads a structured baseSalary", () => {
@@ -274,6 +305,252 @@ describe("dates and pay", () => {
 
     expect(extractJob(readPage(html)).salary).toBeUndefined();
   });
+
+  /**
+   * The real failure this rule exists for. A posting published
+   * `baseSalary.value.value: 0`, and the first version stored "USD 0 per year"
+   * — not an unknown salary but a false one, in a field a student would use to
+   * compare offers.
+   */
+  it("refuses a structured zero rather than storing USD 0 per year", () => {
+    const html = page(
+      jsonLd(
+        jobPosting({
+          baseSalary: {
+            "@type": "MonetaryAmount",
+            currency: "USD",
+            value: {
+              "@type": "QuantitativeValue",
+              value: 0,
+              unitText: "YEAR",
+            },
+          },
+        }),
+      ),
+    );
+
+    expect(extractJob(readPage(html)).salary).toBeUndefined();
+  });
+
+  it("refuses amounts that are not money", () => {
+    for (const value of [0, -5, "0", "", "not a number", null]) {
+      const html = page(
+        jsonLd(
+          jobPosting({
+            baseSalary: {
+              currency: "CAD",
+              value: { value, unitText: "HOUR" },
+            },
+          }),
+        ),
+      );
+
+      expect(extractJob(readPage(html)).salary).toBeUndefined();
+    }
+  });
+
+  it("refuses a range whose bounds are zero or inverted", () => {
+    for (const value of [
+      { minValue: 0, maxValue: 0 },
+      { minValue: 0, maxValue: -1 },
+      { minValue: 90000, maxValue: 40000 },
+    ]) {
+      const html = page(
+        jsonLd(
+          jobPosting({
+            baseSalary: {
+              currency: "CAD",
+              value: { ...value, unitText: "YEAR" },
+            },
+          }),
+        ),
+      );
+
+      expect(extractJob(readPage(html)).salary).toBeUndefined();
+    }
+  });
+
+  it("qualifies a half-stated range instead of reading it as the salary", () => {
+    const minimumOnly = page(
+      jsonLd(
+        jobPosting({
+          baseSalary: {
+            currency: "CAD",
+            value: { minValue: 50000, unitText: "YEAR" },
+          },
+        }),
+      ),
+    );
+    const maximumOnly = page(
+      jsonLd(
+        jobPosting({
+          baseSalary: {
+            currency: "CAD",
+            value: { maxValue: 80000, unitText: "YEAR" },
+          },
+        }),
+      ),
+    );
+
+    expect(extractJob(readPage(minimumOnly)).salary).toBe(
+      "CAD 50,000+ per year",
+    );
+    expect(extractJob(readPage(maximumOnly)).salary).toBe(
+      "CAD up to 80,000 per year",
+    );
+  });
+
+  it("collapses a range whose bounds are the same figure", () => {
+    const html = page(
+      jsonLd(
+        jobPosting({
+          baseSalary: {
+            currency: "CAD",
+            value: { minValue: 25, maxValue: 25, unitText: "HOUR" },
+          },
+        }),
+      ),
+    );
+
+    expect(extractJob(readPage(html)).salary).toBe("CAD 25 per hour");
+  });
+
+  it("refuses a written-out salary that states nothing but zero", () => {
+    const html = page(
+      jsonLd(jobPosting({ baseSalary: "USD 0.00 per year" })),
+    );
+
+    expect(extractJob(readPage(html)).salary).toBeUndefined();
+  });
+
+  it("keeps a written-out salary that states a real figure", () => {
+    const html = page(jsonLd(jobPosting({ baseSalary: "$23.50 per hour" })));
+
+    expect(extractJob(readPage(html)).salary).toBe("$23.50 per hour");
+  });
+});
+
+/**
+ * The generic fallback, after real-site testing showed it was too willing.
+ *
+ * The mechanism is structural: a heading is considered only on a page whose
+ * address names one posting, that offers to be applied to, or that declares
+ * itself a job page — two of the three. The whole-string furniture check below
+ * it is a backstop, not the rule.
+ */
+describe("the generic fallback", () => {
+  const chromeHeadings = [
+    "Welcome back",
+    "Search for Jobs",
+    "Careers",
+    "Jobs",
+    "Home",
+    "Sign in",
+    "Job search",
+    "Jobs for you",
+  ];
+
+  it("refuses page furniture even on a page that looks like a posting", () => {
+    for (const heading of chromeHeadings) {
+      const html = page("", `<h1>${heading}</h1>${applyControl()}`);
+
+      const job = extractJob(
+        readPage(html, "https://careers.example.com/jobs/48213"),
+      );
+
+      expect(job.jobTitle).toBeUndefined();
+    }
+  });
+
+  it("refuses a heading on a page with nothing to corroborate it", () => {
+    const html = page("", "<h1>Analytics Intern</h1>");
+
+    expect(
+      extractJob(readPage(html, "https://www.example.com/")).jobTitle,
+    ).toBeUndefined();
+  });
+
+  it("accepts a heading once two signals agree the page is a posting", () => {
+    const html = page("", `<h1>Analytics Intern</h1>${applyControl()}`);
+
+    expect(
+      extractJob(readPage(html, "https://careers.example.com/job/analytics/48213"))
+        .jobTitle,
+    ).toBe("Analytics Intern");
+  });
+
+  it("refuses a heading that is only the site's own name", () => {
+    const html = page(
+      '<meta property="og:site_name" content="Workmill" />',
+      `<h1>Workmill</h1>${applyControl()}`,
+    );
+
+    expect(
+      extractJob(readPage(html, "https://workmill.com/jobs/48213")).jobTitle,
+    ).toBeUndefined();
+  });
+
+  it("takes a declared job page as one of the two signals", () => {
+    const html = page(
+      '<meta property="og:type" content="job" />',
+      "<h1>Analytics Intern</h1>",
+    );
+
+    expect(
+      extractJob(readPage(html, "https://careers.example.com/job/48213"))
+        .jobTitle,
+    ).toBe("Analytics Intern");
+  });
+});
+
+/**
+ * JobPosting microdata: the same vocabulary, written on the elements.
+ *
+ * Employer careers sites publish it far more often than job boards do, and
+ * reading it costs no site knowledge at all — which is why a direct careers
+ * page that offered nothing to the first version can be read here.
+ */
+describe("JobPosting microdata", () => {
+  const microdataPosting = `<body>
+     <div itemscope itemtype="https://schema.org/JobPosting">
+       <h1 itemprop="title">Systems Engineering Intern</h1>
+       <div itemprop="hiringOrganization" itemscope itemtype="https://schema.org/Organization">
+         <span itemprop="name">Beacon Aerospace</span>
+         <link itemprop="url" href="https://beaconaerospace.com/" />
+       </div>
+       <div itemprop="jobLocation" itemscope itemtype="https://schema.org/Place">
+         <div itemprop="address" itemscope itemtype="https://schema.org/PostalAddress">
+           <span itemprop="addressLocality">Waterloo</span>
+           <span itemprop="addressRegion">ON</span>
+         </div>
+       </div>
+       <meta itemprop="validThrough" content="2026-10-01" />
+       <div itemprop="description"><p>Work on avionics test benches.</p></div>
+     </div>
+   </body>`;
+
+  it("reads a posting a page expressed in attributes", () => {
+    const job = extractJob(
+      readPage(
+        `<head></head>${microdataPosting}`,
+        "https://careers.beaconaerospace.com/job/48213",
+      ),
+    );
+
+    expect(job.company).toBe("Beacon Aerospace");
+    expect(job.jobTitle).toBe("Systems Engineering Intern");
+    expect(job.location).toBe("Waterloo, ON");
+    expect(job.jobDescription).toBe("Work on avionics test benches.");
+    expect(job.deadline).toBe("2026-10-01");
+    expect(job.companyDomain).toBe("beaconaerospace.com");
+    expect(job.warnings).toEqual([]);
+  });
+
+  it("still prefers JSON-LD when the page publishes both", () => {
+    const html = `<head>${jsonLd(jobPosting())}</head>${microdataPosting}`;
+
+    expect(extractJob(readPage(html)).company).toBe("IBM");
+  });
 });
 
 describe("pages that are not job postings", () => {
@@ -288,14 +565,15 @@ describe("pages that are not job postings", () => {
     expect(job.warnings).toContain("no_job_posting_found");
     expect(job.company).toBeUndefined();
     expect(job.location).toBeUndefined();
-    expect(job.jobTitle).toBe("Five ways to write a résumé");
+    // An article about résumés is not a job, and its headline is not a title.
+    expect(job.jobTitle).toBeUndefined();
   });
 
   it("drops a trailing site name the page declared itself", () => {
     const html = page(
       '<meta property="og:site_name" content="IBM Careers" />' +
         '<meta property="og:title" content="Business Technology Analyst Intern | IBM Careers" />',
-      "<div>no heading</div>",
+      `<div>no heading</div>${applyControl()}`,
     );
 
     expect(extractJob(readPage(html)).jobTitle).toBe(

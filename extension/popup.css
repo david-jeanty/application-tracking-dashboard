@@ -121,6 +121,46 @@ p {
   color: var(--problem);
 }
 
+/*
+ * The read-only summary of what is being saved unasked.
+ *
+ * Deliberately quiet — a rule above it, small labels, values aligned right —
+ * so it reads as a receipt beside the form rather than as more form. The
+ * definition list is a two-column grid so a long salary wraps under itself
+ * instead of pushing its own label off a 360-pixel window.
+ */
+.also-found {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.also-found__heading {
+  margin: 0 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--foreground-muted);
+}
+
+.also-found__list {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.also-found__list dt {
+  color: var(--foreground-secondary);
+}
+
+.also-found__list dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 .problem-list {
   margin: 0;
   padding-left: 18px;

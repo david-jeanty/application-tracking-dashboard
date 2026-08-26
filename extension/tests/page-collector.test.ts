@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { collectPageSignals } from "../src/page-collector.js";
+import { fieldRulesFor } from "../src/sites.js";
 
 /**
  * What the injected collector is willing to take off a page.
@@ -72,6 +73,75 @@ describe("the injected collector", () => {
     expect(signals.meta).toEqual({});
     expect(signals.canonicalUrl).toBeUndefined();
     expect(signals.headingText).toBeUndefined();
+  });
+
+  it("reads JobPosting microdata as dotted property paths", () => {
+    const signals = read(
+      `<head></head><body>
+         <div itemscope itemtype="https://schema.org/JobPosting">
+           <h1 itemprop="title">Analytics Intern</h1>
+           <div itemprop="hiringOrganization" itemscope itemtype="https://schema.org/Organization">
+             <span itemprop="name">Beacon Aerospace</span>
+           </div>
+         </div>
+       </body>`,
+    );
+
+    expect(signals.microdata?.["title"]).toBe("Analytics Intern");
+    expect(signals.microdata?.["hiringOrganization.name"]).toBe(
+      "Beacon Aerospace",
+    );
+    expect(signals.evidence?.jobPostingMicrodata).toBe(true);
+  });
+
+  it("leaves microdata belonging to something other than the posting alone", () => {
+    const signals = read(
+      `<head></head><body>
+         <div itemscope itemtype="https://schema.org/BreadcrumbList">
+           <span itemprop="name">All openings</span>
+         </div>
+         <div itemscope itemtype="https://schema.org/JobPosting">
+           <h1 itemprop="title">Analytics Intern</h1>
+         </div>
+       </body>`,
+    );
+
+    expect(signals.microdata).toEqual({ title: "Analytics Intern" });
+  });
+
+  it("notices an apply control without ever storing its words", () => {
+    const withApply = read(
+      '<head></head><body><button>Apply now</button></body>',
+    );
+    const without = read(
+      '<head></head><body><button>Save this job</button></body>',
+    );
+
+    expect(withApply.evidence?.applyAffordance).toBe(true);
+    expect(without.evidence?.applyAffordance).toBe(false);
+    expect(JSON.stringify(withApply)).not.toContain("Apply now");
+  });
+
+  it("collects nothing site-specific when it is handed no selectors", () => {
+    const signals = read(
+      '<head></head><body><h2 data-testid="jobsearch-JobInfoHeader-title">Co-op</h2></body>',
+    );
+
+    expect(signals.siteFields).toBeUndefined();
+  });
+
+  it("takes the first selector that matches, in the order the site lists them", () => {
+    document.documentElement.innerHTML =
+      `<head></head><body>
+         <h2 class="jobsearch-JobInfoHeader-title">Older markup</h2>
+         <h2 data-testid="jobsearch-JobInfoHeader-title">Current markup</h2>
+       </body>`;
+
+    const signals = collectPageSignals(
+      fieldRulesFor("https://ca.indeed.com/viewjob?jk=abc123"),
+    );
+
+    expect(signals.siteFields?.["title"]).toBe("Current markup");
   });
 
   it("is self-contained, because Chrome injects it as source text", () => {

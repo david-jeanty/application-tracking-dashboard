@@ -64,9 +64,15 @@ declare namespace chrome {
   namespace scripting {
     type InjectionResult<T> = { frameId: number; result?: T };
 
+    /**
+     * `args` are structured-cloned into the page, which is why the injected
+     * function takes its site selectors as a parameter rather than closing
+     * over them: Chrome serializes the function body alone.
+     */
     function executeScript<Result>(injection: {
       target: { tabId: number };
-      func: () => Result;
+      func: (...args: never[]) => Result;
+      args?: unknown[];
       world?: "ISOLATED" | "MAIN";
     }): Promise<InjectionResult<Result>[]>;
   }

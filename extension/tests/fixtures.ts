@@ -1,4 +1,5 @@
 import { collectPageSignals } from "../src/page-collector.js";
+import { fieldRulesFor } from "../src/sites.js";
 import type { PageSignals } from "../src/types.js";
 
 /**
@@ -28,6 +29,20 @@ export function readPage(
   return { ...collectPageSignals(), pageUrl };
 }
 
+/**
+ * The same read, with the selectors a recognized site's address resolves to.
+ *
+ * The popup does exactly this: it decides which named read path applies from
+ * the tab's address and hands the collector the resulting selectors as data.
+ * Going through `fieldRulesFor` here means a test exercises the real table
+ * rather than a list written beside the assertion.
+ */
+export function readSitePage(html: string, pageUrl: string): PageSignals {
+  document.documentElement.innerHTML = html;
+
+  return { ...collectPageSignals(fieldRulesFor(pageUrl)), pageUrl };
+}
+
 export function jsonLd(value: unknown): string {
   // `</` is escaped the way publishers escape it, because an unescaped closing
   // tag inside JSON ends the script element early and the browser never hands
@@ -44,6 +59,17 @@ export function rawJsonLd(text: string): string {
 
 export function page(head: string, body = "<h1>Job posting</h1>"): string {
   return `<head><title>Careers</title>${head}</head><body>${body}</body>`;
+}
+
+/**
+ * The apply control a real posting has and a careers landing page does not.
+ *
+ * The generic fallback will not promote a heading into a job title on the word
+ * of the heading alone, so a fixture that expects a title out of an
+ * unstructured page has to carry the same corroboration a real one would.
+ */
+export function applyControl(): string {
+  return '<a href="/apply">Apply now</a>';
 }
 
 /** A minimal, complete JobPosting node the individual tests vary from. */
