@@ -5,7 +5,7 @@ import { PublicHeader } from "@/components/public/public-header";
 export const metadata: Metadata = {
   title: "Privacy",
   description:
-    "How JobTrack handles account, application, and planned browser-capture data.",
+    "How JobTrack handles account, application, and browser-capture data.",
 };
 
 export default function PrivacyPage() {
@@ -29,12 +29,13 @@ export default function PrivacyPage() {
             Your application records stay yours.
           </h1>
           <p className="mt-5 text-[15px] leading-7 text-foreground-secondary">
-            This page describes the current JobTrack web app and the intended
-            privacy boundary for a planned browser extension. The extension is
-            not publicly released.
+            This page describes the JobTrack web app and the JobTrack Capture
+            browser extension. The extension is built and can be installed
+            locally as an unpacked extension; it is not distributed through the
+            Chrome Web Store.
           </p>
           <p className="mt-3 text-[13px] text-foreground-muted">
-            Last updated August 25, 2026.
+            Last updated August 26, 2026.
           </p>
 
           <div className="mt-10 space-y-10 text-[15px] leading-7 text-foreground-secondary">
@@ -66,35 +67,53 @@ export default function PrivacyPage() {
                 className="border-b border-border pb-2 text-[20px] font-medium text-foreground"
                 id="extension-privacy"
               >
-                The planned browser extension
+                The JobTrack Capture browser extension
               </h2>
               <p className="mt-4">
-                The planned extension is a manual capture tool, not an AI,
-                discovery, or background-monitoring product. Its intended
-                behavior is limited to the posting the user explicitly asks it
-                to save.
+                JobTrack Capture is a manual capture tool, not an AI, discovery,
+                or background-monitoring product. It does what its one button
+                says: it saves the posting you are looking at into your own
+                tracker.
               </p>
               <ul className="mt-4 list-disc space-y-2 pl-5 marker:text-accent">
                 <li>
-                  Page data will be accessed only after explicit user
-                  invocation.
+                  Page data is read only after you open the extension on a page.
+                  It registers no content script and holds no permission for job
+                  sites, so it has no way to read a page you have not opened it
+                  on.
                 </li>
                 <li>
-                  Extracted posting information will be transmitted to the
-                  user&apos;s own JobTrack account.
-                </li>
-                <li>JobTrack will not continuously monitor browsing.</li>
-                <li>
-                  Authentication information will be used only to connect the
-                  user&apos;s account.
+                  What it reads is the posting&apos;s own published job details
+                  and standard page metadata. The page&apos;s full contents are
+                  never transmitted.
                 </li>
                 <li>
-                  Captured data will be used only to provide JobTrack
-                  functionality, not sold or used for personalized advertising.
+                  Extracted posting information is sent to your own JobTrack
+                  account, and only after you confirm it and choose to save.
                 </li>
                 <li>
-                  Users will be able to edit or delete captured records through
-                  JobTrack, just like records saved another way.
+                  JobTrack does not continuously monitor browsing. Nothing runs
+                  in the background between captures, and the extension keeps no
+                  record of pages you visited.
+                </li>
+                <li>
+                  Sign-in information is used only to connect your own JobTrack
+                  account. Credentials are held by the extension and are never
+                  given to the job page.
+                </li>
+                <li>
+                  Captured data is used only to provide JobTrack functionality,
+                  not sold or used for personalized advertising.
+                </li>
+                <li>
+                  You can edit or delete captured records through JobTrack, just
+                  like records saved another way, and you can remove the
+                  extension&apos;s access at any time in Settings.
+                </li>
+                <li>
+                  The extension provides no AI of its own. It does not classify
+                  jobs, match or tailor a resume, write applications, fill forms,
+                  or apply on your behalf.
                 </li>
               </ul>
             </section>
@@ -110,8 +129,12 @@ export default function PrivacyPage() {
                 JobTrack does not need to infer personal facts, continuously
                 scrape job sites, detect submissions, or inspect unrelated
                 browsing to store a posting. Unknown information remains
-                unknown. The extension&apos;s permissions and data handling will
-                receive a separate review before any public release.
+                unknown: when a posting does not state something, the extension
+                leaves the field empty rather than guessing at it.
+              </p>
+              <p className="mt-3">
+                The extension&apos;s permissions and data handling will receive a
+                further review before any public distribution.
               </p>
             </section>
           </div>

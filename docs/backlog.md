@@ -57,6 +57,11 @@ significant source of duplicate work, so one narrow browser feature is now
 approved: an extension that saves the posting the student is currently viewing
 after an explicit user action.
 
+The server foundation shipped first; the JobTrack Capture Chrome extension
+followed as a locally loadable unpacked MV3 package. It is not distributed
+through the Chrome Web Store, and site-specific extraction adapters are
+deliberately not part of it.
+
 The approved work is capture only. Arbitrary or background scraping, autofill,
 auto-apply, submission detection, built-in AI, job classification, resume
 matching, recommendations, and automatic job discovery remain out of scope.

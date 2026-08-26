@@ -2,6 +2,7 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ApplicationDetail,
+  ApplicationOriginalPosting,
   ApplicationRecordMeta,
 } from "@/components/applications/application-detail";
 import type { ApplicationRecord } from "@/lib/applications/types";
@@ -169,5 +170,94 @@ describe("what stays plainly visible", () => {
     );
 
     expect(screen.getByText(/This application is archived/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * The link out to the posting, promoted beside the record's own actions.
+ *
+ * Manual testing found people reviewing an application and concluding no
+ * original link existed — it was there, fourteen fields down a list, labelled
+ * "Open posting". Reading the posting is one of the two or three things a
+ * student does on this page, so it now sits with Edit and Archive.
+ */
+describe("the original posting action", () => {
+  it("offers the posting as a named top-level action", () => {
+    render(
+      <ApplicationOriginalPosting
+        application={application({
+          application_url: "https://careers.example.com/jobs/1",
+        })}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: /view original posting/i });
+
+    expect(link).toHaveAttribute("href", "https://careers.example.com/jobs/1");
+  });
+
+  it("opens in a new tab without handing the posting a referrer or an opener", () => {
+    render(
+      <ApplicationOriginalPosting
+        application={application({
+          application_url: "https://careers.example.com/jobs/1",
+        })}
+      />,
+    );
+
+    const link = screen.getByRole("link", { name: /view original posting/i });
+
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link.getAttribute("rel")).toContain("noreferrer");
+    expect(link.getAttribute("rel")).toContain("noopener");
+  });
+
+  it("renders nothing at all when no URL is stored", () => {
+    const { container } = render(
+      <ApplicationOriginalPosting
+        application={application({ application_url: null })} />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders nothing for a stored URL that is not safe to open", () => {
+    const { container } = render(
+      <ApplicationOriginalPosting
+        application={application({
+          application_url: "javascript:alert(1)",
+        })}
+      />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  /**
+   * The redundancy is deliberate. The action above is the common thing to do;
+   * the row below is the stored field, and it is the only one of the two that
+   * can say a URL is missing.
+   */
+  it("keeps the stored field in the record beneath it", () => {
+    render(
+      <ApplicationDetail
+        application={application({
+          application_url: "https://careers.example.com/jobs/1",
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: /open posting/i })).toHaveAttribute(
+      "href",
+      "https://careers.example.com/jobs/1",
+    );
+  });
+
+  it("still reports an unset posting in the record, where absence belongs", () => {
+    render(<ApplicationDetail application={application({ application_url: null })} />);
+
+    const row = screen.getByText("Job posting").closest("div");
+
+    expect(row).toHaveTextContent("Not set");
   });
 });

@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import {
   ApplicationDetail,
   ApplicationIdentity,
+  ApplicationOriginalPosting,
   ApplicationRecordMeta,
 } from "@/components/applications/application-detail";
 import { ApplicationStatusDot } from "@/components/applications/application-status";
@@ -62,7 +63,9 @@ export default async function DemoApplicationDetailPage({
 
       <div className="mt-6 flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
         <ApplicationIdentity application={application} />
-        <div className="shrink-0">
+        <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
+          {/* Reading the posting is not a write, so the demo offers it too. */}
+          <ApplicationOriginalPosting application={application} />
           <ApplicationStatusDot status={application.current_status} />
         </div>
       </div>

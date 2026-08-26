@@ -1,5 +1,5 @@
 /**
- * What a connected AI assistant can and cannot do with a student's tracker.
+ * What a connected client can and cannot do with a student's tracker.
  *
  * The consent screen and the settings page both describe this, and they must
  * never disagree: one is the promise made while granting access, the other is
@@ -9,6 +9,15 @@
  *
  * These describe the tools actually registered in `lib/mcp/tools.ts`. If a tool
  * is ever added or removed, this list changes with it.
+ *
+ * The list is also what the consent screen shows the JobTrack Capture browser
+ * extension, and that is accurate rather than convenient: an OAuth grant issues
+ * an ordinary Supabase user token, and Supabase scopes affect what is inside an
+ * identity token, not what the database will accept. Any authorized client
+ * therefore holds this same authority whether or not it exercises all of it.
+ * Narrowing that for the extension is a real piece of work — client-id-aware
+ * policies — and `docs/browser-capture.md` records it as the open
+ * least-privilege question rather than implying it is already solved.
  */
 
 /**

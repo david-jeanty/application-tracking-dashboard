@@ -1,0 +1,142 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JobTrack Capture</title>
+<link rel="stylesheet" href="popup.css" />
+
+<div class="shell">
+  <header class="shell__header">
+    <h1 class="wordmark">JobTrack</h1>
+    <button class="link-button" id="disconnect" hidden type="button">
+      Sign out
+    </button>
+  </header>
+
+  <!--
+    One live region for the whole popup. Every state writes its own sentence
+    here, so a screen reader hears "Reading this page", "Saving", or "Tracked in
+    JobTrack" as it happens rather than only when focus lands somewhere new.
+  -->
+  <p class="announcement" id="announcement" role="status" aria-live="polite"></p>
+
+  <main id="main">
+    <section class="panel" data-panel="loading">
+      <p class="muted">Checking your JobTrack connection…</p>
+    </section>
+
+    <section class="panel" data-panel="disconnected" hidden>
+      <p>Connect JobTrack to save the job you are viewing.</p>
+      <button class="button" id="connect" type="button">Connect JobTrack</button>
+    </section>
+
+    <section class="panel" data-panel="connecting" hidden>
+      <p class="muted">Waiting for you to finish signing in…</p>
+    </section>
+
+    <section class="panel" data-panel="connect_failed" hidden>
+      <p class="problem" id="connect-error"></p>
+      <button class="button" id="connect-retry" type="button">Try again</button>
+    </section>
+
+    <section class="panel" data-panel="extracting" hidden>
+      <p class="muted">Reading this page…</p>
+    </section>
+
+    <section class="panel" data-panel="extraction_failed" hidden>
+      <p class="problem" id="extraction-error"></p>
+    </section>
+
+    <section class="panel" data-panel="ready" hidden>
+      <form id="capture-form" novalidate>
+        <div class="field">
+          <label class="field__label" for="company">Company</label>
+          <input
+            autocomplete="off"
+            class="field__input field__input--strong"
+            id="company"
+            name="company"
+            maxlength="160"
+            required
+            type="text"
+          />
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="job-title">Job title</label>
+          <input
+            autocomplete="off"
+            class="field__input"
+            id="job-title"
+            name="job-title"
+            maxlength="200"
+            required
+            type="text"
+          />
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="location">Location</label>
+          <input
+            autocomplete="off"
+            class="field__input"
+            id="location"
+            name="location"
+            maxlength="200"
+            type="text"
+          />
+        </div>
+
+        <p class="note" id="extraction-note"></p>
+
+        <div class="field">
+          <label class="field__label" for="status">Status</label>
+          <select class="field__input" id="status" name="status">
+            <option value="Interested">Interested</option>
+            <option value="Applied">Applied</option>
+          </select>
+        </div>
+
+        <!--
+          What is being saved that the student did not type. Read-only and
+          secondary: it exists so nothing important enters their tracker
+          invisibly, not to become a second copy of the JobTrack form.
+        -->
+        <section aria-labelledby="also-found-heading" class="also-found" id="also-found" hidden>
+          <h2 class="also-found__heading" id="also-found-heading">Also found</h2>
+          <dl class="also-found__list" id="also-found-list"></dl>
+        </section>
+
+        <p class="problem" id="save-problem" hidden></p>
+        <ul class="problem-list" id="save-issues" hidden></ul>
+
+        <button class="button" id="save" type="submit">Track job</button>
+      </form>
+    </section>
+
+    <section class="panel" data-panel="saving" hidden>
+      <p class="muted">Saving to JobTrack…</p>
+    </section>
+
+    <section class="panel" data-panel="unauthorized" hidden>
+      <p class="problem">
+        Your JobTrack connection has expired. Connect again to keep saving jobs.
+      </p>
+      <button class="button" id="reconnect" type="button">Connect JobTrack</button>
+    </section>
+
+    <section class="panel" data-panel="saved" hidden>
+      <p class="saved__headline" id="saved-headline"></p>
+      <p class="saved__company" id="saved-company"></p>
+      <p class="saved__title" id="saved-title"></p>
+      <a
+        class="button button--secondary"
+        id="open-application"
+        rel="noopener noreferrer"
+        target="_blank"
+      >
+        Open application
+      </a>
+    </section>
+  </main>
+</div>
+
+<script src="dist/popup.js" type="module"></script>

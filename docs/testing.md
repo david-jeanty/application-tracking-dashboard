@@ -10,6 +10,22 @@ npm run build
 npm run test:e2e
 ```
 
+The browser extension has its own project, because it runs different code in a
+different environment:
+
+```bash
+npm run extension:typecheck
+npm run extension:test
+npm run extension:build
+npm run extension:check   # all three
+```
+
+`npm run check` runs the application gate and then `extension:check`. The
+extension suite covers extraction against synthetic pages, the PKCE and token
+helpers, credential storage and refresh, message validation, every popup state,
+the popup rendered into its real markup, and the manifest's permission set. Its
+fixtures are invented: no real job posting is committed.
+
 Unit tests cover environment validation, safe routes, auth/application schemas,
 optional application normalization, enum validation, ownership-free insert
 mapping, and date-only behavior. Public Playwright tests cover
@@ -110,6 +126,25 @@ Neither script reads the service credential from source, a fixture, or
 `.env.local`; `SUPABASE_SERVICE_ROLE_KEY` must be injected into the process
 environment by a trusted terminal or secret manager. The runner removes that
 variable before spawning Playwright or the application server.
+
+## Manual browser-extension check
+
+The extension's own suite runs without a browser, and the OAuth flow cannot be
+exercised without a real Supabase project. These steps are the part that has to
+be done by hand; `docs/browser-capture.md` has the loading instructions.
+
+1. Load `extension/` unpacked in Chrome after `npm run extension:build`.
+2. Connect it, and confirm the consent screen names the extension rather than an
+   assistant.
+3. On a public job posting, open the popup and confirm the company, title, and
+   location it offers match the page — or are empty rather than wrong.
+4. Save, and confirm the record appears in JobTrack with the same values.
+5. Press the toolbar button again on the same posting and confirm it reports the
+   job as already tracked and links to the existing record.
+6. Sign out, and confirm the popup returns to its disconnected state.
+7. Repeat step 3 on an employer careers page, LinkedIn, Indeed, Greenhouse,
+   Lever and Workday, recording per site which fields were correct, absent, or
+   wrong. Record findings only — do not commit captured job descriptions.
 
 ## Manual accessibility/responsive check
 

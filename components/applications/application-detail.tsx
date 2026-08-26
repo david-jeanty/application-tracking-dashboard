@@ -16,6 +16,7 @@ import {
   displayOptionalText,
   safeExternalUrl,
 } from "@/lib/applications/mapper";
+import { ButtonLink } from "@/components/ui/button";
 import type { ApplicationRecord } from "@/lib/applications/types";
 import { formatDateOnly } from "@/lib/dates/date-only";
 import { formatDateTime } from "@/lib/dates/date-time";
@@ -180,6 +181,42 @@ export function ApplicationIdentity({
 }
 
 /**
+ * The link out to the posting the record came from, beside the record's own
+ * actions.
+ *
+ * It is also a row in the Application list below, and that repetition is the
+ * point rather than an oversight. The row is the stored field — it says whether
+ * a URL is set, and shows "Not set" when one is not. This is the action a
+ * student reaches for while reviewing an application, and it was previously
+ * only reachable by reading down a list of fourteen fields to a link labelled
+ * "Open posting". Testing found people concluding the link did not exist.
+ *
+ * It renders nothing at all unless a safe external URL exists, so a record with
+ * no posting shows no dead control — the "Not set" answer stays in the field
+ * list, where a missing value belongs.
+ */
+export function ApplicationOriginalPosting({
+  application,
+}: {
+  application: ApplicationRecord;
+}) {
+  const externalUrl = safeExternalUrl(application.application_url);
+  if (!externalUrl) return null;
+
+  return (
+    <ButtonLink
+      href={externalUrl}
+      rel="noreferrer noopener"
+      target="_blank"
+      variant="secondary"
+    >
+      View original posting
+      <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+    </ButtonLink>
+  );
+}
+
+/**
  * Provenance: when the record was written, and how confident the category
  * behind it is. Quiet, and last, because it is the least of what a student
  * comes to this page for.
@@ -269,6 +306,11 @@ export function ApplicationDetail({
           <Row icon={Banknote} label="Salary">
             <OptionalValue value={application.salary} />
           </Row>
+          {/*
+            Kept, deliberately, alongside the promoted action above. This is
+            the stored field: it reports what the record holds, including that
+            it holds nothing.
+          */}
           <Row icon={ExternalLink} label="Job posting">
             {externalUrl ? (
               <a

@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "JobTrack Capture",
+  "version": "0.1.0",
+  "description": "Save the job posting you are viewing into your own JobTrack account.",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "scripting", "storage", "identity"],
+  "host_permissions": [
+    "https://jobtrack.example.com/*",
+    "https://your-project-ref.supabase.co/*"
+  ],
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Save this job to JobTrack",
+    "default_popup": "popup.html"
+  }
+}

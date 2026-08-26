@@ -20,7 +20,13 @@ function describeGrantedAt(value: string): string | null {
 }
 
 /**
- * The AI assistants a student has authorized, with a way to disconnect each.
+ * Everything a student has authorized, with a way to disconnect each.
+ *
+ * An entry may be an AI assistant connected over MCP or the JobTrack Capture
+ * browser extension. Supabase reports a client's name and id and nothing about
+ * its kind, so this list names each connection and declines to categorize it —
+ * guessing from the name would put a confident label on a value the student
+ * chose when they registered the client.
  *
  * The list comes from Supabase on every request rather than from anything
  * stored here, so what it shows is the live state of consent. The disconnect
@@ -33,10 +39,10 @@ export function ConnectedClients({ clients }: { clients: ConnectedClient[] }) {
       // A rule and two lines. The dashed box with an icon inside it was the
       // loudest thing in Settings, and it was announcing an absence.
       <div className="border-t border-border pt-5">
-        <p className="text-sm text-foreground">No assistants connected yet</p>
+        <p className="text-sm text-foreground">Nothing connected yet</p>
         <p className="mt-1 max-w-md text-sm leading-6 text-foreground-secondary">
-          Once you connect one using the steps above, it will appear here and
-          you can disconnect it at any time.
+          Once you connect an assistant or the browser extension, it will appear
+          here and you can remove it at any time.
         </p>
       </div>
     );
