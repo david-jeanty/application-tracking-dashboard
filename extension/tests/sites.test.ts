@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractJob } from "../src/extractor.js";
+import {
+  extractJob,
+  extractJobReport,
+  toExtractedJob,
+} from "../src/extractor.js";
 import {
   chooseLinkedInFrame,
   planLinkedInRead,
@@ -244,9 +248,10 @@ describe("LinkedIn", () => {
      </main></body>`;
 
   it("reads the selected posting from a job detail page", () => {
-    const job = extractJob(
+    const report = extractJobReport(
       readSitePage(detail(topCard, aboutTheJob), LINKEDIN_JOB),
     );
+    const job = toExtractedJob(report);
 
     expect(job.company).toBe("Northwind Photonics");
     expect(job.jobTitle).toBe(
@@ -258,6 +263,11 @@ describe("LinkedIn", () => {
     );
     expect(job.source).toBe("LinkedIn");
     expect(job.warnings).toEqual([]);
+    expect(report.fields.company).toMatchObject({
+      state: "established",
+      source: "linkedin_selected_posting",
+      confidence: "exact",
+    });
   });
 
   /**
@@ -1100,13 +1110,19 @@ describe("Indeed", () => {
        <div id="jobDescriptionText"><p>Support the campaigns team.</p></div>
      </body>`;
 
-    const job = extractJob(readSitePage(html, INDEED_JOB));
+    const report = extractJobReport(readSitePage(html, INDEED_JOB));
+    const job = toExtractedJob(report);
 
     expect(job.company).toBe("Bright Harbour Media");
     expect(job.jobTitle).toBe("Marketing Co-op");
     expect(job.location).toBe("Ottawa, ON");
     expect(job.jobDescription).toBe("Support the campaigns team.");
     expect(job.source).toBe("Indeed");
+    expect(report.fields.jobTitle).toMatchObject({
+      state: "established",
+      source: "indeed_site",
+      confidence: "exact",
+    });
   });
 
   /**
@@ -1210,11 +1226,17 @@ describe("Workday", () => {
   }
 
   it("reads the selected posting rather than the page around it", () => {
-    const job = extractJob(readSitePage(posting, WORKDAY_JOB));
+    const report = extractJobReport(readSitePage(posting, WORKDAY_JOB));
+    const job = toExtractedJob(report);
 
     expect(job.jobTitle).toBe("Senior Consultant, Internship");
     expect(job.location).toBe("Toronto, Ontario");
     expect(job.jobDescription).toBe("Join the consulting practice.");
+    expect(report.fields.jobTitle).toMatchObject({
+      state: "established",
+      source: "workday_selected_posting",
+      confidence: "exact",
+    });
   });
 
   /**
@@ -1302,7 +1324,8 @@ describe("Workday", () => {
         '<img data-automation-id="image" alt="Logo" /><div data-automation-id="richText">BMO is a leading bank.</div>',
     })}`;
 
-    const job = extractJob(readSitePage(html, BMO_JOB));
+    const report = extractJobReport(readSitePage(html, BMO_JOB));
+    const job = toExtractedJob(report);
 
     expect(job.company).toBe("BMO");
     expect(job.jobTitle).toContain("Metals & Mining");
@@ -1312,6 +1335,21 @@ describe("Workday", () => {
     expect(job.salary).toBeUndefined();
     expect(job.companyDomain).toBeUndefined();
     expect(job.jobUrl).toBe(BMO_JOB);
+    expect(report.fields.jobTitle).toMatchObject({
+      state: "established",
+      source: "workday_selected_posting",
+      rejected: [
+        {
+          source: "json_ld_job_posting",
+          reason: "workday_structured_data_untrusted",
+        },
+      ],
+    });
+    expect(report.fields.deadline).toMatchObject({
+      state: "ambiguous",
+      source: "json_ld_job_posting",
+      reason: "workday_structured_data_untrusted",
+    });
   });
 
   it("does not let CIBC's structured legal employer override selected fields", () => {
@@ -1373,7 +1411,8 @@ describe("Workday", () => {
       <link rel="canonical" href="https://bmo.wd3.myworkdayjobs.com/en-US/job/Stale_999" />
     </head><body><div data-automation-id="jobResults">Search results</div></body>`;
 
-    const job = extractJob(readSitePage(html, current));
+    const report = extractJobReport(readSitePage(html, current));
+    const job = toExtractedJob(report);
 
     expect(job.company).toBeUndefined();
     expect(job.jobTitle).toBeUndefined();
@@ -1384,6 +1423,12 @@ describe("Workday", () => {
     expect(job.companyDomain).toBeUndefined();
     expect(job.jobUrl).toBe(current);
     expect(job.warnings).toContain("no_job_posting_found");
+    expect(report.fields.jobTitle).toMatchObject({
+      state: "ambiguous",
+      source: "json_ld_job_posting",
+    });
+    // An ambiguous candidate cannot cross the compatibility boundary.
+    expect(extractJob(readSitePage(html, current))).toEqual(job);
   });
 
   it("does not originate an employer from a tenant hostname", () => {

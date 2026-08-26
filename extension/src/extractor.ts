@@ -15,7 +15,16 @@ import {
   siteFor,
 } from "./sites.js";
 import { employerDomainFromUrl, sourceForUrl } from "./source.js";
-import type { ExtractedJob, ExtractionWarning, PageSignals } from "./types.js";
+import type {
+  CapturedField,
+  EvidenceConfidence,
+  ExtractionDiagnostics,
+  ExtractionReport,
+  ExtractionSource,
+  ExtractionWarning,
+  ExtractedJob,
+  PageSignals,
+} from "./types.js";
 
 /**
  * Turns what the page said about itself into the facts JobTrack can store.
@@ -568,14 +577,90 @@ function microdataPosting(signals: PageSignals): JsonLdNode | undefined {
  * and the student can complete by hand, not an error, and it is the honest
  * answer for the many job pages that publish nothing a machine can trust.
  */
-export function extractJob(signals: PageSignals): ExtractedJob {
+function sourceForSite(site: ReturnType<typeof siteFor>): ExtractionSource | undefined {
+  switch (site) {
+    case "linkedin":
+      return "linkedin_selected_posting";
+    case "indeed":
+      return "indeed_site";
+    case "workday":
+      return "workday_selected_posting";
+    default:
+      return undefined;
+  }
+}
+
+function absent<T>(): CapturedField<T> {
+  return { state: "absent" };
+}
+
+function established<T>(
+  value: T | undefined,
+  confidence: Exclude<EvidenceConfidence, "ambiguous">,
+  source: ExtractionSource | undefined,
+): CapturedField<T> {
+  return value !== undefined && source
+    ? { state: "established", value, confidence, source }
+    : absent();
+}
+
+/** Workday structured data is observable but never establishes a field. */
+function workdayField<T>(
+  value: T | undefined,
+  source: ExtractionSource | undefined,
+  structuredValue: T | undefined,
+  structuredSource: ExtractionSource | undefined,
+): CapturedField<T> {
+  if (value !== undefined && source) {
+    return {
+      state: "established",
+      value,
+      confidence: "exact",
+      source,
+      ...(structuredValue !== undefined && structuredSource
+        ? {
+            rejected: [
+              {
+                source: structuredSource,
+                reason: "workday_structured_data_untrusted" as const,
+              },
+            ],
+          }
+        : {}),
+    };
+  }
+
+  return structuredValue !== undefined && structuredSource
+    ? {
+        state: "ambiguous",
+        confidence: "ambiguous",
+        source: structuredSource,
+        reason: "workday_structured_data_untrusted",
+      }
+    : absent();
+}
+
+/**
+ * Reads one page's signals into an evidence-aware internal result.
+ *
+ * `extractJob` below is the only compatibility projection. New extraction
+ * consumers should start here so evidence and values cannot drift apart.
+ */
+export function extractJobReport(signals: PageSignals): ExtractionReport {
   const warnings: ExtractionWarning[] = [];
   const url = postingUrl(signals);
   const source = sourceForUrl(signals.pageUrl);
   const site = siteFor(signals.pageUrl);
+  const siteSource = sourceForSite(site);
 
   const [jsonLdPosting] = findJobPostings(signals.jsonLdBlocks);
-  const structuredPosting = jsonLdPosting ?? microdataPosting(signals);
+  const microdata = jsonLdPosting ? undefined : microdataPosting(signals);
+  const structuredPosting = jsonLdPosting ?? microdata;
+  const structuredSource: ExtractionSource | undefined = jsonLdPosting
+    ? "json_ld_job_posting"
+    : microdata
+      ? "microdata_job_posting"
+      : undefined;
   // Workday can retain a backend or previous SPA JobPosting after its visible
   // detail pane has changed. Its bounded site strategy is authoritative, and
   // structured fields must not revive a search-result state that established
@@ -584,17 +669,21 @@ export function extractJob(signals: PageSignals): ExtractedJob {
 
   const fromSite = site ? readSiteFields(site, signals.siteFields) : {};
 
+  const structuredOrganization = structuredPosting
+    ? firstRecord(structuredPosting["hiringOrganization"])
+    : undefined;
   const organization = posting
     ? firstRecord(posting["hiringOrganization"])
     : undefined;
-  const structuredCompany = posting
+  const structuredCompanyCandidate = structuredPosting
     ? clamp(
-        organization
-          ? firstString(organization["name"])
-          : firstString(posting["hiringOrganization"]),
+        structuredOrganization
+          ? firstString(structuredOrganization["name"])
+          : firstString(structuredPosting["hiringOrganization"]),
         LIMITS.company,
       )
     : undefined;
+  const structuredCompany = posting ? structuredCompanyCandidate : undefined;
 
   const company =
     structuredCompany ??
@@ -603,22 +692,48 @@ export function extractJob(signals: PageSignals): ExtractedJob {
       LIMITS.company,
     );
 
+  const structuredTitleCandidate = structuredPosting
+    ? clamp(firstString(structuredPosting["title"]), LIMITS.jobTitle)
+    : undefined;
+  const siteTitle = clamp(
+    acceptFromSite(fromSite.jobTitle, signals, { site, field: "jobTitle" }),
+    LIMITS.jobTitle,
+  );
+  const fallback = site
+    ? undefined
+    : clamp(fallbackTitle(signals, Boolean(posting)), LIMITS.jobTitle);
   const jobTitle =
     (posting ? clamp(firstString(posting["title"]), LIMITS.jobTitle) : undefined) ??
-    clamp(
-      acceptFromSite(fromSite.jobTitle, signals, { site, field: "jobTitle" }),
-      LIMITS.jobTitle,
-    ) ??
+    siteTitle ??
     // A recognized site that found nothing found nothing. Its own heading is
     // page furniture, and that is exactly the mistake this patch removes.
-    (site
-      ? undefined
-      : clamp(fallbackTitle(signals, Boolean(posting)), LIMITS.jobTitle));
+    fallback;
+  const titleSource = structuredTitleCandidate
+    ? structuredSource
+    : siteTitle
+      ? siteSource
+      : fallback
+        ? "generic_fallback"
+        : undefined;
 
+  const structuredLocationCandidate = structuredPosting
+    ? clamp(readLocation(structuredPosting), LIMITS.location)
+    : undefined;
+  const siteLocation = clamp(fromSite.location, LIMITS.location);
   const location =
     (posting ? clamp(readLocation(posting), LIMITS.location) : undefined) ??
-    clamp(fromSite.location, LIMITS.location);
+    siteLocation;
 
+  const structuredDescriptionCandidate = limitDescription(
+    structuredPosting ? firstString(structuredPosting["description"]) : undefined,
+  ).text;
+  const descriptionSource = posting && firstString(posting["description"])
+    ? structuredSource
+    : fromSite.jobDescription
+      ? siteSource
+      : !site && (signals.meta["og:description"] ?? signals.meta["description"])
+        ? "generic_metadata"
+        : undefined;
   const description = limitDescription(
     (posting ? firstString(posting["description"]) : undefined) ??
       fromSite.jobDescription ??
@@ -630,28 +745,167 @@ export function extractJob(signals: PageSignals): ExtractedJob {
         : (signals.meta["og:description"] ?? signals.meta["description"])),
   );
 
+  const structuredCompanyDomainCandidate = readCompanyDomain(structuredOrganization);
+  const structuredDeadlineCandidate = structuredPosting
+    ? readDeadline(structuredPosting)
+    : undefined;
+  const structuredSalaryCandidate = structuredPosting
+    ? readSalary(structuredPosting)
+    : undefined;
   const companyDomain = readCompanyDomain(organization);
   const deadline = posting ? readDeadline(posting) : undefined;
   const salary = posting ? readSalary(posting) : undefined;
 
-  if (!company && !jobTitle && !description.text) {
+  const fields = {
+    company:
+      site === "workday"
+        ? workdayField(company, siteSource, structuredCompanyCandidate, structuredSource)
+        : established(company, "exact", structuredCompany ? structuredSource : siteSource),
+    jobTitle:
+      site === "workday"
+        ? workdayField(jobTitle, siteSource, structuredTitleCandidate, structuredSource)
+        : established(
+            jobTitle,
+            titleSource === "generic_fallback" ? "strong" : "exact",
+            titleSource,
+          ),
+    location:
+      site === "workday"
+        ? workdayField(location, siteSource, structuredLocationCandidate, structuredSource)
+        : established(
+            location,
+            "exact",
+            structuredLocationCandidate ? structuredSource : siteSource,
+          ),
+    companyDomain:
+      site === "workday"
+        ? workdayField(undefined, undefined, structuredCompanyDomainCandidate, structuredSource)
+        : established(companyDomain, "exact", structuredSource),
+    jobDescription:
+      site === "workday"
+        ? workdayField(
+            description.text,
+            descriptionSource === siteSource ? siteSource : undefined,
+            structuredDescriptionCandidate,
+            structuredSource,
+          )
+        : established(
+            description.text,
+            "exact",
+            descriptionSource,
+          ),
+    jobUrl: established(url, "exact", "posting_url"),
+    source: established(source, "exact", "source_host"),
+    deadline:
+      site === "workday"
+        ? workdayField(undefined, undefined, structuredDeadlineCandidate, structuredSource)
+        : established(deadline, "exact", structuredSource),
+    salary:
+      site === "workday"
+        ? workdayField(undefined, undefined, structuredSalaryCandidate, structuredSource)
+        : established(salary, "exact", structuredSource),
+  } satisfies ExtractionReport["fields"];
+
+  if (
+    fields.company.state !== "established" &&
+    fields.jobTitle.state !== "established" &&
+    fields.jobDescription.state !== "established"
+  ) {
     warnings.push("no_job_posting_found");
   }
-  if (!company) warnings.push("missing_company");
-  if (!jobTitle) warnings.push("missing_job_title");
-  if (!location) warnings.push("missing_location");
+  if (fields.company.state !== "established") warnings.push("missing_company");
+  if (fields.jobTitle.state !== "established") warnings.push("missing_job_title");
+  if (fields.location.state !== "established") warnings.push("missing_location");
   if (description.shortened) warnings.push("description_too_long");
 
   return {
-    ...(company ? { company } : {}),
-    ...(jobTitle ? { jobTitle } : {}),
-    ...(location ? { location } : {}),
-    ...(companyDomain ? { companyDomain } : {}),
-    ...(description.text ? { jobDescription: description.text } : {}),
-    ...(url ? { jobUrl: url } : {}),
-    ...(source ? { source } : {}),
-    ...(deadline ? { deadline } : {}),
-    ...(salary ? { salary } : {}),
+    fields,
     warnings,
+    ...(site ? { recognizedSite: site } : {}),
+    ...(siteSource ?? structuredSource ?? fallback
+      ? { selectedStrategy: siteSource ?? structuredSource ?? "generic_fallback" }
+      : {}),
+    structuredData: {
+      jsonLdJobPosting: Boolean(jsonLdPosting),
+      microdataJobPosting: Boolean(microdata),
+    },
+    ...(hostnameOf(signals.pageUrl) ? { pageHost: hostnameOf(signals.pageUrl) } : {}),
   };
+}
+
+/** Backward-compatible projection: ambiguous and absent fields stay blank. */
+export function toExtractedJob(report: ExtractionReport): ExtractedJob {
+  const value = (field: CapturedField<string>): string | undefined =>
+    field.state === "established" ? field.value : undefined;
+
+  return {
+    ...(value(report.fields.company) ? { company: value(report.fields.company) } : {}),
+    ...(value(report.fields.jobTitle)
+      ? { jobTitle: value(report.fields.jobTitle) }
+      : {}),
+    ...(value(report.fields.location) ? { location: value(report.fields.location) } : {}),
+    ...(value(report.fields.companyDomain)
+      ? { companyDomain: value(report.fields.companyDomain) }
+      : {}),
+    ...(value(report.fields.jobDescription)
+      ? { jobDescription: value(report.fields.jobDescription) }
+      : {}),
+    ...(value(report.fields.jobUrl) ? { jobUrl: value(report.fields.jobUrl) } : {}),
+    ...(value(report.fields.source) ? { source: value(report.fields.source) } : {}),
+    ...(value(report.fields.deadline) ? { deadline: value(report.fields.deadline) } : {}),
+    ...(value(report.fields.salary) ? { salary: value(report.fields.salary) } : {}),
+    warnings: report.warnings,
+  };
+}
+
+/** Removes values while retaining enough shape to diagnose a local capture. */
+export function extractionDiagnostics(
+  report: ExtractionReport,
+): ExtractionDiagnostics {
+  const diagnose = (
+    field: CapturedField<string>,
+    includeLength = false,
+  ): ExtractionDiagnostics["fields"][keyof ExtractionDiagnostics["fields"]] => {
+    if (field.state === "established") {
+      return {
+        state: field.state,
+        confidence: field.confidence,
+        source: field.source,
+        ...(field.rejected ? { rejected: field.rejected } : {}),
+        ...(includeLength ? { valueLength: field.value.length } : {}),
+      };
+    }
+    if (field.state === "ambiguous") {
+      return {
+        state: field.state,
+        confidence: field.confidence,
+        source: field.source,
+        reason: field.reason,
+      };
+    }
+    return { state: field.state };
+  };
+
+  return {
+    ...(report.recognizedSite ? { recognizedSite: report.recognizedSite } : {}),
+    ...(report.selectedStrategy ? { selectedStrategy: report.selectedStrategy } : {}),
+    structuredData: report.structuredData,
+    ...(report.pageHost ? { pageHost: report.pageHost } : {}),
+    warnings: report.warnings,
+    fields: {
+      company: diagnose(report.fields.company),
+      jobTitle: diagnose(report.fields.jobTitle),
+      location: diagnose(report.fields.location),
+      companyDomain: diagnose(report.fields.companyDomain),
+      jobDescription: diagnose(report.fields.jobDescription, true),
+      jobUrl: diagnose(report.fields.jobUrl),
+      source: diagnose(report.fields.source),
+      deadline: diagnose(report.fields.deadline),
+      salary: diagnose(report.fields.salary),
+    },
+  };
+}
+
+export function extractJob(signals: PageSignals): ExtractedJob {
+  return toExtractedJob(extractJobReport(signals));
 }
