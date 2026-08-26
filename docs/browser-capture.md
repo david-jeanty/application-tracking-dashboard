@@ -254,18 +254,29 @@ in that page.
 ### Extraction hierarchy
 
 ```text
-extractJob(pageSignals)
+extractJobReport(pageSignals)
         │
         ├── structured data the publisher asserts   (JSON-LD, then microdata)
         │
         ├── a recognized site's own read path       (LinkedIn, Indeed, Workday)
         │
         └── a conservative generic fallback         (a title, with corroboration)
+        │
+        └── evidence-aware internal report → ExtractedJob compatibility projection
 ```
 
-Every path returns the same neutral `ExtractedJob`. Nothing below the first
-level knows that JobTrack, Supabase, OAuth, `applicationCreationSchema` or MCP
-exist; site rules extract facts from a page and stop there.
+Every path now contributes to one internal evidence-aware report. An
+established field records its bounded source and confidence (`exact` for a
+direct posting signal; `strong` for corroborated generic fallback); ambiguous
+candidates are retained only as sanitized rejection metadata and project to a
+blank `ExtractedJob` field. Local diagnostics contain strategy/source codes,
+warning codes and description length, never page HTML, full descriptions,
+tokens or cookies. The popup, browser-capture API and payload remain on the
+same `ExtractedJob` contract. Rich Capture fields remain future work.
+
+Nothing below the first level knows that JobTrack, Supabase, OAuth,
+`applicationCreationSchema` or MCP exist; site rules extract facts from a page
+and stop there.
 
 1. **`schema.org` JobPosting.** As JSON-LD — a single object, a top-level array,
    `@graph`, several script blocks, `@type` as a string or an array, a full IRI

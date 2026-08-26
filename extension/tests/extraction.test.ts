@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { extractJob, DESCRIPTION_LIMIT } from "../src/extractor.js";
+import {
+  extractJob,
+  extractJobReport,
+  extractionDiagnostics,
+  toExtractedJob,
+  DESCRIPTION_LIMIT,
+} from "../src/extractor.js";
+import type { ExtractionReport } from "../src/types.js";
 import {
   applyControl,
   jobPosting,
@@ -23,13 +30,26 @@ import {
 
 describe("structured JobPosting data", () => {
   it("reads a single JobPosting object", () => {
-    const job = extractJob(readPage(page(jsonLd(jobPosting()))));
+    const signals = readPage(page(jsonLd(jobPosting())));
+    const report = extractJobReport(signals);
+    const job = toExtractedJob(report);
 
     expect(job.company).toBe("IBM");
     expect(job.jobTitle).toBe("Business Technology Analyst Intern");
     expect(job.location).toBe("Ottawa, ON");
     expect(job.jobDescription).toContain("analytics team");
     expect(job.warnings).toEqual([]);
+    // The compatibility entry point remains exactly this projection.
+    expect(extractJob(signals)).toEqual(job);
+    expect(report.fields.company).toMatchObject({
+      state: "established",
+      confidence: "exact",
+      source: "json_ld_job_posting",
+    });
+    expect(report.fields.jobDescription).toMatchObject({
+      state: "established",
+      source: "json_ld_job_posting",
+    });
   });
 
   it("reads a JobPosting from a top-level array", () => {
@@ -143,6 +163,23 @@ describe("descriptions", () => {
     expect(job.jobDescription).toBe("Short and complete.");
     expect(job.warnings).not.toContain("description_too_long");
   });
+
+  it("marks a generic metadata description strong without changing its projection", () => {
+    const report = extractJobReport(
+      readPage(
+        page('<meta property="og:description" content="Page metadata description." />'),
+      ),
+    );
+
+    expect(toExtractedJob(report).jobDescription).toBe(
+      "Page metadata description.",
+    );
+    expect(report.fields.jobDescription).toMatchObject({
+      state: "established",
+      source: "generic_metadata",
+      confidence: "strong",
+    });
+  });
 });
 
 describe("the employer's domain", () => {
@@ -210,9 +247,16 @@ describe("missing information", () => {
       "<h1>Finance Co-op Student</h1>",
     );
 
-    const job = extractJob(readPage(html));
+    const report = extractJobReport(readPage(html));
+    const job = toExtractedJob(report);
 
     expect(job.jobTitle).toBe("Finance Co-op Student");
+    expect(report.fields.jobTitle).toMatchObject({
+      state: "established",
+      source: "generic_fallback",
+      confidence: "strong",
+      corroboratedBy: ["structured_job_posting"],
+    });
   });
 
   it("reports a missing title when nothing on the page supplies one", () => {
@@ -473,10 +517,20 @@ describe("the generic fallback", () => {
   it("accepts a heading once two signals agree the page is a posting", () => {
     const html = page("", `<h1>Analytics Intern</h1>${applyControl()}`);
 
-    expect(
-      extractJob(readPage(html, "https://careers.example.com/job/analytics/48213"))
-        .jobTitle,
-    ).toBe("Analytics Intern");
+    const report = extractJobReport(
+      readPage(html, "https://careers.example.com/job/analytics/48213"),
+    );
+
+    expect(toExtractedJob(report).jobTitle).toBe("Analytics Intern");
+    expect(report.fields.jobTitle).toMatchObject({
+      state: "established",
+      confidence: "strong",
+      source: "generic_fallback",
+      corroboratedBy: ["job_shaped_url", "apply_control"],
+    });
+    expect(extractionDiagnostics(report).fields.jobTitle.corroboratedBy).toEqual(
+      ["job_shaped_url", "apply_control"],
+    );
   });
 
   it("refuses a heading that is only the site's own name", () => {
@@ -496,10 +550,14 @@ describe("the generic fallback", () => {
       "<h1>Analytics Intern</h1>",
     );
 
-    expect(
-      extractJob(readPage(html, "https://careers.example.com/job/48213"))
-        .jobTitle,
-    ).toBe("Analytics Intern");
+    const report = extractJobReport(
+      readPage(html, "https://careers.example.com/job/48213"),
+    );
+
+    expect(toExtractedJob(report).jobTitle).toBe("Analytics Intern");
+    expect(report.fields.jobTitle).toMatchObject({
+      corroboratedBy: ["job_shaped_url", "declared_job_page"],
+    });
   });
 });
 
@@ -530,12 +588,13 @@ describe("JobPosting microdata", () => {
    </body>`;
 
   it("reads a posting a page expressed in attributes", () => {
-    const job = extractJob(
+    const report = extractJobReport(
       readPage(
         `<head></head>${microdataPosting}`,
         "https://careers.beaconaerospace.com/job/48213",
       ),
     );
+    const job = toExtractedJob(report);
 
     expect(job.company).toBe("Beacon Aerospace");
     expect(job.jobTitle).toBe("Systems Engineering Intern");
@@ -544,12 +603,59 @@ describe("JobPosting microdata", () => {
     expect(job.deadline).toBe("2026-10-01");
     expect(job.companyDomain).toBe("beaconaerospace.com");
     expect(job.warnings).toEqual([]);
+    expect(report.fields.jobTitle).toMatchObject({
+      state: "established",
+      confidence: "exact",
+      source: "microdata_job_posting",
+    });
   });
 
   it("still prefers JSON-LD when the page publishes both", () => {
     const html = `<head>${jsonLd(jobPosting())}</head>${microdataPosting}`;
+    const report = extractJobReport(readPage(html));
 
-    expect(extractJob(readPage(html)).company).toBe("IBM");
+    expect(toExtractedJob(report).company).toBe("IBM");
+    expect(report.structuredData).toEqual({
+      jsonLdJobPosting: true,
+      microdataJobPosting: true,
+    });
+  });
+});
+
+describe("sanitized extraction diagnostics", () => {
+  it("keeps values, descriptions, and token-like text out of diagnostics", () => {
+    const description = "Private role details bearer very-secret-token";
+    const report = extractJobReport(
+      readPage(page(jsonLd(jobPosting({ description })))),
+    );
+
+    const diagnostics = extractionDiagnostics(report);
+    const serialized = JSON.stringify(diagnostics);
+
+    expect(diagnostics.fields.jobDescription.valueLength).toBe(description.length);
+    expect(serialized).not.toContain(description);
+    expect(serialized).not.toContain("very-secret-token");
+    expect(serialized).not.toContain("<script");
+  });
+
+  it("never projects a candidate value from an intentionally malformed ambiguous field", () => {
+    const report = extractJobReport(readPage(page(jsonLd(jobPosting()))));
+    const malformed = {
+      ...report,
+      fields: {
+        ...report.fields,
+        // Intentionally violates the type contract to test the runtime boundary.
+        company: {
+          state: "ambiguous",
+          confidence: "ambiguous",
+          source: "json_ld_job_posting",
+          reason: "workday_structured_data_untrusted",
+          value: "Wrong Employer",
+        },
+      },
+    } as unknown as ExtractionReport;
+
+    expect(toExtractedJob(malformed).company).toBeUndefined();
   });
 });
 

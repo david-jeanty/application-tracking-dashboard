@@ -61,6 +61,111 @@ export type ExtractionWarning =
   | "description_too_long";
 
 /**
+ * How directly the current posting establishes a field.
+ *
+ * `exact` is tied to this posting by one bounded, deterministic signal.
+ * `strong` is a conservative fallback corroborated by multiple page signals.
+ * `ambiguous` means a candidate existed but could not safely be attributed to
+ * the posting, so it is deliberately not projected into a saved job.
+ */
+export type EvidenceConfidence = "exact" | "strong" | "ambiguous";
+
+/** The small, stable vocabulary of extraction mechanisms the extension has. */
+export type ExtractionSource =
+  | "json_ld_job_posting"
+  | "microdata_job_posting"
+  | "linkedin_selected_posting"
+  | "indeed_site"
+  | "workday_selected_posting"
+  | "generic_fallback"
+  | "generic_metadata"
+  | "posting_url"
+  | "source_host";
+
+/** The bounded signals that qualify a generic title fallback as a job posting. */
+export type GenericFallbackCorroboration =
+  | "job_shaped_url"
+  | "apply_control"
+  | "declared_job_page"
+  | "structured_job_posting";
+
+/** Why a candidate was observed but intentionally not trusted. */
+export type EvidenceRejectionReason = "workday_structured_data_untrusted";
+
+export type RejectedEvidence = {
+  source: ExtractionSource;
+  reason: EvidenceRejectionReason;
+};
+
+/**
+ * One field's extraction outcome. Values occur only in the established case;
+ * an ambiguous candidate has no value to accidentally project into a capture.
+ */
+export type CapturedField<T> =
+  | {
+      state: "established";
+      value: T;
+      confidence: Exclude<EvidenceConfidence, "ambiguous">;
+      source: ExtractionSource;
+      /** Present for a strong generic title fallback; contains no page content. */
+      corroboratedBy?: readonly GenericFallbackCorroboration[];
+      rejected?: readonly RejectedEvidence[];
+    }
+  | {
+      state: "ambiguous";
+      confidence: "ambiguous";
+      source: ExtractionSource;
+      reason: EvidenceRejectionReason;
+    }
+  | { state: "absent" };
+
+export type ExtractionFieldName =
+  | "company"
+  | "jobTitle"
+  | "location"
+  | "companyDomain"
+  | "jobDescription"
+  | "jobUrl"
+  | "source"
+  | "deadline"
+  | "salary";
+
+export type ExtractionFields = {
+  [Field in ExtractionFieldName]: CapturedField<string>;
+};
+
+/** Internal extraction truth. `toExtractedJob` is its compatibility boundary. */
+export type ExtractionReport = {
+  fields: ExtractionFields;
+  warnings: ExtractionWarning[];
+  recognizedSite?: "linkedin" | "indeed" | "workday";
+  selectedStrategy?: ExtractionSource;
+  structuredData: { jsonLdJobPosting: boolean; microdataJobPosting: boolean };
+  pageHost?: string;
+};
+
+/** Sanitized, local-only troubleshooting data derived from an ExtractionReport. */
+export type ExtractionDiagnostics = {
+  recognizedSite?: ExtractionReport["recognizedSite"];
+  selectedStrategy?: ExtractionSource;
+  structuredData: ExtractionReport["structuredData"];
+  pageHost?: string;
+  warnings: ExtractionWarning[];
+  fields: {
+    [Field in ExtractionFieldName]: {
+      state: CapturedField<string>["state"];
+      confidence?: EvidenceConfidence;
+      source?: ExtractionSource;
+      corroboratedBy?: readonly GenericFallbackCorroboration[];
+      reason?: EvidenceRejectionReason;
+      rejected?: readonly RejectedEvidence[];
+      /** Present only for description; its contents never leave the extractor. */
+      valueLength?: number;
+    };
+  };
+};
+
+/**
  * What the extension believes about the posting on screen.
  *
  * Every field is optional except the warnings, because "we could not tell" is
