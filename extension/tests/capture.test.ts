@@ -21,6 +21,9 @@ const extracted: ExtractedJob = {
   source: "LinkedIn",
   deadline: "2026-11-30",
   salary: "CAD 22–25 per hour",
+  workArrangement: "Hybrid",
+  workTerm: "Summer 2027",
+  duration: "4 months",
   warnings: [],
 };
 
@@ -51,7 +54,52 @@ describe("the record sent to JobTrack", () => {
       source: "LinkedIn",
       deadline: "2026-11-30",
       salary: "CAD 22–25 per hour",
+      work_arrangement: "Hybrid",
+      work_term: "Summer 2027",
+      duration: "4 months",
     });
+  });
+
+  /**
+   * The three rich fields travel on the record contract's own wire names, and
+   * only when the page established them.
+   *
+   * The server already turns a missing arrangement into `Unknown` and a missing
+   * work term into `Not specified`. Sending either sentinel from here would be
+   * a second implementation of a default only one side can own — and the one
+   * that shipped in a browser is the one nobody could change.
+   */
+  it("omits the rich fields the page did not establish", () => {
+    const record = buildCaptureRecord(
+      { jobUrl: "https://careers.example.com/jobs/1", warnings: [] },
+      { company: "Acme", jobTitle: "Intern", status: "Interested" },
+    );
+
+    expect(record).not.toHaveProperty("work_arrangement");
+    expect(record).not.toHaveProperty("work_term");
+    expect(record).not.toHaveProperty("duration");
+  });
+
+  it("invents no Unknown arrangement and no Not specified work term", () => {
+    const record = buildCaptureRecord(
+      { warnings: [] },
+      { company: "Acme", jobTitle: "Intern", status: "Interested" },
+    );
+    const serialized = JSON.stringify(record);
+
+    expect(serialized).not.toContain("Unknown");
+    expect(serialized).not.toContain("Not specified");
+  });
+
+  it("passes an established arrangement through without changing it", () => {
+    for (const workArrangement of ["Remote", "Hybrid", "On-site"] as const) {
+      const record = buildCaptureRecord(
+        { workArrangement, warnings: [] },
+        { company: "Acme", jobTitle: "Intern", status: "Interested" },
+      );
+
+      expect(record.work_arrangement).toBe(workArrangement);
+    }
   });
 
   it("never sends an owner and never names itself as the job source", () => {

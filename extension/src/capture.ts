@@ -2,6 +2,7 @@ import { captureEndpoint, jobtrackUrl } from "./config.js";
 import type {
   CaptureConfirmation,
   CaptureOutcome,
+  CaptureWorkArrangement,
   ExtractedJob,
 } from "./types.js";
 
@@ -32,6 +33,18 @@ export type CaptureRecord = {
   source?: string;
   deadline?: string;
   salary?: string;
+  /**
+   * The three rich fields, on the record contract's own wire names.
+   *
+   * `work_arrangement` also accepts `Unknown` server-side and the extension
+   * never sends it, because "the page did not say" is what an omitted field
+   * already means. Same for `work_term`: the server stores `Not specified`
+   * when it is absent, and a client that sent the sentinel itself would be a
+   * second implementation of a default only one of them can own.
+   */
+  work_arrangement?: CaptureWorkArrangement;
+  work_term?: string;
+  duration?: string;
 };
 
 /**
@@ -66,6 +79,11 @@ export function buildCaptureRecord(
     ...(extracted.source ? { source: extracted.source } : {}),
     ...(extracted.deadline ? { deadline: extracted.deadline } : {}),
     ...(extracted.salary ? { salary: extracted.salary } : {}),
+    ...(extracted.workArrangement
+      ? { work_arrangement: extracted.workArrangement }
+      : {}),
+    ...(extracted.workTerm ? { work_term: extracted.workTerm } : {}),
+    ...(extracted.duration ? { duration: extracted.duration } : {}),
   };
 }
 

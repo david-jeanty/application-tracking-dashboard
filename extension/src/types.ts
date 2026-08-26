@@ -89,8 +89,16 @@ export type GenericFallbackCorroboration =
   | "declared_job_page"
   | "structured_job_posting";
 
-/** Why a candidate was observed but intentionally not trusted. */
-export type EvidenceRejectionReason = "workday_structured_data_untrusted";
+/**
+ * Why a candidate was observed but intentionally not trusted.
+ *
+ * `conflicting_evidence` is the rich-capture case: the posting stated a fact
+ * twice and did not state the same thing twice. Choosing one of them would be
+ * a coin toss written into a record the student has no reason to doubt.
+ */
+export type EvidenceRejectionReason =
+  | "workday_structured_data_untrusted"
+  | "conflicting_evidence";
 
 export type RejectedEvidence = {
   source: ExtractionSource;
@@ -119,19 +127,39 @@ export type CapturedField<T> =
     }
   | { state: "absent" };
 
-export type ExtractionFieldName =
-  | "company"
-  | "jobTitle"
-  | "location"
-  | "companyDomain"
-  | "jobDescription"
-  | "jobUrl"
-  | "source"
-  | "deadline"
-  | "salary";
+/**
+ * The work arrangements a page is allowed to establish.
+ *
+ * The stored contract also has `Unknown`, and the extension never sends it: a
+ * page that did not say is a page that did not say, and the server's mapper
+ * already turns an absent arrangement into `Unknown`. Defaulting here would
+ * mean two implementations of one default, and the client's would be the one
+ * nobody could see.
+ */
+export const CAPTURE_WORK_ARRANGEMENTS = ["Remote", "Hybrid", "On-site"] as const;
+
+export type CaptureWorkArrangement = (typeof CAPTURE_WORK_ARRANGEMENTS)[number];
+
+/** What each extracted field holds, for the fields that are not plain strings. */
+type ExtractionFieldValues = {
+  company: string;
+  jobTitle: string;
+  location: string;
+  companyDomain: string;
+  jobDescription: string;
+  jobUrl: string;
+  source: string;
+  deadline: string;
+  salary: string;
+  workArrangement: CaptureWorkArrangement;
+  workTerm: string;
+  duration: string;
+};
+
+export type ExtractionFieldName = keyof ExtractionFieldValues;
 
 export type ExtractionFields = {
-  [Field in ExtractionFieldName]: CapturedField<string>;
+  [Field in ExtractionFieldName]: CapturedField<ExtractionFieldValues[Field]>;
 };
 
 /** Internal extraction truth. `toExtractedJob` is its compatibility boundary. */
@@ -188,6 +216,12 @@ export type ExtractedJob = {
   /** `YYYY-MM-DD`, from `validThrough`. */
   deadline?: string;
   salary?: string;
+  /** Only when the posting explicitly stated it. Never inferred from a city. */
+  workArrangement?: CaptureWorkArrangement;
+  /** The recruiting term the posting names, such as `Summer 2027`. */
+  workTerm?: string;
+  /** The term length the posting states, such as `4 months`. */
+  duration?: string;
   warnings: ExtractionWarning[];
 };
 
