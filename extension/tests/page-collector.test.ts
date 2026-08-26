@@ -179,68 +179,27 @@ describe("the injected collector", () => {
    * a page gets is `sites.ts`'s answer, arriving as data — and the two reads
    * genuinely differ, so the same markup gives different answers.
    */
-  it("takes the strategy and the address's job as data", () => {
+  it("takes the strategy and the selected job as data", () => {
     document.documentElement.innerHTML = `<head></head><body><main>
        <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
      </main></body>`;
 
     const similar = readRulesFor(
-      "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4455239909&referenceJobId=4455304273",
+      "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4451682967&referenceJobId=4459178947",
     );
 
     expect(similar.strategy).toBe("linkedin-similar-jobs");
-    expect(similar.jobId).toBe("4455239909");
+    expect(similar.jobId).toBe("4451682967");
 
-    // No Primary content region states an identity here, so the stricter read
-    // establishes nothing — which is the correct answer, and not the one the
-    // ordinary read gives on the very same markup.
+    // No Primary content region here, so the stricter read establishes nothing
+    // — which is correct, and not what the ordinary read does with the same
+    // markup.
     expect(collectPageSignals(similar).siteFields).toBeUndefined();
     expect(
       collectPageSignals(
-        readRulesFor("https://www.linkedin.com/jobs/view/4455239909/"),
+        readRulesFor("https://www.linkedin.com/jobs/view/4451682967/"),
       ).siteFields?.["company"],
     ).toBe("Northwind Photonics");
-  });
-
-  /**
-   * The identity a Similar Jobs pane states about itself travels back with the
-   * fields, so the record's URL and its contents cannot describe two postings.
-   */
-  it("reports the identity the active pane stated, alongside its fields", () => {
-    document.documentElement.innerHTML = `<head></head><body><main>
-       <section aria-label="Primary content">
-         <div id="JobDetails_ManageJobBanner_4455304273"></div>
-         <div id="JobDetails_AboutTheCompany_4455304273"></div>
-         <div aria-label="Company, Halden Wholesale Foods.">Halden Wholesale Foods</div>
-       </section>
-     </main></body>`;
-
-    const signals = collectPageSignals(
-      readRulesFor(
-        "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4455239909&referenceJobId=4455304273",
-      ),
-    );
-
-    expect(signals.siteJobId).toBe("4455304273");
-    expect(signals.siteFields?.["company"]).toBe("Halden Wholesale Foods");
-  });
-
-  it("states no identity where the pane did not state one", () => {
-    document.documentElement.innerHTML =
-      "<head></head><body><main><h1>Jobs</h1></main></body>";
-
-    expect(
-      collectPageSignals(
-        readRulesFor(
-          "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4455239909&referenceJobId=4455304273",
-        ),
-      ).siteJobId,
-    ).toBeUndefined();
-    expect(
-      collectPageSignals(
-        readRulesFor("https://www.linkedin.com/jobs/view/4455239909/"),
-      ).siteJobId,
-    ).toBeUndefined();
   });
 
   it("is self-contained, because Chrome injects it as source text", () => {

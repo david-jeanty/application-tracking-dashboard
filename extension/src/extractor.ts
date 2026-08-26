@@ -107,10 +107,7 @@ function sameHost(candidate: string, pageUrl: string): string | undefined {
  * somewhere else would file the posting under an address they never visited.
  */
 function postingUrl(signals: PageSignals): string | undefined {
-  // The detail region's own answer wins where it gave one: the fields came from
-  // that region, and a record must not be filed under a posting other than the
-  // one it describes.
-  const perPosting = canonicalPostingUrl(signals.pageUrl, signals.siteJobId);
+  const perPosting = canonicalPostingUrl(signals.pageUrl);
   const canonical = signals.canonicalUrl
     ? sameHost(signals.canonicalUrl, signals.pageUrl)
     : undefined;

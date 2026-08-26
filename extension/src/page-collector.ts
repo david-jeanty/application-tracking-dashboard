@@ -23,8 +23,8 @@ import type { PageSignals } from "./types.js";
  * puts the title and the location in unattributed leaves whose classes are
  * generated hashes, and the only way to reach them without guessing is through
  * their relationship to an element that *is* semantically labelled. There are
- * two because one LinkedIn route shows a posting its own address does not name,
- * and reading it needs the page's answer rather than the URL's.
+ * two because one LinkedIn route keeps the previous posting's markup after an
+ * in-page transition, so reading it means asking which surface is drawn.
  *
  * Chrome serializes this function with `Function.prototype.toString()` before
  * injecting it, so it must be self-contained: every helper it uses is declared
@@ -93,6 +93,45 @@ export function collectPageSignals(
     if (!node.textContent?.trim()) return undefined;
 
     return clamp(node.innerHTML, MAXIMUM_FIELD_CHARACTERS);
+  }
+
+  /**
+   * Whether an element is actually drawn, rather than merely still present.
+   *
+   * A single-page application does not always remove what it replaces. When a
+   * student picks a similar job, the previous posting's markup can survive the
+   * transition — its company label, its title, its description, and its
+   * component ids, all intact and all describing a job that is no longer on
+   * screen. "Is in the DOM" and "is what the student is looking at" come apart
+   * there, and only the second is the question worth asking.
+   *
+   * Rendered is not the same as scrolled into view. A student reading the
+   * bottom of a long posting has its header far above the viewport and is still
+   * capturing that posting, so intersection is deliberately not part of this.
+   */
+  function isRendered(node: Element | null): boolean {
+    if (!node) return false;
+
+    // Hidden or removed from the accessibility tree takes the subtree with it.
+    if (node.closest('[hidden], [aria-hidden="true"]')) return false;
+
+    const element = node as HTMLElement;
+    const rect =
+      typeof element.getBoundingClientRect === "function"
+        ? element.getBoundingClientRect()
+        : null;
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+
+    // `display` and `visibility` come from the computed style, so an ancestor
+    // that hid this subtree counts even where the element itself sets nothing.
+    const view = element.ownerDocument?.defaultView;
+    const style = view?.getComputedStyle
+      ? view.getComputedStyle(element)
+      : null;
+
+    return (
+      !style || (style.display !== "none" && style.visibility !== "hidden")
+    );
   }
 
   const jsonLdBlocks: string[] = [];
@@ -174,9 +213,6 @@ export function collectPageSignals(
   }
 
   const siteFields: Record<string, string> = {};
-  /** What the region the fields came from said it was, when it said so. */
-  let statedJobId: string | undefined;
-
   for (const rule of rules.fields) {
     for (const selector of rule.selectors) {
       let found: Element | null = null;
@@ -403,62 +439,60 @@ export function collectPageSignals(
   }
 
   /**
-   * LinkedIn's Similar Jobs route, where the address does not name the pane.
+   * LinkedIn's Similar Jobs route, where the previous posting's markup lingers.
    *
-   * `/jobs/collections/similar-jobs/?currentJobId=A&referenceJobId=B` shows one
-   * posting and names two, and live Chrome evidence says neither parameter
-   * reliably names the one on screen. On the page that produced this code the
-   * address read `currentJobId=4455239909`, while inside
-   * `section[aria-label="Primary content"]` every `JobDetails_*` component id —
-   * the manage banner, the about-the-job block, the resume review, the company
-   * insights, the similar-jobs slot — ended `_4455304273`, and the company
-   * label in that same region named that posting's employer. Nothing carrying
-   * 4455239909 was rendered outside a result card at all.
+   * Starting on a Microsoft posting and clicking a similar job leaves the
+   * address at `currentJobId=<the new job>&referenceJobId=<the Microsoft one>`
+   * and the screen showing the new employer — while Microsoft's rendered-once
+   * DOM is still in the document. Reading the first labelled company on the
+   * page therefore captured Microsoft, over and over.
    *
-   * An earlier correction assumed `currentJobId` was authoritative and read the
-   * wrong pane. Assuming `referenceJobId` instead would be the same mistake
-   * with a different parameter. So neither decides: **the active detail pane is
-   * authoritative about which posting it is**, it says so in its own component
-   * ids, and the address is context rather than an answer.
+   * Two earlier theories about this route were wrong and are worth naming, so
+   * neither comes back. `referenceJobId` is not the stale one to avoid and the
+   * live one to prefer — it is simply the posting the student came from.
+   * `JobDetails_*_<id>` component ids are not a statement about what is on
+   * screen either: they go stale across the same transition, and trusting them
+   * filed the wrong job just as reliably.
    *
-   * Identity has to agree with itself before it counts. Several independent
-   * components must name the same posting, no component may name a different
-   * one, and a single uncorroborated id is not enough. When identity does not
-   * resolve, every field stays blank and no URL is built from a parameter —
-   * because a record filed under one posting's address carrying another
-   * posting's fields is worse than a blank the student types over.
+   * What actually separates the two postings is that only one of them is drawn.
+   * So identity comes from `currentJobId`, which LinkedIn rewrites when the
+   * student picks a posting, and every field comes from the rendered detail
+   * surface inside `section[aria-label="Primary content"]` — with the More jobs
+   * rail excluded structurally rather than by assuming every list item is a
+   * search result, because this route renders the employer inside one.
+   *
+   * When the rendered candidates disagree about the employer, the page is
+   * mid-transition and no answer is safe: every field stays blank.
    */
   function readLinkedInSimilarJob(): void {
-    /** `JobDetails_AboutTheJob_4455304273` — the component, and the posting. */
-    const COMPONENT_ID_PATTERN = /^JobDetails[A-Za-z0-9_]*_(\d{5,})$/;
-    /** The one region that holds the posting the student is looking at. */
+    /** The one region holding the posting the student is looking at. */
     const PRIMARY_CONTENT_SELECTORS = [
       'section[aria-label="Primary content"]',
       '[aria-label="Primary content"]',
     ];
-    /** The rail of other postings, named by the same id convention. */
+    /** The rail of other postings, and the description block, by convention. */
     const RAIL_ID_PATTERN = /similarjobs|morejobs/i;
-    const MINIMUM_AGREEING_COMPONENTS = 2;
+    const ABOUT_ID_PATTERN = /aboutthejob/i;
 
-    let primary: Element | null = null;
+    let found: Element | null = null;
     for (const selector of PRIMARY_CONTENT_SELECTORS) {
-      primary = document.querySelector(selector);
-      if (primary) break;
+      found = document.querySelector(selector);
+      if (found) break;
     }
-    // No bounded active region, nothing to be sure about. Blank.
-    if (!primary) return;
+    // No bounded detail region, nothing to be sure about. Blank.
+    if (!found) return;
 
-    const region = primary;
+    const region = found;
 
     /**
      * Whether an element belongs to the rail of other postings.
      *
-     * Structural containment rather than "is inside a list item". The rail is
-     * a `JobDetails*SimilarJobs*` slot inside the same region, and the top card
-     * beside it is not — where the blanket list-item test could not tell the
-     * two apart, because LinkedIn builds parts of the active pane out of lists
-     * too. Outside this region the list-item test still stands: that is where
-     * search results live.
+     * Structural containment, walked up to the region, rather than "is inside a
+     * list item". The rail is a `JobDetails*SimilarJobs*` slot; the detail
+     * header beside it is not — and on this route the header renders its
+     * employer inside a list, so the blanket list-item test would discard the
+     * very field being looked for. Outside this region that test still stands,
+     * which is where search results actually live.
      */
     function inTheRail(element: Element): boolean {
       let node: Element | null = element;
@@ -471,69 +505,42 @@ export function collectPageSignals(
       return false;
     }
 
-    /**
-     * Which posting this region says it is, or nothing.
-     *
-     * Every `JobDetails_*_<id>` component in the region votes. They must agree
-     * unanimously and there must be more than one of them: a lone id could be a
-     * leftover, and two components disagreeing means the page is mid-swap and
-     * no answer is safe.
-     */
-    function statedIdentity(): string | undefined {
-      const found = new Set<string>();
-
-      for (const element of Array.from(region.querySelectorAll("[id]")).slice(
-        0,
-        MAXIMUM_LABELLED_CANDIDATES,
-      )) {
-        const stated = COMPONENT_ID_PATTERN.exec(element.id)?.[1];
-        if (!stated) continue;
-        // A card in the rail names its own posting; it is not this pane's.
-        if (inTheRail(element)) continue;
-
-        found.add(stated);
-        if (found.size > 1) return undefined;
-      }
-
-      const [only] = Array.from(found);
-      if (!only) return undefined;
-
-      // Corroboration: count the components that agreed, not just the ids.
-      const agreeing = Array.from(region.querySelectorAll("[id]")).filter(
-        (element) =>
-          COMPONENT_ID_PATTERN.exec(element.id)?.[1] === only &&
-          !inTheRail(element),
-      ).length;
-
-      return agreeing >= MINIMUM_AGREEING_COMPONENTS ? only : undefined;
+    function usable(element: Element): boolean {
+      return !inTheRail(element) && isRendered(element);
     }
 
-    const identity = statedIdentity();
-    if (!identity) return;
-
-    // Stated before any field is read, and read from the same region, so the
-    // stored URL and the stored fields cannot describe two different postings.
-    statedJobId = identity;
-
     /**
-     * The employer, then the card it belongs to, then that card's title and
-     * location — the mechanics the verified routes already use, pointed at this
-     * region instead of at the whole document.
+     * The employer, from the rendered detail header and only from there.
+     *
+     * Every drawn company label in the region votes. One employer means the
+     * transition has settled; two different ones mean it has not, and a page
+     * showing two employers at once cannot be captured correctly by picking
+     * either.
      */
+    const labelled = Array.from(region.querySelectorAll("[aria-label]")).slice(
+      0,
+      MAXIMUM_LABELLED_CANDIDATES,
+    );
+
     let anchor: { element: Element; name: string } | null = null;
-    for (const element of Array.from(region.querySelectorAll("[aria-label]"))) {
-      if (inTheRail(element)) continue;
+    const employers = new Set<string>();
+
+    for (const element of labelled) {
+      if (!usable(element)) continue;
 
       const name = companyNameFrom(element);
-      if (name) {
-        anchor = { element, name };
-        break;
-      }
+      if (!name) continue;
+
+      employers.add(name);
+      if (employers.size > 1) return;
+      if (!anchor) anchor = { element, name };
     }
 
     if (anchor) {
       siteFields["company"] = clamp(anchor.name, MAXIMUM_FIELD_CHARACTERS);
 
+      // The title and the location: the card the drawn employer belongs to,
+      // read exactly the way the verified LinkedIn routes read theirs.
       let card: Element | null = anchor.element.parentElement;
       let titleText = "";
       for (let depth = 0; card && depth < MAXIMUM_ANCESTOR_DEPTH; depth += 1) {
@@ -549,7 +556,7 @@ export function collectPageSignals(
         for (const candidate of Array.from(
           card.querySelectorAll(TITLE_SELECTOR),
         )) {
-          if (inTheRail(candidate)) continue;
+          if (!usable(candidate)) continue;
           if (
             candidate.contains(anchor.element) ||
             anchor.element.contains(candidate)
@@ -566,9 +573,7 @@ export function collectPageSignals(
         }
 
         for (const candidate of Array.from(card.querySelectorAll("p > span"))) {
-          if (inTheRail(candidate) || anchor.element.contains(candidate)) {
-            continue;
-          }
+          if (!usable(candidate) || anchor.element.contains(candidate)) continue;
 
           const value = trimmedText(candidate);
           if (
@@ -588,36 +593,60 @@ export function collectPageSignals(
     }
 
     /**
-     * The description, from this posting's own About-the-job component.
+     * The description, from a drawn About-the-job block in this region.
      *
-     * The component names the posting in its id, so scoping to it settles both
-     * questions at once: which posting the text belongs to, and which of the
-     * page's several `expandable-text-box` elements is the job rather than a
-     * Premium upsell. Where no such component exists the heading anchoring the
-     * verified routes use stands in, still bounded to this region.
+     * The block is recognized by the component-name half of its id, never by
+     * the job number on the end of it — that number is one of the things that
+     * goes stale here. The heading itself is not required to be drawn: on this
+     * route it measures zero while the block around it is plainly on screen.
+     * What must be drawn is the text box, which is also what keeps a Premium
+     * upsell and the previous posting's copy out.
      */
-    const aboutComponent = Array.from(region.querySelectorAll("[id]")).find(
-      (element) =>
-        COMPONENT_ID_PATTERN.exec(element.id)?.[1] === identity &&
-        /abouthejob|aboutthejob/i.test(element.id) &&
-        !inTheRail(element),
+    const aboutBlocks = Array.from(region.querySelectorAll("[id]")).filter(
+      (element) => ABOUT_ID_PATTERN.test(element.id) && !inTheRail(element),
     );
 
-    if (aboutComponent) {
+    for (const block of aboutBlocks) {
       const box = Array.from(
-        aboutComponent.querySelectorAll(DESCRIPTION_SELECTOR),
-      ).find((candidate) => !inTheRail(candidate));
+        block.querySelectorAll(DESCRIPTION_SELECTOR),
+      ).find(usable);
 
       const value = markupOf(box ?? null);
-      if (value) siteFields["description"] = value;
+      if (value) {
+        siteFields["description"] = value;
+        break;
+      }
     }
 
     if (!siteFields["description"]) {
-      const headings = aboutTheJobHeadings().filter(
-        (heading) => region.contains(heading) && !inTheRail(heading),
-      );
-      const value = descriptionUnder(headings);
-      if (value) siteFields["description"] = value;
+      // No such block: fall back to the heading anchoring the verified routes
+      // use, still bounded to this region and still requiring a drawn box.
+      for (const heading of aboutTheJobHeadings()) {
+        if (!region.contains(heading) || inTheRail(heading)) continue;
+
+        let node: Element | null = heading.parentElement;
+        for (let depth = 0; node && depth < MAXIMUM_ANCESTOR_DEPTH; depth += 1) {
+          const box = Array.from(
+            node.querySelectorAll(DESCRIPTION_SELECTOR),
+          ).find(
+            (candidate) =>
+              usable(candidate) &&
+              (heading.compareDocumentPosition(candidate) &
+                Node.DOCUMENT_POSITION_FOLLOWING) !==
+                0,
+          );
+
+          const value = markupOf(box ?? null);
+          if (value) {
+            siteFields["description"] = value;
+            break;
+          }
+          if (node === region) break;
+          node = node.parentElement;
+        }
+
+        if (siteFields["description"]) break;
+      }
     }
   }
 
@@ -664,7 +693,6 @@ export function collectPageSignals(
       : {}),
     ...(Object.keys(microdata).length > 0 ? { microdata } : {}),
     ...(Object.keys(siteFields).length > 0 ? { siteFields } : {}),
-    ...(statedJobId ? { siteJobId: statedJobId } : {}),
     evidence: {
       applyAffordance,
       jobPostingMicrodata: Boolean(microdataRoot),

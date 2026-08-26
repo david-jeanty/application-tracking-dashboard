@@ -21,16 +21,15 @@ const LINKEDIN_JOB = "https://www.linkedin.com/jobs/view/4123456789/";
 const LINKEDIN_SEARCH =
   "https://www.linkedin.com/jobs/search/?currentJobId=4123456789&keywords=intern";
 /**
- * The route whose address names two postings and neither the pane.
+ * The route where the previous posting's markup outlives the transition.
  *
- * Live evidence: `currentJobId` was 4455239909 while every `JobDetails_*`
- * component inside Primary content ended `_4455304273`. The ids below keep that
- * relationship — A in the address, B on the pane — so a test cannot pass by
- * either parameter happening to be right.
+ * Live evidence: starting on a Microsoft posting and clicking a similar job
+ * left the address naming the newly selected job in `currentJobId` and the
+ * Microsoft one in `referenceJobId`, while Microsoft's DOM stayed in the page.
  */
-const SIMILAR_URL_JOB = "4455239909";
-const SIMILAR_PANE_JOB = "4455304273";
-const LINKEDIN_SIMILAR = `https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=${SIMILAR_URL_JOB}&referenceJobId=${SIMILAR_PANE_JOB}`;
+const SELECTED_JOB = "4451682967";
+const PREVIOUS_JOB = "4459178947";
+const LINKEDIN_SIMILAR = `https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=${SELECTED_JOB}&originToLandingJobPostings=${SELECTED_JOB}&referenceJobId=${PREVIOUS_JOB}`;
 const INDEED_JOB = "https://ca.indeed.com/viewjob?jk=a1b2c3d4e5f6a7b8";
 const WORKDAY_JOB =
   "https://kpmg.wd3.myworkdayjobs.com/en-US/External/job/Toronto/Senior-Consultant_12345";
@@ -88,25 +87,22 @@ describe("recognizing a site", () => {
     }
   });
 
-  it("passes the address's job only as context, not as the answer", () => {
+  it("carries the job the student selected, never the one they came from", () => {
     const rules = readRulesFor(LINKEDIN_SIMILAR);
 
     expect(rules.strategy).toBe("linkedin-similar-jobs");
-    expect(rules.jobId).toBe(SIMILAR_URL_JOB);
+    expect(rules.jobId).toBe(SELECTED_JOB);
   });
 
   /**
-   * The invariant this route cost a release to learn. Neither parameter names
-   * the pane, so with no pane to ask there is no honest URL to build.
+   * `currentJobId` is the parameter LinkedIn rewrites when the student picks a
+   * different posting, so it names the job they selected — on every route.
    */
-  it("builds no LinkedIn URL from a parameter on the Similar Jobs route", () => {
-    expect(canonicalPostingUrl(LINKEDIN_SIMILAR)).toBeUndefined();
-  });
-
-  it("builds the URL from the pane's own identity when it states one", () => {
-    expect(canonicalPostingUrl(LINKEDIN_SIMILAR, SIMILAR_PANE_JOB)).toBe(
-      `https://www.linkedin.com/jobs/view/${SIMILAR_PANE_JOB}/`,
+  it("files a Similar Jobs capture under currentJobId", () => {
+    expect(canonicalPostingUrl(LINKEDIN_SIMILAR)).toBe(
+      `https://www.linkedin.com/jobs/view/${SELECTED_JOB}/`,
     );
+    expect(canonicalPostingUrl(LINKEDIN_SIMILAR)).not.toContain(PREVIOUS_JOB);
   });
 });
 
@@ -406,87 +402,143 @@ describe("LinkedIn", () => {
 });
 
 /**
- * LinkedIn's Similar Jobs route, where the address does not name the pane.
+ * LinkedIn's Similar Jobs route, where the previous posting's markup lingers.
  *
- * Two corrections were needed here. The first assumed `currentJobId` named the
- * posting on screen; live Chrome then showed a page whose address said
- * `currentJobId=4455239909` while every `JobDetails_*` component inside
- * `section[aria-label="Primary content"]` ended `_4455304273`, and whose
- * company label named that posting's employer. Nothing carrying the address's
- * id was rendered outside a result card at all.
+ * The failure, as it happened: a student captured a Microsoft posting from
+ * `/jobs/view/4459178947/` correctly, clicked a similar job, and watched the
+ * screen change to a different employer — while Capture went on returning
+ * Microsoft. The address had moved to `currentJobId=4451682967`, but Microsoft's
+ * rendered-once DOM was still in the document, and the read took the first
+ * labelled company it found.
  *
- * Assuming `referenceJobId` instead would be the same mistake with a different
- * parameter, so neither decides: the pane states its own identity in its
- * component ids, and the fields and the stored URL both come from it. The
- * fixtures below keep the ids crossed — A in the address, B on the pane — so no
- * test can pass because a parameter happened to be right.
+ * Two earlier theories died here and the fixtures below keep both dead. Naming
+ * the stale job in `referenceJobId` does not make it avoidable by parameter —
+ * that only says which posting the student came from. And `JobDetails_*_<id>`
+ * component ids are no better: they go stale across the same transition, which
+ * is why the stale block below carries a perfectly well-formed set of them.
+ *
+ * What separates the two postings is that only one is drawn. jsdom lays nothing
+ * out, so these tests stub `getBoundingClientRect` to model a laid-out page —
+ * narrowly, here, rather than by weakening the production check. Anything
+ * inside `data-stale="true"` measures zero, exactly as the departed posting
+ * does in Chrome.
  */
 describe("LinkedIn Similar Jobs", () => {
-  /** The pane, naming itself the way the live page does. */
-  const primaryContent = (
-    jobId: string,
-    options: { components?: number; company?: string } = {},
-  ) => {
-    const company = options.company ?? "Halden Wholesale Foods";
-    const components = options.components ?? 3;
-    const extra = [
-      `<div id="JobDetails_ManageJobBanner_${jobId}"></div>`,
-      `<div id="JobDetailsPeopleWhoCanHelpSlot_${jobId}"></div>`,
-      `<div id="JobDetails_PremiumCompanyInsights_${jobId}"></div>`,
-    ]
-      .slice(0, Math.max(0, components - 1))
-      .join("");
+  /** Lays the page out: drawn by default, zero-sized inside a stale subtree. */
+  function withRenderedGeometry<T>(run: () => T): T {
+    const original = Element.prototype.getBoundingClientRect;
 
-    return `
-      <section aria-label="Primary content">
-        ${extra}
-        <div class="_c753af09">
-          <div data-display-contents="true">
-            <p class="_0508a270">Business Development Representative - Ottawa Region</p>
-          </div>
-          <ul><li>
-            <div class="_72963fa6" aria-label="Company, ${company}.">
-              <a href="/company/halden-wholesale">${company}</a>
-            </div>
-          </li></ul>
-          <div data-display-contents="true">
-            <p><span>Ottawa, ON</span><span> · 2 days ago · 12 applicants</span></p>
-          </div>
-          <button>Easy Apply</button>
-        </div>
-        <div id="JobDetails_AboutTheJob_${jobId}">
-          <h2>About the job</h2>
-          <span data-testid="expandable-text-box">
-            <p>Grow the Ottawa wholesale accounts.</p><ul><li>Cold calling</li></ul>
-          </span>
-        </div>
-        <div id="JobDetailsSimilarJobsSlot_${jobId}">
-          <h2>More jobs</h2>
-          <ul>
-            <li id="JobDetails_SimilarJobCard_${SIMILAR_URL_JOB}"
-                aria-label="Company, Southgate Robotics.">
-              <div data-display-contents="true"><p>Warehouse Coordinator</p></div>
-              <p><span>Mississauga, ON</span></p>
-              <a href="/jobs/view/${SIMILAR_URL_JOB}/">Warehouse Coordinator</a>
-            </li>
-          </ul>
-        </div>
-      </section>`;
-  };
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const drawn = !this.closest('[data-stale="true"]');
+      const width = drawn ? 640 : 0;
+      const height = drawn ? 32 : 0;
 
-  /** The posting the browsing began at, still in the document outside the pane. */
-  const strayReferenceMarkup = `
-    <div class="_stale11">
-      <div data-display-contents="true"><p>Operations Program Enablement Student</p></div>
-      <div class="_stale22" aria-label="Company, Bird Construction.">
-        <a href="/company/bird-construction">Bird Construction</a>
+      return {
+        width,
+        height,
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: width,
+        bottom: height,
+        toJSON: () => ({}),
+      } as DOMRect;
+    };
+
+    try {
+      return run();
+    } finally {
+      Element.prototype.getBoundingClientRect = original;
+    }
+  }
+
+  /**
+   * One posting's detail surface, as the live route builds it.
+   *
+   * `stale` only changes whether it is drawn — the markup, the component ids
+   * and the labels are identical either way, because in Chrome they are.
+   */
+  const detailSurface = ({
+    jobId,
+    company,
+    title,
+    location,
+    description,
+    stale = false,
+  }: {
+    jobId: string;
+    company: string;
+    title: string;
+    location: string;
+    description: string;
+    stale?: boolean;
+  }) => `
+    <div class="_c753af09"${stale ? ' data-stale="true"' : ""}>
+      <div id="JobDetails_ManageJobBanner_${jobId}"></div>
+      <div id="JobDetailsPeopleWhoCanHelpSlot_${jobId}"></div>
+      <div class="_a11f22e3">
+        <div data-display-contents="true"><p class="_0508a270">${title}</p></div>
+        <ul><li>
+          <div class="_72963fa6" aria-label="Company, ${company}.">
+            <a href="/company/${company.toLowerCase().replace(/\s+/g, "-")}">${company}</a>
+          </div>
+        </li></ul>
+        <div data-display-contents="true">
+          <p><span>${location}</span><span> · 2 days ago · 12 applicants</span></p>
+        </div>
+        <button>Easy Apply</button>
       </div>
-      <div data-display-contents="true"><p><span>Calgary, AB</span></p></div>
-      <h2>About the job</h2>
-      <span data-testid="expandable-text-box">Support the operations programs team.</span>
+      <div id="JobDetails_AboutTheJob_${jobId}">
+        <h2>About the job</h2>
+        <span data-testid="expandable-text-box"><p>${description}</p></span>
+      </div>
     </div>`;
 
-  /** Everything else LinkedIn puts on the page. */
+  const microsoft = (stale: boolean) =>
+    detailSurface({
+      jobId: PREVIOUS_JOB,
+      company: "Microsoft",
+      title: "Software Engineering Intern",
+      location: "Redmond, WA",
+      description: "Build platform tooling with the Azure team.",
+      stale,
+    });
+
+  const acadium = (stale = false) =>
+    detailSurface({
+      jobId: SELECTED_JOB,
+      company: "Acadium",
+      title: "Multimedia Marketing Intern",
+      location: "Canada",
+      description: "Produce short-form video for the growth team.",
+      stale,
+    });
+
+  /** A third posting, for the second hop. */
+  const northwind = (stale = false) =>
+    detailSurface({
+      jobId: "4460000001",
+      company: "Northwind Photonics",
+      title: "Optics Test Technician",
+      location: "Boise, ID",
+      description: "Run bench measurements on prototype assemblies.",
+      stale,
+    });
+
+  /** The rail the student picks the next posting out of. */
+  const moreJobs = `
+    <div id="JobDetailsSimilarJobsSlot_${PREVIOUS_JOB}">
+      <h2>More jobs</h2>
+      <ul>
+        <li aria-label="Company, Southgate Robotics.">
+          <div data-display-contents="true"><p>Warehouse Coordinator</p></div>
+          <p><span>Mississauga, ON</span></p>
+          <a href="/jobs/view/4470000002/">Warehouse Coordinator</a>
+        </li>
+      </ul>
+    </div>`;
+
   const distractors = `
     <section>
       <h2>Hiring insights</h2>
@@ -495,132 +547,132 @@ describe("LinkedIn Similar Jobs", () => {
     <div data-display-contents="true"><p>Use AI to assess how you fit</p></div>`;
 
   const page = (...parts: string[]) =>
-    `<body><main><h1>Jobs</h1>${parts.join("")}</main></body>`;
+    `<body><main><h1>Jobs</h1>
+       <section aria-label="Primary content">${parts.join("")}</section>
+     </main></body>`;
 
   const capture = (html: string, url = LINKEDIN_SIMILAR) =>
-    extractJob(readSitePage(html, url));
+    withRenderedGeometry(() => extractJob(readSitePage(html, url)));
 
-  it("reads the posting the pane says it is showing", () => {
-    const job = capture(
-      page(strayReferenceMarkup, primaryContent(SIMILAR_PANE_JOB), distractors),
-    );
+  /** The reported failure, end to end. */
+  it("reads the posting on screen after a similar-job click", () => {
+    const job = capture(page(microsoft(true), acadium(), moreJobs, distractors));
 
-    expect(job.company).toBe("Halden Wholesale Foods");
-    expect(job.jobTitle).toBe(
-      "Business Development Representative - Ottawa Region",
-    );
-    expect(job.location).toBe("Ottawa, ON");
+    expect(job.company).toBe("Acadium");
+    expect(job.jobTitle).toBe("Multimedia Marketing Intern");
+    expect(job.location).toBe("Canada");
     expect(job.jobDescription).toBe(
-      "Grow the Ottawa wholesale accounts.\nCold calling",
+      "Produce short-form video for the growth team.",
     );
   });
 
-  /**
-   * The invariant. The address says one posting, the pane says another, and the
-   * fields came from the pane — so the record must be filed under the pane's.
-   */
-  it("files the record under the pane's posting, not the address's", () => {
-    const job = capture(
-      page(strayReferenceMarkup, primaryContent(SIMILAR_PANE_JOB), distractors),
-    );
+  it("lets no part of the departed posting reach the record", () => {
+    const job = capture(page(microsoft(true), acadium(), moreJobs, distractors));
 
-    expect(job.jobUrl).toBe(
-      `https://www.linkedin.com/jobs/view/${SIMILAR_PANE_JOB}/`,
-    );
-    expect(job.jobUrl).not.toContain(SIMILAR_URL_JOB);
-  });
-
-  it("never lets markup outside the pane reach the record", () => {
-    const job = capture(
-      page(strayReferenceMarkup, primaryContent(SIMILAR_PANE_JOB), distractors),
-    );
-
-    expect(JSON.stringify(job)).not.toContain("Bird Construction");
-    expect(JSON.stringify(job)).not.toContain("Calgary");
-    expect(JSON.stringify(job)).not.toContain("Operations Program Enablement");
+    expect(JSON.stringify(job)).not.toContain("Microsoft");
+    expect(JSON.stringify(job)).not.toContain("Redmond");
+    expect(JSON.stringify(job)).not.toContain("Software Engineering Intern");
+    expect(job.jobDescription).not.toContain("Azure");
     expect(job.jobDescription).not.toContain("Unlock hiring insights");
   });
 
-  it("takes nothing from the More jobs rail inside the pane", () => {
-    const job = capture(page(primaryContent(SIMILAR_PANE_JOB)));
+  it("files the record under the job the student selected", () => {
+    const job = capture(page(microsoft(true), acadium(), moreJobs, distractors));
+
+    expect(job.jobUrl).toBe(
+      `https://www.linkedin.com/jobs/view/${SELECTED_JOB}/`,
+    );
+    expect(job.jobUrl).not.toContain(PREVIOUS_JOB);
+    expect(job.source).toBe("LinkedIn");
+  });
+
+  /**
+   * The stale surface keeps a complete, well-formed set of `JobDetails_*` ids.
+   * If those ever decide anything again, this fails.
+   */
+  it("ignores the component ids the departed posting still carries", () => {
+    const job = capture(page(microsoft(true), acadium(), moreJobs));
+
+    expect(job.company).toBe("Acadium");
+    expect(JSON.stringify(job)).not.toContain(PREVIOUS_JOB);
+  });
+
+  /** A second hop: two postings have now departed and a third is on screen. */
+  it("follows a second similar-job click past two stale surfaces", () => {
+    const url = `https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4460000001&referenceJobId=${SELECTED_JOB}`;
+    const job = capture(
+      page(microsoft(true), acadium(true), northwind(), moreJobs, distractors),
+      url,
+    );
+
+    expect(job.company).toBe("Northwind Photonics");
+    expect(job.jobTitle).toBe("Optics Test Technician");
+    expect(job.location).toBe("Boise, ID");
+    expect(job.jobDescription).toBe(
+      "Run bench measurements on prototype assemblies.",
+    );
+    expect(job.jobUrl).toBe(
+      "https://www.linkedin.com/jobs/view/4460000001/",
+    );
+    expect(JSON.stringify(job)).not.toContain("Microsoft");
+    expect(JSON.stringify(job)).not.toContain("Acadium");
+  });
+
+  it("takes nothing from the More jobs rail", () => {
+    const job = capture(page(microsoft(true), acadium(), moreJobs));
 
     expect(job.company).not.toBe("Southgate Robotics");
     expect(job.jobTitle).not.toBe("Warehouse Coordinator");
     expect(job.location).not.toBe("Mississauga, ON");
-    // The rail card names the address's job; it still does not become identity.
-    expect(job.jobUrl).toBe(
-      `https://www.linkedin.com/jobs/view/${SIMILAR_PANE_JOB}/`,
-    );
   });
 
   /**
    * The employer sits inside a list item on this route. A blanket "anything in
-   * an `li` is a search result" test would have thrown it away — which is why
-   * the rail is identified structurally instead.
+   * an `li` is a search result" test would discard the field being looked for,
+   * which is why the rail is identified structurally instead.
    */
-  it("reads a company the pane happens to render inside a list", () => {
-    expect(capture(page(primaryContent(SIMILAR_PANE_JOB))).company).toBe(
-      "Halden Wholesale Foods",
-    );
+  it("reads a company the detail header renders inside a list", () => {
+    expect(capture(page(acadium(), moreJobs)).company).toBe("Acadium");
   });
 
-  describe("identity has to agree with itself", () => {
-    it("accepts an id several components state together", () => {
-      const job = capture(page(primaryContent(SIMILAR_PANE_JOB)));
+  it("stores nothing when two employers are drawn at once", () => {
+    const job = capture(page(microsoft(false), acadium(), moreJobs));
 
-      expect(job.jobUrl).toBe(
-        `https://www.linkedin.com/jobs/view/${SIMILAR_PANE_JOB}/`,
-      );
-      expect(job.company).toBe("Halden Wholesale Foods");
-    });
+    expect(job.company).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
+    expect(job.location).toBeUndefined();
+    expect(job.jobDescription).toBeUndefined();
+    expect(job.warnings).toContain("no_job_posting_found");
+  });
 
-    it("refuses a single uncorroborated component id", () => {
-      const job = capture(
-        page(primaryContent(SIMILAR_PANE_JOB, { components: 1 })),
-      );
+  it("stores nothing when nothing is drawn at all", () => {
+    const job = capture(page(microsoft(true), acadium(true), moreJobs));
 
-      expect(job.company).toBeUndefined();
-      expect(job.jobTitle).toBeUndefined();
-      expect(job.location).toBeUndefined();
-      expect(job.jobDescription).toBeUndefined();
-    });
+    expect(job.company).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
+    expect(JSON.stringify(job)).not.toContain("Microsoft");
+  });
 
-    it("refuses a pane whose components name different postings", () => {
-      const html = page(
-        primaryContent(SIMILAR_PANE_JOB).replace(
-          `id="JobDetails_ManageJobBanner_${SIMILAR_PANE_JOB}"`,
-          'id="JobDetails_ManageJobBanner_9999999999"',
-        ),
-      );
+  it("stores nothing when the page has no Primary content region", () => {
+    const job = capture(
+      `<body><main>${acadium()}${distractors}</main></body>`,
+    );
 
-      const job = capture(html);
+    expect(job.company).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
+    expect(job.warnings).toContain("no_job_posting_found");
+  });
 
-      expect(job.company).toBeUndefined();
-      expect(job.jobTitle).toBeUndefined();
-      expect(JSON.stringify(job)).not.toContain("9999999999");
-    });
+  /**
+   * Even with no fields, the address still knows which posting the student
+   * chose — so the URL stays right rather than becoming a second failure.
+   */
+  it("still files an empty capture under the selected job", () => {
+    const job = capture(page(microsoft(true), acadium(true), moreJobs));
 
-    it("refuses a page with no Primary content region at all", () => {
-      const job = capture(page(strayReferenceMarkup, distractors));
-
-      expect(job.company).toBeUndefined();
-      expect(job.jobTitle).toBeUndefined();
-      expect(job.warnings).toContain("no_job_posting_found");
-    });
-
-    /**
-     * Unresolved identity means no fields *and* no URL built from a parameter.
-     * A record filed under one posting while describing another is the failure
-     * this whole route exists to prevent, and half of it is just as wrong.
-     */
-    it("builds no contradictory URL when identity does not resolve", () => {
-      const job = capture(page(strayReferenceMarkup, distractors));
-
-      expect(job.jobUrl).not.toContain(
-        `/jobs/view/${SIMILAR_URL_JOB}`,
-      );
-      expect(job.jobUrl).not.toContain(`/jobs/view/${SIMILAR_PANE_JOB}`);
-    });
+    expect(job.jobUrl).toBe(
+      `https://www.linkedin.com/jobs/view/${SELECTED_JOB}/`,
+    );
   });
 });
 

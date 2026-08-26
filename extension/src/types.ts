@@ -39,14 +39,6 @@ export type PageSignals = {
    */
   siteFields?: Record<string, string>;
   /**
-   * Which posting the detail region the fields came from says it is.
-   *
-   * Set only where a site states it structurally, and only alongside the fields
-   * read from that same region. It exists so the stored URL and the stored
-   * fields can be guaranteed to describe one posting rather than two.
-   */
-  siteJobId?: string;
-  /**
    * Structural facts used to decide whether a page is a posting at all.
    *
    * The generic fallback needs corroboration before it will call a heading a
