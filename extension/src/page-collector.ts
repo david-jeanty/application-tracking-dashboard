@@ -506,27 +506,57 @@ export function collectPageSignals(
       if (!title) return;
       siteFields["title"] = clamp(title, MAXIMUM_FIELD_CHARACTERS);
 
-      // The selected card presents title, company, then location. Restricting
-      // the walk to spans in the exact posting link means no neighbouring card
-      // or global iframe text can fill a field.
-      const metadata = Array.from(
-        exactPostingLink.querySelectorAll("span"),
-      )
-        .filter((candidate) => !candidate.querySelector("span, strong"))
-        .map((candidate) => trimmedText(candidate))
-        .filter(
-          (value) =>
-            value &&
-            value.length <= MAXIMUM_LOCATION_CHARACTERS &&
-            !value.includes("\n") &&
-            value !== title,
-        );
+      /** The card's sibling blocks: title wrapper, company, then location. */
+      function nextElementSibling(node: Element): Element | null {
+        return node.nextElementSibling;
+      }
 
-      const [company, rawLocation] = metadata;
-      if (company) {
+      let titleWrapper: Element | null = exactPostingLink.parentElement;
+      let companyBlock: Element | null = null;
+      let locationBlock: Element | null = null;
+
+      // The link is nested inside its title wrapper. The first ancestor with
+      // two sibling blocks is the metadata block's title child; only those
+      // siblings may provide employer and location.
+      for (
+        let depth = 0;
+        titleWrapper && depth < MAXIMUM_ANCESTOR_DEPTH;
+        depth += 1
+      ) {
+        const company = nextElementSibling(titleWrapper);
+        const location = company ? nextElementSibling(company) : null;
+        if (company && location) {
+          companyBlock = company;
+          locationBlock = location;
+          break;
+        }
+        if (titleWrapper === root) break;
+        titleWrapper = titleWrapper.parentElement;
+      }
+
+      const companyElement = companyBlock
+        ? Array.from(companyBlock.children).find(
+            (child) => child.tagName === "SPAN",
+          )
+        : undefined;
+      const company = trimmedText(companyElement ?? null);
+      if (
+        company &&
+        company !== title &&
+        !/\bwith verification\b/i.test(company)
+      ) {
         siteFields["company"] = clamp(company, MAXIMUM_FIELD_CHARACTERS);
       }
-      if (rawLocation) {
+
+      const locationList = locationBlock
+        ? Array.from(locationBlock.children).find(
+            (child) => child.tagName === "UL",
+          )
+        : undefined;
+      const rawLocation = locationList
+        ? trimmedText(locationList.querySelector("li > span"))
+        : "";
+      if (rawLocation && rawLocation.length <= MAXIMUM_LOCATION_CHARACTERS) {
         const location = rawLocation
           .replace(/\s+\((?:on-site|hybrid|remote)\)\s*$/i, "")
           .trim();

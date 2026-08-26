@@ -17,6 +17,22 @@ function read(html: string) {
   return collectPageSignals();
 }
 
+function preloadCard(
+  jobId: string,
+  title: string,
+  company: string,
+  location: string,
+  duplicateTitle = title,
+) {
+  return `<article data-job-id="${jobId}">
+    <div>
+      <div><div><div><div><a href="/jobs/view/${jobId}/" aria-label="${title} with verification"><span>${title}</span><span>${duplicateTitle}</span></a></div></div></div></div>
+      <div><span>${company}</span></div>
+      <div><ul><li><span>${location}</span></li></ul></div>
+    </div>
+  </article>`;
+}
+
 describe("the injected collector", () => {
   it("takes structured data, the canonical link, and standard metadata", () => {
     const signals = read(
@@ -238,15 +254,8 @@ describe("the injected collector", () => {
   /** The selected `/preload/` card has no Primary-content landmark. */
   it("reads the selected GE preload card without leaking a neighbouring job", () => {
     document.documentElement.innerHTML = `<head></head><body>
-      <article data-job-id="4000000000"><a href="/jobs/view/4000000000/"><span>Wrong title</span><span>Wrong Co</span><span>Elsewhere, ON (Remote)</span></a></article>
-      <article data-job-id="4459003223">
-        <a href="/jobs/view/4459003223/?alternateChannel=search" aria-label="GE Vernova Controls Product Management Intern - Summer 2027 with verification">
-          <span>GE Vernova Controls Product Management Intern - Summer 2027<strong>GE Vernova Controls Product Management Intern - Summer 2027</strong></span>
-          <span>GE Vernova</span>
-          <span>Greenville, SC (On-site)</span>
-          <span>Alumni at GE</span>
-        </a>
-      </article>
+      ${preloadCard("4000000000", "Wrong title", "Wrong Co", "Elsewhere, ON (Remote)")}
+      ${preloadCard("4459003223", "GE Vernova Controls Product Management Intern - Summer 2027", "GE Vernova", "Greenville, SC (On-site)", "GE Vernova Controls Product Management Intern - Summer 2027 with verification")}
       <section id="job-details"><h2> About the job </h2><p>GE description</p></section>
       <article>Arbitrary iframe text must not become a description.</article>
     </body>`;
@@ -269,14 +278,8 @@ describe("the injected collector", () => {
 
   it("reads the selected IBM preload card and fails blank without job details", () => {
     document.documentElement.innerHTML = `<head></head><body>
-      <article data-job-id="4446257399">
-        <a href="/jobs/view/4446257399/" aria-label="Senior Managing Consultant SAP HANA SD OTC with verification">
-          <span>Senior Managing Consultant SAP HANA SD OTC<strong>Senior Managing Consultant SAP HANA SD OTC</strong></span>
-          <span>IBM</span>
-          <span>Vancouver, BC (Hybrid)</span>
-        </a>
-      </article>
-      <div data-occludable-job-id="4470000002"><a href="/jobs/view/4470000002/"><span>Wrong company</span></a></div>
+      ${preloadCard("4446257399", "Senior Managing Consultant SAP HANA SD OTC", "IBM", "Vancouver, BC (Hybrid)", "Senior Managing Consultant SAP HANA SD OTC with verification")}
+      ${preloadCard("4470000002", "Wrong title", "Wrong company", "Elsewhere, ON (Remote)")}
       <div>Arbitrary iframe description</div>
     </body>`;
 
@@ -292,6 +295,57 @@ describe("the injected collector", () => {
       location: "Vancouver, BC",
     });
     expect(JSON.stringify(signals)).not.toContain("Arbitrary iframe description");
+  });
+
+  it("takes KPMG's employer and location from title-wrapper siblings", () => {
+    document.documentElement.innerHTML = `<head></head><body>
+      ${preloadCard("4454844474", "QC - Intern Strategy & Economy - 2027", "KPMG Canada", "Montreal, QC (On-site)", "QC - Intern Strategy & Economy - 2027 with verification")}
+      ${preloadCard("4000000000", "Neighbouring title", "Neighbouring employer", "Toronto, ON (Hybrid)")}
+    </body>`;
+
+    const signals = collectPageSignals(
+      readRulesFor(
+        "https://www.linkedin.com/jobs/search/?currentJobId=4454844474",
+      ),
+    );
+
+    expect(signals.siteFields).toEqual({
+      title: "QC - Intern Strategy & Economy - 2027",
+      company: "KPMG Canada",
+      location: "Montreal, QC",
+    });
+  });
+
+  it("takes Mitsubishi's employer rather than its duplicate title", () => {
+    document.documentElement.innerHTML = `<head></head><body>
+      ${preloadCard("4459045200", "Project Management Internship", "Mitsubishi Power Americas", "Orlando, FL (On-site)")}
+    </body>`;
+
+    const signals = collectPageSignals(
+      readRulesFor(
+        "https://www.linkedin.com/jobs/search/?currentJobId=4459045200",
+      ),
+    );
+
+    expect(signals.siteFields).toEqual({
+      title: "Project Management Internship",
+      company: "Mitsubishi Power Americas",
+      location: "Orlando, FL",
+    });
+  });
+
+  it("preserves legitimate location parentheses before a terminal work mode", () => {
+    document.documentElement.innerHTML = `<head></head><body>
+      ${preloadCard("4459045201", "Analyst Intern", "Northwind", "St. John's (NL) (Remote)")}
+    </body>`;
+
+    expect(
+      collectPageSignals(
+        readRulesFor(
+          "https://www.linkedin.com/jobs/search/?currentJobId=4459045201",
+        ),
+      ).siteFields?.["location"],
+    ).toBe("St. John's (NL)");
   });
 
   it("does not use a wrong preload marker when no selected root exists", () => {
