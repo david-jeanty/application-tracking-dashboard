@@ -49,16 +49,30 @@ export type SiteFieldKey = "title" | "company" | "location" | "description";
 /**
  * A relational read the collector performs, for a site no selector list fits.
  *
- * There is one, and it is named rather than described, because the alternative
- * — a data language for "walk up from this anchor until…" — would be a scraping
- * engine, and a scraping engine is the thing this extension is not.
+ * They are named rather than described, because the alternative — a data
+ * language for "walk up from this anchor until…" — would be a scraping engine,
+ * and a scraping engine is the thing this extension is not.
+ *
+ * There are two, and they are both LinkedIn's, because LinkedIn's routes differ
+ * in a way that matters. On a job page and in search results, the labelled
+ * company belongs to the posting on screen. On the Similar Jobs route it does
+ * not: the page keeps the anchors of the job the student came *from*, and
+ * reading the first one files the wrong posting.
  */
-export type SiteStrategy = "linkedin-job-detail";
+export type SiteStrategy = "linkedin-job-detail" | "linkedin-similar-jobs";
 
 /** What the collector should do on this page: selectors, a strategy, or both. */
 export type PageReadRules = {
   fields: readonly FieldRule[];
   strategy?: SiteStrategy;
+  /**
+   * The posting the address says the student selected.
+   *
+   * Identity, not a field. A strategy may use it to recognize which part of the
+   * page belongs to the selected job; nothing is ever stored from it except
+   * through `canonicalPostingUrl`.
+   */
+  jobId?: string;
 };
 
 type SiteRule = {
@@ -67,7 +81,57 @@ type SiteRule = {
   hosts: string[];
   fields: FieldRule[];
   strategy?: SiteStrategy;
+  /** For a site whose routes need different reads, which one this address is. */
+  route?: (url: URL) => { strategy: SiteStrategy; jobId?: string };
 };
+
+/** A job identifier: digits, or the short alphanumerics Indeed hands out. */
+function jobIdentifier(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+
+  return trimmed && /^[A-Za-z0-9_-]{1,64}$/.test(trimmed) ? trimmed : undefined;
+}
+
+/** The posting a LinkedIn address says is selected, on any of its routes. */
+function selectedLinkedInJob(url: URL): string | undefined {
+  return (
+    jobIdentifier(url.searchParams.get("currentJobId")) ??
+    jobIdentifier(/\/jobs\/view\/([A-Za-z0-9_-]+)/.exec(url.pathname)?.[1])
+  );
+}
+
+/**
+ * Which LinkedIn read this address needs.
+ *
+ * The Similar Jobs route is the one that differs, and the address says so
+ * itself: it carries `referenceJobId` alongside `currentJobId`, naming both the
+ * posting the student selected and the one their browsing began at. Real-Chrome
+ * testing found the page keeping the reference job's rendered-once markup —
+ * including a perfectly valid `aria-label="Company, …"` for it — while showing
+ * the selected job, so the ordinary read returned the wrong posting entirely.
+ *
+ * `referenceJobId` is the marker rather than the path, because the parameter is
+ * what indicates two postings are in play. `currentJobId` is authoritative
+ * about which one the student chose, and `referenceJobId` is never treated as
+ * posting identity anywhere.
+ */
+function linkedInRoute(url: URL): { strategy: SiteStrategy; jobId?: string } {
+  const jobId = selectedLinkedInJob(url);
+  const carriesAReference = Boolean(
+    jobIdentifier(url.searchParams.get("referenceJobId")),
+  );
+  const isSimilarJobsPath = /^\/jobs\/collections\/similar-jobs\b/.test(
+    url.pathname,
+  );
+
+  return {
+    strategy:
+      carriesAReference || isSimilarJobsPath
+        ? "linkedin-similar-jobs"
+        : "linkedin-job-detail",
+    ...(jobId ? { jobId } : {}),
+  };
+}
 
 const SITE_RULES: readonly SiteRule[] = [
   {
@@ -80,6 +144,7 @@ const SITE_RULES: readonly SiteRule[] = [
     // which the extractor reads before it ever reaches this file.
     fields: [],
     strategy: "linkedin-job-detail",
+    route: linkedInRoute,
   },
   {
     id: "indeed",
@@ -188,9 +253,22 @@ export function readRulesFor(url: string): PageReadRules {
   const rule = ruleFor(url);
   if (!rule) return { fields: [] };
 
+  let routed: { strategy: SiteStrategy; jobId?: string } | undefined;
+  if (rule.route) {
+    try {
+      routed = rule.route(new URL(url));
+    } catch {
+      // An address that will not parse gets the site's default read.
+      routed = undefined;
+    }
+  }
+
+  const strategy = routed?.strategy ?? rule.strategy;
+
   return {
     fields: rule.fields,
-    ...(rule.strategy ? { strategy: rule.strategy } : {}),
+    ...(strategy ? { strategy } : {}),
+    ...(routed?.jobId ? { jobId: routed.jobId } : {}),
   };
 }
 
@@ -198,13 +276,6 @@ export function readRulesFor(url: string): PageReadRules {
 export const RECOGNIZED_SITES: readonly SiteId[] = SITE_RULES.map(
   (rule) => rule.id,
 );
-
-/** A job identifier: digits, or the short alphanumerics Indeed hands out. */
-function jobIdentifier(value: string | null | undefined): string | undefined {
-  const trimmed = value?.trim();
-
-  return trimmed && /^[A-Za-z0-9_-]{1,64}$/.test(trimmed) ? trimmed : undefined;
-}
 
 /**
  * The address a recognized posting should be filed under.
@@ -231,12 +302,12 @@ export function canonicalPostingUrl(pageUrl: string): string | undefined {
   }
 
   if (site === "linkedin") {
-    const selected = jobIdentifier(parsed.searchParams.get("currentJobId"));
-    if (selected) return `${parsed.origin}/jobs/view/${selected}/`;
+    // `currentJobId` only, on every route. On Similar Jobs the address also
+    // carries `referenceJobId` — the posting the student came from — and
+    // filing the record under that would name a job they did not select.
+    const selected = selectedLinkedInJob(parsed);
 
-    const path = /\/jobs\/view\/([A-Za-z0-9_-]+)/.exec(parsed.pathname)?.[1];
-
-    return path ? `${parsed.origin}/jobs/view/${path}/` : undefined;
+    return selected ? `${parsed.origin}/jobs/view/${selected}/` : undefined;
   }
 
   if (site === "indeed") {

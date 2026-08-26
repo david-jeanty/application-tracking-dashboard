@@ -185,7 +185,8 @@ extension/
     extractor.ts         structured data, then a recognized site, then a
                          corroborated title; json-ld.ts, html-text.ts,
                          source.ts and sites.ts are its parts
-    sites.ts             the only file naming LinkedIn, Indeed or Workday
+    sites.ts             the only file naming LinkedIn, Indeed or Workday, and
+                         the only place a LinkedIn route is told apart
     auth.ts pkce.ts      Authorization Code + PKCE
     tokens.ts            credential storage and token-response validation
     capture.ts           the POST to /api/browser-capture
@@ -273,10 +274,11 @@ exist; site rules extract facts from a page and stop there.
    property paths. Employer careers sites publish microdata far more often than
    job boards do, and reading it costs no site knowledge.
 2. **A recognized site.** `extension/src/sites.ts` names LinkedIn, Indeed and
-   Workday, and nothing else. It holds a table of selectors, one named
-   relational strategy, and a little URL arithmetic. The injected collector
-   receives the rules for the current address as an argument, so it never
-   decides which site it is on and every site is described in exactly one file.
+   Workday, and nothing else. It holds a table of selectors, two named
+   relational strategies (both LinkedIn's), and a little URL arithmetic. The
+   injected collector receives the rules for the current address as an argument,
+   so it never decides which site — or which route — it is on, and every site is
+   described in exactly one file.
 3. **The page's own headings**, but only on an unrecognized site, and only with
    corroboration (below).
 
@@ -334,6 +336,35 @@ or nesting depth. A site that cannot be read reliably returns blanks.
   and reads whatever is selected at that moment. No observer, no background
   listener, nothing watching navigation. Source is `LinkedIn`, which the
   hostname settles.
+
+  **Similar Jobs is a different read, because the labelled company lies there.**
+  On `/jobs/collections/similar-jobs/?currentJobId=…&referenceJobId=…` the page
+  shows the posting the student selected while keeping the markup of the posting
+  they arrived from — including a perfectly valid `aria-label="Company, …"` for
+  that earlier job. Real-Chrome testing found the ordinary read filing a
+  different employer, a different title and a different city than the screen was
+  showing. Nothing about that is a selector mistake: the semantic anchor is
+  real, it is simply the wrong posting's, and no selector distinguishes them.
+
+  What does distinguish them is that the stale markup is not drawn. So the
+  Similar Jobs read trusts only rendered elements — non-zero geometry, not
+  `hidden`, not `aria-hidden`, not `display: none` or `visibility: hidden` —
+  and resolves the pane in the order the evidence supports: first an element
+  carrying the selected `currentJobId`, then the visible "About the job" region
+  of the posting on screen. Rendered is not the same as scrolled into view; a
+  student reading the bottom of a long posting still has that posting's header
+  above the viewport, so intersection is deliberately not part of the test.
+
+  Within the resolved pane the employer comes from its own label, or failing
+  that from a link to the employer's LinkedIn company page — a URL shape rather
+  than a class, scoped so it can only name the employer on screen. If neither a
+  job-id element nor a visible About-the-job region resolves a pane, every field
+  stays blank. A blank popup the student types into is a far better outcome than
+  silently filing the job they navigated away from.
+
+  `referenceJobId` is never posting identity. The address is routed on its
+  presence, and the stored URL is built from `currentJobId` on every LinkedIn
+  route, so a record can never combine one job's address with another's fields.
 - **Indeed.** Employer, title, location and description from Indeed's own test
   attributes and the stable description id. Source is `Indeed`.
 - **Workday.** Title, location and description from `data-automation-id`.
@@ -560,6 +591,12 @@ strategy is now built on, and is why LinkedIn is no longer a selector list at
 all. IBM's direct careers page fills a title but remains weak on company,
 location and description; that is separate evidence, not addressed here.
 
+A third pass verified the LinkedIn strategy on `/jobs/view/<id>` and on
+`/jobs/search-results/?currentJobId=<id>` — company, title, location and
+description all populate — and verified Indeed on every field. It also found the
+Similar Jobs route filing the wrong posting entirely, which is what the separate
+Similar Jobs read above exists for.
+
 Two different problems. The blanks were the design working: nothing was
 established, so nothing was claimed. The two wrong titles were the design
 failing — the generic fallback was willing to promote any first heading, and a
@@ -588,27 +625,37 @@ at CONNECT — so no live DOM was inspected while writing the selectors above.
   fixtures carrying the container, attribute and nesting each read path depends
   on. Structure is what a parser is proved by; no real posting is committed,
   because a real one would be somebody else's copyrighted text.
-- **Verified in real Chrome:** Workday fills title, location and description.
-- **Not verified:** that Indeed's `data-testid` selectors match what Indeed
-  serves today, and that LinkedIn's relational strategy resolves against the
-  live page. The LinkedIn strategy is built from DOM observed in real Chrome on
-  26 August 2026 — the company `aria-label`, the description `data-testid`, and
-  the unattributed title and location leaves — but the strategy written from
-  that evidence has not itself been run against LinkedIn. Every step fails safe:
-  a relationship that cannot be established yields a blank field, never a wrong
-  one.
+Verified in real Chrome, per surface:
+
+| Surface | Status |
+| --- | --- |
+| Indeed | Company, title, location, description, source and posting URL all correct. |
+| LinkedIn `/jobs/view/<id>` | Company, title, location and description all correct. |
+| LinkedIn `/jobs/search-results/?currentJobId=<id>` | Company, title, location and description all correct. |
+| LinkedIn Similar Jobs | Filed the **reference** posting instead of the selected one. Corrected by the separate read above; **not yet retested**. |
+| Workday | Title, location and description correct. **Employer is still blank** and remains incomplete — a separate task, not closed here. |
+| KPMG / L3Harris / IBM | Not retested since the salary and deadline corrections. |
+
+The Similar Jobs correction is built from DOM observed in real Chrome on
+26 August 2026 — the stale reference `aria-label`, the zero-geometry copies of
+the visible posting, the absence of any stable id on the header chain — but the
+read written from that evidence has not itself been run against LinkedIn. Every
+step fails safe: a relationship that cannot be established yields a blank field,
+never a wrong one.
 
 **Still required, in real Chrome, locally**
 
 1. Load the unpacked extension and connect it to a real JobTrack account.
-2. Open a public posting on each of LinkedIn (both `/jobs/view/` and a job
-   selected inside `/jobs/search/`), Indeed, a Workday tenant, and the KPMG,
-   IBM and L3Harris careers pages.
+2. Open a public posting on each of LinkedIn (`/jobs/view/`, a job selected
+   inside `/jobs/search-results/`, and a job selected from Similar Jobs),
+   Indeed, a Workday tenant, and the KPMG, IBM and L3Harris careers pages.
 3. Record, per site: which fields extracted correctly, which were absent, which
    were wrong, and whether the popup made the result usable anyway.
-4. Confirm specifically that the KPMG posting no longer stores a salary, that
-   its deadline is now absent rather than a day late, and that Indeed and
-   Workday store no title rather than a wrong one.
+4. Confirm specifically that a job selected from Similar Jobs stores that job
+   and not the one the browsing began at — scroll to More jobs, select a
+   different posting, and capture without reloading — that the KPMG posting no
+   longer stores a salary, and that its deadline is absent rather than a day
+   late.
 5. Record nothing else. Do not commit captured descriptions.
 
 A site that still extracts nothing is a finding for PR #29. A site that extracts

@@ -20,6 +20,9 @@ import { readSitePage } from "./fixtures.js";
 const LINKEDIN_JOB = "https://www.linkedin.com/jobs/view/4123456789/";
 const LINKEDIN_SEARCH =
   "https://www.linkedin.com/jobs/search/?currentJobId=4123456789&keywords=intern";
+/** The route that shows one posting while keeping the last one's markup. */
+const LINKEDIN_SIMILAR =
+  "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4457185005&referenceJobId=4449683666";
 const INDEED_JOB = "https://ca.indeed.com/viewjob?jk=a1b2c3d4e5f6a7b8";
 const WORKDAY_JOB =
   "https://kpmg.wd3.myworkdayjobs.com/en-US/External/job/Toronto/Senior-Consultant_12345";
@@ -50,6 +53,38 @@ describe("recognizing a site", () => {
     expect(readRulesFor(INDEED_JOB).strategy).toBeUndefined();
     expect(readRulesFor(WORKDAY_JOB).strategy).toBeUndefined();
     expect(readRulesFor(WORKDAY_JOB).fields.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * LinkedIn's routes do not all behave alike, and the address says which is
+   * which. Only the route that carries a reference job needs the stricter read.
+   */
+  it("keeps the verified LinkedIn routes on the read that works for them", () => {
+    for (const url of [
+      LINKEDIN_JOB,
+      LINKEDIN_SEARCH,
+      "https://www.linkedin.com/jobs/search-results/?currentJobId=4123456789",
+      "https://www.linkedin.com/jobs/collections/recommended/?currentJobId=4123456789",
+    ]) {
+      expect(readRulesFor(url).strategy).toBe("linkedin-job-detail");
+    }
+  });
+
+  it("routes a page carrying a reference job to the stricter read", () => {
+    for (const url of [
+      LINKEDIN_SIMILAR,
+      "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4457185005",
+      "https://www.linkedin.com/jobs/search-results/?currentJobId=4457185005&referenceJobId=4449683666",
+    ]) {
+      expect(readRulesFor(url).strategy).toBe("linkedin-similar-jobs");
+    }
+  });
+
+  it("passes the selected job's identity, never the reference job's", () => {
+    const rules = readRulesFor(LINKEDIN_SIMILAR);
+
+    expect(rules.jobId).toBe("4457185005");
+    expect(JSON.stringify(rules)).not.toContain("4449683666");
   });
 });
 
@@ -345,6 +380,245 @@ describe("LinkedIn", () => {
 
       expect(job.jobDescription).toBeUndefined();
     });
+  });
+});
+
+/**
+ * LinkedIn's Similar Jobs route, where the labelled company belongs to the job
+ * the student navigated away from.
+ *
+ * Real-Chrome testing found this filing an entirely different posting: the
+ * screen showed one employer, title and city, and the extension stored the
+ * previous one — because the page keeps the earlier posting's markup, including
+ * a perfectly valid `aria-label="Company, …"` for it. The anchor is real. It is
+ * simply the wrong job's, and no selector fixes that.
+ *
+ * What separates them is that the stale markup is not drawn. jsdom gives every
+ * element zero geometry, so these tests stub `getBoundingClientRect` to model a
+ * laid-out page — narrowly, here, rather than by weakening the production test.
+ * Anything inside `data-rendered="false"` reports zero size, exactly as the
+ * stale subtree does in Chrome.
+ */
+describe("LinkedIn Similar Jobs", () => {
+  /** Lays the page out: drawn by default, zero-sized inside a stale subtree. */
+  function withRenderedGeometry<T>(run: () => T): T {
+    const original = Element.prototype.getBoundingClientRect;
+
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      const drawn = !this.closest('[data-rendered="false"]');
+      const width = drawn ? 640 : 0;
+      const height = drawn ? 32 : 0;
+
+      return {
+        width,
+        height,
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: width,
+        bottom: height,
+        toJSON: () => ({}),
+      } as DOMRect;
+    };
+
+    try {
+      return run();
+    } finally {
+      Element.prototype.getBoundingClientRect = original;
+    }
+  }
+
+  /** The posting the student came from, still in the document, undrawn. */
+  const referenceJob = `
+    <div class="_stale11" data-rendered="false">
+      <div data-display-contents="true"><p>Operations Program Enablement Student</p></div>
+      <div class="_stale22" aria-label="Company, Bird Construction.">
+        <a href="/company/bird-construction">Bird Construction</a>
+      </div>
+      <div data-display-contents="true">
+        <p><span>Calgary, AB</span><span> · 3 weeks ago</span></p>
+      </div>
+      <a href="/jobs/view/4449683666/">Apply</a>
+      <section>
+        <h2>About the job</h2>
+        <span data-testid="expandable-text-box">Support the operations programs team.</span>
+      </section>
+    </div>`;
+
+  /** The posting on screen. */
+  const currentJob = (options: { label?: boolean; idAnchor?: boolean } = {}) => `
+    <div class="_live11">
+      <div data-display-contents="true"><p>Business Development Representative - Ottawa Region</p></div>
+      <div class="_live22" ${
+        options.label === false
+          ? ""
+          : 'aria-label="Company, Bondi Produce and Specialty Foods."'
+      }>
+        <a href="/company/bondi-produce">Bondi Produce and Specialty Foods</a>
+      </div>
+      <div data-display-contents="true">
+        <p><span>Ottawa, ON</span><span> · 2 days ago · 12 applicants</span></p>
+      </div>
+      ${options.idAnchor === false ? "" : '<a href="/jobs/view/4457185005/">Easy Apply</a>'}
+      <button>Save</button>
+      <section>
+        <h2>About the job</h2>
+        <span data-testid="expandable-text-box">
+          <p>Grow the Ottawa wholesale accounts.</p><ul><li>Cold calling</li></ul>
+        </span>
+      </section>
+    </div>`;
+
+  /** The rail the student picked the current posting out of. */
+  const similarRail = `
+    <ul>
+      <li aria-label="Company, Southgate Robotics.">
+        <div data-display-contents="true"><p>Warehouse Coordinator</p></div>
+        <p><span>Mississauga, ON</span></p>
+        <a href="/jobs/view/4457185005/">Business Development Representative - Ottawa Region</a>
+      </li>
+    </ul>`;
+
+  /** Everything else LinkedIn puts on the page. */
+  const distractors = `
+    <section>
+      <h2>Hiring insights</h2>
+      <span data-testid="expandable-text-box">Unlock hiring insights with Premium.</span>
+    </section>
+    <div data-display-contents="true"><p>Use AI to assess how you fit</p></div>
+    <div style="display: none">
+      <div data-display-contents="true"><p>Business Development Representative - Ottawa Region</p></div>
+      <div aria-label="Company, Bondi Produce and Specialty Foods.">Bondi Produce and Specialty Foods</div>
+    </div>`;
+
+  const page = (...parts: string[]) =>
+    `<body><main><h1>Jobs</h1>${parts.join("")}</main></body>`;
+
+  const capture = (html: string, url = LINKEDIN_SIMILAR) =>
+    withRenderedGeometry(() => extractJob(readSitePage(html, url)));
+
+  it("reads the posting on screen, not the one the page came from", () => {
+    const job = capture(
+      page(referenceJob, currentJob(), similarRail, distractors),
+    );
+
+    expect(job.company).toBe("Bondi Produce and Specialty Foods");
+    expect(job.jobTitle).toBe(
+      "Business Development Representative - Ottawa Region",
+    );
+    expect(job.location).toBe("Ottawa, ON");
+    expect(job.jobDescription).toBe(
+      "Grow the Ottawa wholesale accounts.\nCold calling",
+    );
+  });
+
+  /** The exact failure, stated as the thing that must never happen again. */
+  it("never lets the reference job reach the record by any field", () => {
+    const job = capture(
+      page(referenceJob, currentJob(), similarRail, distractors),
+    );
+
+    expect(JSON.stringify(job)).not.toContain("Bird Construction");
+    expect(JSON.stringify(job)).not.toContain("Calgary");
+    expect(JSON.stringify(job)).not.toContain("Operations Program Enablement");
+    expect(job.jobDescription).not.toContain("operations programs team");
+  });
+
+  it("files the record under the selected job, never the reference job", () => {
+    const job = capture(
+      page(referenceJob, currentJob(), similarRail, distractors),
+    );
+
+    expect(job.jobUrl).toBe("https://www.linkedin.com/jobs/view/4457185005/");
+    expect(job.source).toBe("LinkedIn");
+  });
+
+  it("resolves the pane from the About-the-job region with no id anchor", () => {
+    const job = capture(
+      page(referenceJob, currentJob({ idAnchor: false }), similarRail),
+    );
+
+    expect(job.company).toBe("Bondi Produce and Specialty Foods");
+    expect(job.jobTitle).toBe(
+      "Business Development Representative - Ottawa Region",
+    );
+    expect(job.location).toBe("Ottawa, ON");
+  });
+
+  it("names the employer from its company link when no label is drawn", () => {
+    const job = capture(
+      page(referenceJob, currentJob({ label: false }), similarRail),
+    );
+
+    expect(job.company).toBe("Bondi Produce and Specialty Foods");
+  });
+
+  it("ignores an undrawn duplicate of the posting it is already reading", () => {
+    const job = capture(page(distractors, referenceJob, currentJob()));
+
+    expect(job.company).toBe("Bondi Produce and Specialty Foods");
+    expect(job.jobTitle).toBe(
+      "Business Development Representative - Ottawa Region",
+    );
+  });
+
+  it("takes nothing from the similar-jobs rail the student chose from", () => {
+    const job = capture(page(referenceJob, currentJob(), similarRail));
+
+    expect(job.company).not.toBe("Southgate Robotics");
+    expect(job.location).not.toBe("Mississauga, ON");
+    expect(job.jobTitle).not.toBe("Warehouse Coordinator");
+  });
+
+  it("refuses the Premium upsell sharing the description container's test id", () => {
+    const job = capture(page(distractors, referenceJob, currentJob()));
+
+    expect(job.jobDescription).not.toContain("Unlock hiring insights");
+  });
+
+  /**
+   * The safety half. Nothing on this page connects the visible content to the
+   * selected posting, and the reference job's markup is right there — so the
+   * only correct answer is blanks, which the student can type over.
+   */
+  it("returns blanks rather than the reference job when nothing is drawn", () => {
+    const job = capture(page(referenceJob, similarRail));
+
+    expect(job.company).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
+    expect(job.location).toBeUndefined();
+    expect(job.jobDescription).toBeUndefined();
+    expect(job.warnings).toContain("no_job_posting_found");
+    // The address still knows which posting the student selected.
+    expect(job.jobUrl).toBe("https://www.linkedin.com/jobs/view/4457185005/");
+  });
+
+  it("returns blanks when the page has no detail pane at all", () => {
+    const job = capture(page(similarRail, distractors));
+
+    expect(job.company).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
+    expect(job.location).toBeUndefined();
+  });
+
+  it("stays blank without the geometry that says what is on screen", () => {
+    // No stub: every element reports zero size, as an undrawn page would.
+    const job = extractJob(
+      readSitePage(page(referenceJob, currentJob()), LINKEDIN_SIMILAR),
+    );
+
+    expect(job.company).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
+    expect(JSON.stringify(job)).not.toContain("Bird Construction");
+  });
+
+  it("keeps the selected job's URL even when the reference id comes first", () => {
+    expect(
+      canonicalPostingUrl(
+        "https://www.linkedin.com/jobs/collections/similar-jobs/?referenceJobId=4449683666&currentJobId=4457185005",
+      ),
+    ).toBe("https://www.linkedin.com/jobs/view/4457185005/");
   });
 });
 

@@ -93,6 +93,45 @@ export function collectPageSignals(
     return clamp(node.innerHTML, MAXIMUM_FIELD_CHARACTERS);
   }
 
+  /**
+   * Whether an element is actually drawn, rather than merely present.
+   *
+   * A single-page application does not always remove what it replaces. On one
+   * LinkedIn route the markup of a previously viewed posting stays in the
+   * document, laid out at zero size, while the posting on screen is a different
+   * job — so "is in the DOM" and "is what the student is looking at" come
+   * apart, and only the second one is the question worth asking.
+   *
+   * Rendered is not the same as scrolled into view. A student reading the
+   * bottom of a long posting has its header far above the viewport, and it is
+   * still the posting they are capturing, so intersection is deliberately not
+   * part of this test.
+   */
+  function isRendered(node: Element | null): boolean {
+    if (!node) return false;
+
+    // Hidden or removed from the accessibility tree takes the subtree with it.
+    if (node.closest('[hidden], [aria-hidden="true"]')) return false;
+
+    const element = node as HTMLElement;
+    const rect =
+      typeof element.getBoundingClientRect === "function"
+        ? element.getBoundingClientRect()
+        : null;
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+
+    // `display` and `visibility` are read from the computed style, so a hidden
+    // ancestor counts even where the element itself sets nothing.
+    const view = element.ownerDocument?.defaultView;
+    const style = view?.getComputedStyle
+      ? view.getComputedStyle(element)
+      : null;
+
+    return (
+      !style || (style.display !== "none" && style.visibility !== "hidden")
+    );
+  }
+
   const jsonLdBlocks: string[] = [];
   const scripts = document.querySelectorAll(
     'script[type="application/ld+json"]',
@@ -207,19 +246,96 @@ export function collectPageSignals(
    * step is bounded, and any step that cannot be completed leaves its field
    * blank rather than falling back to something that merely looks right.
    */
-  function readLinkedInJobDetail(): void {
-    /** `Company, Micron Technology.` — the label, and the employer inside it. */
-    const COMPANY_LABEL_PATTERN = /^\s*company\s*[,:]\s*([\s\S]*)$/i;
-    /** The title leaf's one observed structural relationship. */
-    const TITLE_SELECTOR = 'div[data-display-contents="true"] > p';
-    const DESCRIPTION_SELECTOR = '[data-testid="expandable-text-box"]';
-    const ABOUT_HEADING_PATTERN = /^about the job$/i;
-    const MAXIMUM_LOCATION_CHARACTERS = 120;
+  /** `Company, Micron Technology.` — the label, and the employer inside it. */
+  const COMPANY_LABEL_PATTERN = /^\s*company\s*[,:]\s*([\s\S]*)$/i;
+  /** The title leaf's one observed structural relationship. */
+  const TITLE_SELECTOR = 'div[data-display-contents="true"] > p';
+  const DESCRIPTION_SELECTOR = '[data-testid="expandable-text-box"]';
+  const ABOUT_HEADING_PATTERN = /^about the job$/i;
+  const HEADING_SELECTOR = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
+  const RESULT_CARD_SELECTOR = 'li, [role="listitem"]';
+  const MAXIMUM_LOCATION_CHARACTERS = 120;
 
-    function trimmedText(node: Element | null): string {
-      return (node?.textContent ?? "").trim();
+  function trimmedText(node: Element | null): string {
+    return (node?.textContent ?? "").trim();
+  }
+
+  /**
+   * The employer an element's own label names, as the page renders it.
+   *
+   * The element's text is the employer as written on screen; the label is the
+   * same value inside a spoken sentence, so its trailing punctuation belongs to
+   * the sentence rather than to the employer. A label naming nothing — the bare
+   * `Company,` — yields nothing.
+   */
+  function companyNameFrom(element: Element): string | undefined {
+    const match = COMPANY_LABEL_PATTERN.exec(
+      element.getAttribute("aria-label") ?? "",
+    );
+    if (!match) return undefined;
+
+    const fromText = trimmedText(element);
+    const fromLabel = (match[1] ?? "")
+      .trim()
+      .replace(/[.,;:]+$/, "")
+      .trim();
+
+    const name =
+      fromText && fromText.length <= 160 && !fromText.includes("\n")
+        ? fromText
+        : fromLabel;
+
+    return name ? name : undefined;
+  }
+
+  /** LinkedIn renders every search or similar-jobs result as a list item. */
+  function inAResultCard(element: Element): boolean {
+    return Boolean(element.closest(RESULT_CARD_SELECTOR));
+  }
+
+  function aboutTheJobHeadings(): Element[] {
+    return Array.from(document.querySelectorAll(HEADING_SELECTOR))
+      .slice(0, MAXIMUM_HEADING_CANDIDATES)
+      .filter((heading) => ABOUT_HEADING_PATTERN.test(trimmedText(heading)));
+  }
+
+  /**
+   * The description, anchored to a visible "About the job" heading.
+   *
+   * More than one element on the page carries the description container's
+   * `data-testid` — a hiring-insights upsell uses the same one — so taking the
+   * first on the page would store an advertisement as the job description. The
+   * heading is the only thing that says which box is the posting, so the box
+   * must both share a small ancestor with it and follow it in the document.
+   */
+  function descriptionUnder(
+    headings: readonly Element[],
+    requireRendered: boolean,
+  ): string | undefined {
+    for (const heading of headings) {
+      let node: Element | null = heading.parentElement;
+
+      for (let depth = 0; node && depth < MAXIMUM_ANCESTOR_DEPTH; depth += 1) {
+        const boxes = Array.from(node.querySelectorAll(DESCRIPTION_SELECTOR));
+        const following = boxes.find(
+          (box) =>
+            (!requireRendered || isRendered(box)) &&
+            (heading.compareDocumentPosition(box) &
+              Node.DOCUMENT_POSITION_FOLLOWING) !==
+              0,
+        );
+
+        const value = markupOf(following ?? null);
+        if (value) return value;
+        if (node === document.body) break;
+        node = node.parentElement;
+      }
     }
 
+    return undefined;
+  }
+
+  function readLinkedInJobDetail(): void {
     /**
      * The labelled company, and the element carrying the label.
      *
@@ -236,25 +352,9 @@ export function collectPageSignals(
       let fallback: { element: Element; name: string } | null = null;
 
       for (const element of labelled) {
-        const match = COMPANY_LABEL_PATTERN.exec(
-          element.getAttribute("aria-label") ?? "",
-        );
-        if (!match) continue;
-        if (element.closest('li, [role="listitem"]')) continue;
+        if (inAResultCard(element)) continue;
 
-        // The element's own text is the employer as the page renders it; the
-        // label is the same value inside a spoken sentence, so its trailing
-        // punctuation is the sentence's rather than the employer's.
-        const fromText = trimmedText(element);
-        const fromLabel = (match[1] ?? "")
-          .trim()
-          .replace(/[.,;:]+$/, "")
-          .trim();
-
-        const name =
-          fromText && fromText.length <= 160 && !fromText.includes("\n")
-            ? fromText
-            : fromLabel;
+        const name = companyNameFrom(element);
         if (!name) continue;
 
         const candidate = { element, name };
@@ -333,47 +433,178 @@ export function collectPageSignals(
       }
     }
 
-    /**
-     * The description, anchored to the visible "About the job" heading.
-     *
-     * More than one element on the page carries the description container's
-     * `data-testid` — a hiring-insights upsell uses the same one — so taking
-     * the first on the page would store an advertisement as the job
-     * description. The heading is the only thing that says which box is the
-     * posting, so the box must both share a small ancestor with it and follow
-     * it in the document.
-     */
-    const headings = Array.from(
-      document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]'),
-    ).slice(0, MAXIMUM_HEADING_CANDIDATES);
+    // The first "About the job" heading on the page, and only that one: on
+    // these routes the page shows one posting, so a second would be furniture.
+    const [about] = aboutTheJobHeadings();
+    const description = about ? descriptionUnder([about], false) : undefined;
+    if (description) siteFields["description"] = description;
+  }
 
-    for (const heading of headings) {
-      if (!ABOUT_HEADING_PATTERN.test(trimmedText(heading))) continue;
+  /**
+   * LinkedIn's Similar Jobs route, where the labelled company lies.
+   *
+   * `/jobs/collections/similar-jobs/?currentJobId=…&referenceJobId=…` shows the
+   * posting the student selected while keeping the markup of the posting they
+   * arrived from. Real-Chrome testing found that stale markup still carrying a
+   * perfectly valid `aria-label="Company, …"` for the *reference* job, so the
+   * ordinary read — first labelled company, then the card around it — filed a
+   * different employer, a different title and a different city than the screen
+   * was showing. Nothing about that is a selector mistake: the semantic anchor
+   * is real, it is simply the wrong posting's.
+   *
+   * What separates them is that the stale markup is not drawn. So this read
+   * trusts only rendered elements, and finds the pane in the order the evidence
+   * supports: an element that names the selected job id, then the visible
+   * "About the job" region of the posting on screen. If neither resolves, every
+   * field stays blank — a blank popup the student types into is a far better
+   * outcome than silently filing the job they navigated away from.
+   */
+  function readLinkedInSimilarJob(jobId: string | undefined): void {
+    const MAXIMUM_PANE_DEPTH = 12;
 
-      let node: Element | null = heading.parentElement;
-      for (let depth = 0; node && depth < MAXIMUM_ANCESTOR_DEPTH; depth += 1) {
-        const boxes = Array.from(node.querySelectorAll(DESCRIPTION_SELECTOR));
-        const following = boxes.find(
-          (box) =>
-            (heading.compareDocumentPosition(box) &
-              Node.DOCUMENT_POSITION_FOLLOWING) !==
-            0,
+    /** The bounded container around a starting point that holds a drawn title. */
+    function paneAround(
+      start: Element,
+    ): { pane: Element; title: Element } | null {
+      let node: Element | null = start;
+
+      for (let depth = 0; node && depth < MAXIMUM_PANE_DEPTH; depth += 1) {
+        if (node === document.body || node.tagName === "MAIN") return null;
+
+        const title = Array.from(node.querySelectorAll(TITLE_SELECTOR)).find(
+          (candidate) => isRendered(candidate) && !inAResultCard(candidate),
         );
+        if (title) return { pane: node, title };
 
-        const value = markupOf(following ?? null);
-        if (value) {
-          siteFields["description"] = value;
-          break;
-        }
-        if (node === document.body) break;
         node = node.parentElement;
       }
 
+      return null;
+    }
+
+    /**
+     * An element that names the selected posting.
+     *
+     * The strongest evidence available, because it is the job id from the
+     * address rather than an inference: an element carrying it cannot belong to
+     * the reference job. A card in the similar-jobs rail may carry it too, so
+     * result cards are excluded the same way they are everywhere else.
+     */
+    function paneNamingTheJob(): { pane: Element; title: Element } | null {
+      if (!jobId || !/^[A-Za-z0-9_-]+$/.test(jobId)) return null;
+
+      const selectors = [
+        `a[href*="/jobs/view/${jobId}"]`,
+        `[data-job-id="${jobId}"]`,
+        `[data-occludable-job-id="${jobId}"]`,
+        `[data-entity-urn*="${jobId}"]`,
+        `[href*="currentJobId=${jobId}"]`,
+      ];
+
+      for (const selector of selectors) {
+        let matches: Element[] = [];
+        try {
+          matches = Array.from(document.querySelectorAll(selector));
+        } catch {
+          continue;
+        }
+
+        for (const match of matches) {
+          if (inAResultCard(match) || !isRendered(match)) continue;
+
+          const found = paneAround(match);
+          if (found) return found;
+        }
+      }
+
+      return null;
+    }
+
+    /** Failing that, the visible About-the-job region of what is on screen. */
+    const renderedAbout = aboutTheJobHeadings().filter(isRendered);
+
+    let resolved = paneNamingTheJob();
+    if (!resolved) {
+      for (const heading of renderedAbout) {
+        const found = paneAround(heading);
+        if (found) {
+          resolved = found;
+          break;
+        }
+      }
+    }
+
+    // Nothing connected the visible page to the selected posting. Blank.
+    if (!resolved) return;
+
+    const pane = resolved.pane;
+
+    // The employer: its own label first, and a link to the company's LinkedIn
+    // page second — a URL shape rather than a class, and scoped to this pane,
+    // so it can only ever name the employer of the posting on screen.
+    let company: string | undefined;
+    for (const element of Array.from(pane.querySelectorAll("[aria-label]"))) {
+      if (inAResultCard(element) || !isRendered(element)) continue;
+
+      const name = companyNameFrom(element);
+      if (name) {
+        company = name;
+        break;
+      }
+    }
+    if (!company) {
+      for (const link of Array.from(
+        pane.querySelectorAll('a[href*="/company/"]'),
+      )) {
+        if (inAResultCard(link) || !isRendered(link)) continue;
+
+        const name = trimmedText(link);
+        if (name && name.length <= 160 && !name.includes("\n")) {
+          company = name;
+          break;
+        }
+      }
+    }
+    if (company) siteFields["company"] = clamp(company, MAXIMUM_FIELD_CHARACTERS);
+
+    const titleMarkup = markupOf(resolved.title);
+    const titleText = trimmedText(resolved.title);
+    if (titleMarkup && titleText !== company) siteFields["title"] = titleMarkup;
+
+    for (const candidate of Array.from(pane.querySelectorAll("p > span"))) {
+      if (inAResultCard(candidate) || !isRendered(candidate)) continue;
+
+      const value = trimmedText(candidate);
+      if (
+        !value ||
+        value.length > MAXIMUM_LOCATION_CHARACTERS ||
+        value.includes("\n") ||
+        value === company ||
+        value === titleText
+      ) {
+        continue;
+      }
+
+      siteFields["location"] = value;
       break;
     }
+
+    // The description: a heading inside this pane first, then any other drawn
+    // one — never a box under the reference job's undrawn heading.
+    const description = descriptionUnder(
+      [
+        ...renderedAbout.filter((heading) => pane.contains(heading)),
+        ...renderedAbout.filter((heading) => !pane.contains(heading)),
+      ],
+      true,
+    );
+    if (description) siteFields["description"] = description;
   }
 
   if (rules.strategy === "linkedin-job-detail") readLinkedInJobDetail();
+  if (rules.strategy === "linkedin-similar-jobs") {
+    readLinkedInSimilarJob(rules.jobId);
+  }
 
   let applyAffordance = false;
   const candidates = Array.from(

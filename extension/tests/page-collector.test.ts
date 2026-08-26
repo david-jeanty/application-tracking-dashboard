@@ -174,6 +174,32 @@ describe("the injected collector", () => {
     expect(workday.siteFields).toBeUndefined();
   });
 
+  /**
+   * The collector implements both LinkedIn reads and chooses neither. Which one
+   * a page gets is `sites.ts`'s answer, arriving as data.
+   */
+  it("takes the strategy and the selected job's identity as data", () => {
+    document.documentElement.innerHTML = `<head></head><body><main>
+       <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
+     </main></body>`;
+
+    const similar = readRulesFor(
+      "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4457185005&referenceJobId=4449683666",
+    );
+
+    expect(similar.strategy).toBe("linkedin-similar-jobs");
+    expect(similar.jobId).toBe("4457185005");
+
+    // jsdom lays nothing out, so the stricter read establishes nothing — which
+    // is the correct answer, and not the one the ordinary read would give.
+    expect(collectPageSignals(similar).siteFields).toBeUndefined();
+    expect(
+      collectPageSignals(
+        readRulesFor("https://www.linkedin.com/jobs/view/4457185005/"),
+      ).siteFields?.["company"],
+    ).toBe("Northwind Photonics");
+  });
+
   it("is self-contained, because Chrome injects it as source text", () => {
     const source = collectPageSignals.toString();
 
