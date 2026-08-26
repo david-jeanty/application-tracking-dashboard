@@ -481,9 +481,17 @@ function fallbackTitle(
 function acceptFromSite(
   value: string | undefined,
   signals: PageSignals,
+  context?: { site?: string; field?: "company" | "jobTitle" },
 ): string | undefined {
   if (!value) return undefined;
   if (PAGE_CHROME_PATTERN.test(value.trim())) return undefined;
+
+  // A Workday employer is admitted only after the collector established it
+  // from tenant-correlated sidebar branding. Its tenant label matching the
+  // candidate is corroboration, not page furniture.
+  if (context?.site === "workday" && context.field === "company") {
+    return value;
+  }
 
   return namesTheSiteItself(value, signals) ? undefined : value;
 }
@@ -577,11 +585,17 @@ export function extractJob(signals: PageSignals): ExtractedJob {
 
   const company =
     structuredCompany ??
-    clamp(acceptFromSite(fromSite.company, signals), LIMITS.company);
+    clamp(
+      acceptFromSite(fromSite.company, signals, { site, field: "company" }),
+      LIMITS.company,
+    );
 
   const jobTitle =
     (posting ? clamp(firstString(posting["title"]), LIMITS.jobTitle) : undefined) ??
-    clamp(acceptFromSite(fromSite.jobTitle, signals), LIMITS.jobTitle) ??
+    clamp(
+      acceptFromSite(fromSite.jobTitle, signals, { site, field: "jobTitle" }),
+      LIMITS.jobTitle,
+    ) ??
     // A recognized site that found nothing found nothing. Its own heading is
     // page furniture, and that is exactly the mistake this patch removes.
     (site

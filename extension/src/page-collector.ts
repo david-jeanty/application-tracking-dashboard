@@ -908,8 +908,91 @@ export function collectPageSignals(
     }
   }
 
+  /** Workday's selected posting is the only safe scope for its automation ids. */
+  function readWorkdayJobDetail(): void {
+    const posting = document.querySelector(
+      '[data-automation-id="jobPostingPage"]',
+    );
+    // Search results also expose titles and locations, but not a posting root.
+    if (!posting) return;
+
+    const title = posting.querySelector(
+      '[data-automation-id="jobPostingHeader"]',
+    );
+    const titleValue = markupOf(title);
+    if (titleValue) siteFields["title"] = titleValue;
+
+    const details = posting.querySelector(
+      '[data-automation-id="job-posting-details"]',
+    );
+    const locations = details?.querySelector(
+      '[data-automation-id="locations"]',
+    );
+    const locationValue = markupOf(locations?.querySelector("dd") ?? null);
+    if (locationValue) siteFields["location"] = locationValue;
+
+    const description = posting.querySelector(
+      '[data-automation-id="jobPostingDescription"]',
+    );
+    const descriptionValue = markupOf(description);
+    if (descriptionValue) siteFields["description"] = descriptionValue;
+
+    // Workday tenancy corroborates branded sidebar copy but never originates an
+    // employer: a page with no specific sidebar signal still has no company.
+    const sidebar = document.querySelector('[data-automation-id="jobSidebar"]');
+    const normalized = (value: string): string =>
+      value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const tenant =
+      typeof rules.workdayTenant === "string"
+        ? normalized(rules.workdayTenant)
+        : "";
+    const corroboratesTenant = (candidate: string): boolean =>
+      Boolean(tenant) && normalized(candidate) === tenant;
+    const genericBrand = (candidate: string): boolean =>
+      /^(?:logo|company|career|search(?: for)? jobs?|jobs)$/i.test(
+        candidate.trim(),
+      );
+    const logoCandidate = (alt: string): string | undefined => {
+      const candidate = /^\s*([A-Za-z0-9][A-Za-z0-9 .,&'’-]{0,80}?)\s+logo\s*$/i.exec(
+        alt,
+      )?.[1]?.trim();
+      return candidate && !genericBrand(candidate) ? candidate : undefined;
+    };
+    const richTextCandidate = (text: string): string | undefined => {
+      const candidate =
+        /^\s*At\s+([A-Z][A-Za-z0-9 .&'’-]{1,80}?),/.exec(text)?.[1] ??
+        /^\s*([A-Z][A-Za-z0-9 .&'’-]{1,80}?)\s+is\b/.exec(text)?.[1];
+      return candidate?.trim();
+    };
+
+    if (!sidebar) return;
+
+    const logos = Array.from(
+      sidebar.querySelectorAll('[data-automation-id="image"][alt]'),
+    )
+      .map((image) => logoCandidate(image.getAttribute("alt") ?? ""))
+      .filter((candidate): candidate is string => Boolean(candidate));
+    const [logo] = logos;
+
+    if (logo) {
+      if (logos.length === 1 && corroboratesTenant(logo)) {
+        siteFields["company"] = clamp(logo, MAXIMUM_FIELD_CHARACTERS);
+      }
+      return;
+    }
+
+    const richText = sidebar.querySelector(
+      '[data-automation-id="richText"]',
+    );
+    const company = richTextCandidate(trimmedText(richText));
+    if (company && corroboratesTenant(company)) {
+      siteFields["company"] = clamp(company, MAXIMUM_FIELD_CHARACTERS);
+    }
+  }
+
   if (rules.strategy === "linkedin-job-detail") readLinkedInJobDetail();
   if (rules.strategy === "linkedin-split-pane") readLinkedInSplitPane();
+  if (rules.strategy === "workday-job-detail") readWorkdayJobDetail();
 
   let applyAffordance = false;
   const candidates = Array.from(

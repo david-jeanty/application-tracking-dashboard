@@ -15,7 +15,7 @@ import type { ExtractedJob, PageSignals } from "./types.js";
  * fallback is switched off on them entirely: a recognized site that yields
  * nothing yields blanks, never the page's first heading.
  *
- * What is in this file is a table of selectors, one named relational strategy,
+ * What is in this file is a table of selectors and named relational strategies,
  * and a little URL arithmetic. It does not know that JobTrack exists. It
  * performs no network request, executes nothing from the page, and calls no
  * site API. Every value it produces is read out of the DOM the student is
@@ -61,8 +61,9 @@ export type SiteFieldKey = "title" | "company" | "location" | "description";
  * language for "walk up from this anchor until…" — would be a scraping engine,
  * and a scraping engine is the thing this extension is not.
  *
- * There are two, and they are both LinkedIn's, because LinkedIn's routes differ
- * in a way that matters:
+ * There are two LinkedIn strategies because its routes differ in a way that
+ * matters, plus one Workday strategy because its global automation ids occur
+ * in both a selected posting and its Similar Jobs rail:
  *
  * - `linkedin-job-detail` is a page showing one posting at one address. The
  *   first labelled company on it belongs to that posting.
@@ -71,7 +72,10 @@ export type SiteFieldKey = "title" | "company" | "location" | "description";
  *   necessarily the one the address describes. Everything is read inside the
  *   pane's own region and nothing is read outside it.
  */
-export type SiteStrategy = "linkedin-job-detail" | "linkedin-split-pane";
+export type SiteStrategy =
+  | "linkedin-job-detail"
+  | "linkedin-split-pane"
+  | "workday-job-detail";
 
 /**
  * How to find the document that is actually showing the selected posting.
@@ -104,6 +108,8 @@ export type FrameResolution = {
 export type PageReadRules = {
   fields: readonly FieldRule[];
   strategy?: SiteStrategy;
+  /** The Workday tenant label, used only to corroborate sidebar branding. */
+  workdayTenant?: string;
   /**
    * The posting the address says the student selected — `currentJobId`.
    *
@@ -121,6 +127,7 @@ type RoutedRead = {
   strategy: SiteStrategy;
   jobId?: string;
   resolveFrame?: FrameResolution;
+  workdayTenant?: string;
 };
 
 type SiteRule = {
@@ -208,6 +215,18 @@ function linkedInRoute(url: URL): RoutedRead {
   };
 }
 
+/** Workday tenant branding corroborates sidebar evidence; it never originates it. */
+function workdayRoute(url: URL): RoutedRead {
+  const tenant = url.hostname.split(".")[0]?.trim().toLowerCase();
+
+  return {
+    strategy: "workday-job-detail",
+    ...(tenant && /^[a-z0-9-]{1,64}$/.test(tenant)
+      ? { workdayTenant: tenant }
+      : {}),
+  };
+}
+
 const SITE_RULES: readonly SiteRule[] = [
   {
     id: "linkedin",
@@ -260,31 +279,8 @@ const SITE_RULES: readonly SiteRule[] = [
   {
     id: "workday",
     hosts: ["myworkdayjobs.com", "myworkdaysite.com", "wd1.myworkdaycdn.com"],
-    fields: [
-      // `data-automation-id` is Workday's own automation contract, maintained
-      // across tenants and skins. It is the most stable thing a Workday page
-      // offers short of structured data, which Workday does not publish.
-      {
-        key: "title",
-        selectors: ['[data-automation-id="jobPostingHeader"]'],
-      },
-      {
-        key: "location",
-        // The bare `locations` container is a definition list whose term is the
-        // word "locations"; only the definition is the answer.
-        selectors: [
-          '[data-automation-id="locations"] dd',
-          '[data-automation-id="jobPostingLocation"]',
-        ],
-      },
-      {
-        key: "description",
-        selectors: ['[data-automation-id="jobPostingDescription"]'],
-      },
-      // No company rule. A Workday tenant hostname names whoever bought
-      // Workday, and the posting body does not reliably repeat the employer,
-      // so employer identity stays empty for the student to supply.
-    ],
+    fields: [],
+    route: workdayRoute,
   },
 ];
 
@@ -345,6 +341,7 @@ export function readRulesFor(url: string): PageReadRules {
     ...(strategy ? { strategy } : {}),
     ...(routed?.jobId ? { jobId: routed.jobId } : {}),
     ...(routed?.resolveFrame ? { resolveFrame: routed.resolveFrame } : {}),
+    ...(routed?.workdayTenant ? { workdayTenant: routed.workdayTenant } : {}),
   };
 }
 
@@ -441,8 +438,6 @@ export function readSiteFields(
     rawTitle && site === "indeed" ? tidyIndeedTitle(rawTitle) : rawTitle;
 
   return {
-    // Workday has no company rule at all, so this is undefined there by
-    // construction rather than by a special case.
     ...(text("company") ? { company: text("company") } : {}),
     ...(title ? { jobTitle: title } : {}),
     ...(text("location") ? { location: text("location") } : {}),

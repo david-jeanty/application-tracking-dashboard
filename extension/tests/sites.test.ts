@@ -71,10 +71,11 @@ describe("recognizing a site", () => {
     expect(rules.fields).toEqual([]);
   });
 
-  it("leaves Indeed and Workday on their selector tables", () => {
+  it("keeps Indeed on selectors and gives Workday a bounded detail strategy", () => {
     expect(readRulesFor(INDEED_JOB).strategy).toBeUndefined();
-    expect(readRulesFor(WORKDAY_JOB).strategy).toBeUndefined();
-    expect(readRulesFor(WORKDAY_JOB).fields.length).toBeGreaterThan(0);
+    expect(readRulesFor(WORKDAY_JOB).strategy).toBe("workday-job-detail");
+    expect(readRulesFor(WORKDAY_JOB).fields).toEqual([]);
+    expect(readRulesFor(WORKDAY_JOB).workdayTenant).toBe("kpmg");
   });
 
   /**
@@ -1145,10 +1146,40 @@ describe("Indeed", () => {
 describe("Workday", () => {
   const posting = `<body>
      <h1>Search for Jobs</h1>
-     <h2 data-automation-id="jobPostingHeader">Senior Consultant, Internship</h2>
-     <div data-automation-id="locations"><dl><dt>locations</dt><dd>Toronto, Ontario</dd></dl></div>
-     <div data-automation-id="jobPostingDescription"><p>Join the consulting practice.</p></div>
+     <div data-automation-id="jobPostingPage">
+       <h2 data-automation-id="jobPostingHeader">Senior Consultant, Internship</h2>
+       <div data-automation-id="job-posting-details"><div data-automation-id="locations"><dl><dt>locations</dt><dd>Toronto, Ontario</dd></dl></div></div>
+       <div data-automation-id="jobPostingDescription"><p>Join the consulting practice.</p></div>
+     </div>
    </body>`;
+
+  const BMO_JOB =
+    "https://bmo.wd3.myworkdayjobs.com/en-US/External/job/Toronto/Analyst_123";
+  const CIBC_JOB =
+    "https://cibc.wd3.myworkdayjobs.com/campus/job/Toronto/Coordinator_123";
+
+  function workdayDetail({
+    title,
+    location,
+    description,
+    sidebar,
+  }: {
+    title: string;
+    location: string;
+    description: string;
+    sidebar: string;
+  }) {
+    return `<body>
+      <div data-automation-id="similarJobsCard"><h2>Similar Jobs title</h2><div data-automation-id="locations"><dl><dd>Wrong before location</dd></dl></div></div>
+      <div data-automation-id="jobPostingPage">
+        <h2 data-automation-id="jobPostingHeader">${title}</h2>
+        <div data-automation-id="job-posting-details"><div data-automation-id="locations"><dl><dt>locations</dt><dd>${location}</dd></dl></div></div>
+        <div data-automation-id="jobPostingDescription"><p>${description}</p></div>
+      </div>
+      <div data-automation-id="similarJobsCard"><h2>Another similar title</h2><div data-automation-id="locations"><dl><dd>Wrong after location</dd></dl></div></div>
+      <aside data-automation-id="jobSidebar">${sidebar}</aside>
+    </body>`;
+  }
 
   it("reads the selected posting rather than the page around it", () => {
     const job = extractJob(readSitePage(posting, WORKDAY_JOB));
@@ -1187,5 +1218,112 @@ describe("Workday", () => {
     expect(job.location).toBeUndefined();
     expect(job.jobDescription).toBeUndefined();
     expect(job.warnings).toContain("no_job_posting_found");
+  });
+
+  it("reads BMO only from the selected posting and bounded sidebar opening", () => {
+    const html = workdayDetail({
+      title:
+        "BMO Capital Markets Winter 2027 Investment Banking Analyst, Metals & Mining, Toronto (Co-Op/ Internship)",
+      location: "Toronto, ON, CAN",
+      description: "Selected BMO description.",
+      sidebar:
+        '<img data-automation-id="image" alt="Logo" /><div data-automation-id="richText">BMO is a leading bank driven by a single purpose.</div>',
+    });
+
+    const job = extractJob(readSitePage(html, BMO_JOB));
+
+    expect(job.company).toBe("BMO");
+    expect(job.jobTitle).toBe(
+      "BMO Capital Markets Winter 2027 Investment Banking Analyst, Metals & Mining, Toronto (Co-Op/ Internship)",
+    );
+    expect(job.location).toBe("Toronto, ON, CAN");
+    expect(job.jobDescription).toBe("Selected BMO description.");
+    expect(job.jobDescription).not.toContain("leading bank");
+    expect(job.companyDomain).toBeUndefined();
+    expect(job.source).toBeUndefined();
+  });
+
+  it("prefers CIBC's specific sidebar logo and keeps Similar Jobs out", () => {
+    const html = workdayDetail({
+      title: "Project Coordinator Co-op",
+      location: "Toronto, ON",
+      description: "Selected CIBC description.",
+      sidebar:
+        '<img data-automation-id="image" alt="CIBC logo" /><div data-automation-id="richText">At CIBC, we are in business to help our clients.</div>',
+    });
+
+    const job = extractJob(readSitePage(html, CIBC_JOB));
+
+    expect(job.company).toBe("CIBC");
+    expect(job.jobTitle).toBe("Project Coordinator Co-op");
+    expect(job.location).toBe("Toronto, ON");
+    expect(job.jobDescription).toBe("Selected CIBC description.");
+  });
+
+  it("takes no Workday fields from results before a selected posting exists", () => {
+    const html = `<body>
+      <h1>Search for Jobs</h1><div data-automation-id="jobResults"><h2 data-automation-id="jobPostingHeader">Result-card title</h2><div data-automation-id="locations"><dl><dd>Result-card location</dd></dl></div></div>
+      <aside data-automation-id="jobSidebar"><div data-automation-id="richText">BMO is a leading bank.</div></aside>
+    </body>`;
+
+    const job = extractJob(readSitePage(html, BMO_JOB));
+
+    expect(job.jobTitle).toBeUndefined();
+    expect(job.location).toBeUndefined();
+    expect(job.company).toBeUndefined();
+    expect(job.jobDescription).toBeUndefined();
+  });
+
+  it("does not originate an employer from a tenant hostname", () => {
+    const html = workdayDetail({
+      title: "Analyst Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar: '<img data-automation-id="image" alt="Logo" />',
+    });
+
+    expect(
+      extractJob(
+        readSitePage(
+          html,
+          "https://fakebank.wd3.myworkdayjobs.com/en-US/job/Toronto/Analyst_1",
+        ),
+      ).company,
+    ).toBeUndefined();
+  });
+
+  it("rejects branding that conflicts with the Workday tenant", () => {
+    const html = workdayDetail({
+      title: "Analyst Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<img data-automation-id="image" alt="Logo" /><div data-automation-id="richText">BMO is a leading bank.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, CIBC_JOB)).company).toBeUndefined();
+  });
+
+  it("does not mine later sidebar prose for employer branding", () => {
+    const html = workdayDetail({
+      title: "Analyst Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<img data-automation-id="image" alt="Logo" /><div data-automation-id="richText">Welcome. BMO is a leading bank.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, BMO_JOB)).company).toBeUndefined();
+  });
+
+  it("continues rejecting Workday page furniture as a title", () => {
+    const html = workdayDetail({
+      title: "Search for Jobs",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar: '<img data-automation-id="image" alt="CIBC logo" />',
+    });
+
+    expect(extractJob(readSitePage(html, CIBC_JOB)).jobTitle).toBeUndefined();
   });
 });
