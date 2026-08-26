@@ -23,7 +23,8 @@ import type { ExtractedJob, ExtractionWarning, PageSignals } from "./types.js";
  * The order is a trust order, not a convenience order:
  *
  * 1. **Structured data the publisher formally asserts** — `schema.org`
- *    JobPosting, as JSON-LD or as microdata. This wins outright.
+ *    JobPosting, as JSON-LD or as microdata. This wins outright except on
+ *    Workday, where live pages can retain a stale backend posting.
  * 2. **A recognized site's own read path** — LinkedIn, Indeed and Workday
  *    publish no structured posting data on the pages a student actually reads,
  *    and between them they carry most of a student's search. `sites.ts` names
@@ -107,6 +108,13 @@ function sameHost(candidate: string, pageUrl: string): string | undefined {
  * somewhere else would file the posting under an address they never visited.
  */
 function postingUrl(signals: PageSignals): string | undefined {
+  // Workday's canonical and Open Graph URLs can describe stale SPA state. The
+  // student's invoked address is the only selected-posting-safe identity there.
+  if (siteFor(signals.pageUrl) === "workday") {
+    const current = sameHost(signals.pageUrl, signals.pageUrl);
+    return current && current.length <= LIMITS.jobUrl ? current : undefined;
+  }
+
   const perPosting = canonicalPostingUrl(signals.pageUrl);
   const canonical = signals.canonicalUrl
     ? sameHost(signals.canonicalUrl, signals.pageUrl)
@@ -567,7 +575,12 @@ export function extractJob(signals: PageSignals): ExtractedJob {
   const site = siteFor(signals.pageUrl);
 
   const [jsonLdPosting] = findJobPostings(signals.jsonLdBlocks);
-  const posting = jsonLdPosting ?? microdataPosting(signals);
+  const structuredPosting = jsonLdPosting ?? microdataPosting(signals);
+  // Workday can retain a backend or previous SPA JobPosting after its visible
+  // detail pane has changed. Its bounded site strategy is authoritative, and
+  // structured fields must not revive a search-result state that established
+  // no selected posting at all.
+  const posting = site === "workday" ? undefined : structuredPosting;
 
   const fromSite = site ? readSiteFields(site, signals.siteFields) : {};
 

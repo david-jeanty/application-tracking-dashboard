@@ -14,7 +14,7 @@ import {
   type PageReadRules,
 } from "../src/sites.js";
 import type { PageSignals } from "../src/types.js";
-import { readSitePage } from "./fixtures.js";
+import { jsonLd, readSitePage } from "./fixtures.js";
 
 /**
  * The three surfaces JobTrack Capture reads by name.
@@ -1181,6 +1181,34 @@ describe("Workday", () => {
     </body>`;
   }
 
+  function staleStructuredPosting(overrides: Record<string, unknown> = {}) {
+    return {
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: "Stale backend title",
+      description: "Conflicting structured description.",
+      validThrough: "2026-09-25",
+      hiringOrganization: {
+        "@type": "Organization",
+        name: "BMO Nesbitt Burns Inc.",
+        url: "https://www.bmonesbittburns.com/careers",
+      },
+      jobLocation: {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "FCP",
+          addressCountry: "Canada",
+        },
+      },
+      baseSalary: {
+        currency: "CAD",
+        value: { value: "100000", unitText: "YEAR" },
+      },
+      ...overrides,
+    };
+  }
+
   it("reads the selected posting rather than the page around it", () => {
     const job = extractJob(readSitePage(posting, WORKDAY_JOB));
 
@@ -1260,6 +1288,68 @@ describe("Workday", () => {
     expect(job.jobDescription).toBe("Selected CIBC description.");
   });
 
+  it("does not let BMO's structured backend posting override selected fields", () => {
+    const html = `<head>
+      ${jsonLd(staleStructuredPosting())}
+      <meta property="og:url" content="https://bmo.wd3.myworkdayjobs.com/en-US/job/Stale_999" />
+      <link rel="canonical" href="https://bmo.wd3.myworkdayjobs.com/en-US/job/Stale_999" />
+    </head>${workdayDetail({
+      title:
+        "BMO Capital Markets Winter 2027 Investment Banking Analyst, Metals & Mining, Toronto (Co-Op/ Internship)",
+      location: "Toronto, ON, CAN",
+      description: "Selected BMO description.",
+      sidebar:
+        '<img data-automation-id="image" alt="Logo" /><div data-automation-id="richText">BMO is a leading bank.</div>',
+    })}`;
+
+    const job = extractJob(readSitePage(html, BMO_JOB));
+
+    expect(job.company).toBe("BMO");
+    expect(job.jobTitle).toContain("Metals & Mining");
+    expect(job.location).toBe("Toronto, ON, CAN");
+    expect(job.jobDescription).toBe("Selected BMO description.");
+    expect(job.deadline).toBeUndefined();
+    expect(job.salary).toBeUndefined();
+    expect(job.companyDomain).toBeUndefined();
+    expect(job.jobUrl).toBe(BMO_JOB);
+  });
+
+  it("does not let CIBC's structured legal employer override selected fields", () => {
+    const html = `<head>${jsonLd(
+      staleStructuredPosting({
+        title: "Stale CIBC title",
+        description: "Conflicting CIBC description.",
+        validThrough: "2026-08-31",
+        hiringOrganization: {
+          "@type": "Organization",
+          name: "Canadian Imperial Bank of Commerce (Canada)",
+        },
+        jobLocation: {
+          "@type": "Place",
+          address: {
+            "@type": "PostalAddress",
+            addressLocality: "Toronto-81 Bay, 33rd Floor",
+            addressCountry: "Canada",
+          },
+        },
+      }),
+    )}</head>${workdayDetail({
+      title: "Project Coordinator Co-op",
+      location: "Toronto, ON",
+      description: "Selected CIBC description.",
+      sidebar: '<img data-automation-id="image" alt="CIBC logo" />',
+    })}`;
+
+    const job = extractJob(readSitePage(html, CIBC_JOB));
+
+    expect(job.company).toBe("CIBC");
+    expect(job.jobTitle).toBe("Project Coordinator Co-op");
+    expect(job.location).toBe("Toronto, ON");
+    expect(job.jobDescription).toBe("Selected CIBC description.");
+    expect(job.deadline).toBeUndefined();
+    expect(job.companyDomain).toBeUndefined();
+  });
+
   it("takes no Workday fields from results before a selected posting exists", () => {
     const html = `<body>
       <h1>Search for Jobs</h1><div data-automation-id="jobResults"><h2 data-automation-id="jobPostingHeader">Result-card title</h2><div data-automation-id="locations"><dl><dd>Result-card location</dd></dl></div></div>
@@ -1272,6 +1362,28 @@ describe("Workday", () => {
     expect(job.location).toBeUndefined();
     expect(job.company).toBeUndefined();
     expect(job.jobDescription).toBeUndefined();
+  });
+
+  it("leaves a Workday search state blank despite a complete stale posting", () => {
+    const current =
+      "https://bmo.wd3.myworkdayjobs.com/en-US/details/Current_123";
+    const html = `<head>
+      ${jsonLd(staleStructuredPosting())}
+      <meta property="og:url" content="https://bmo.wd3.myworkdayjobs.com/en-US/job/Stale_999" />
+      <link rel="canonical" href="https://bmo.wd3.myworkdayjobs.com/en-US/job/Stale_999" />
+    </head><body><div data-automation-id="jobResults">Search results</div></body>`;
+
+    const job = extractJob(readSitePage(html, current));
+
+    expect(job.company).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
+    expect(job.location).toBeUndefined();
+    expect(job.jobDescription).toBeUndefined();
+    expect(job.deadline).toBeUndefined();
+    expect(job.salary).toBeUndefined();
+    expect(job.companyDomain).toBeUndefined();
+    expect(job.jobUrl).toBe(current);
+    expect(job.warnings).toContain("no_job_posting_found");
   });
 
   it("does not originate an employer from a tenant hostname", () => {
