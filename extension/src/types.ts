@@ -82,6 +82,13 @@ export type ExtractionSource =
   | "posting_url"
   | "source_host";
 
+/** The bounded signals that qualify a generic title fallback as a job posting. */
+export type GenericFallbackCorroboration =
+  | "job_shaped_url"
+  | "apply_control"
+  | "declared_job_page"
+  | "structured_job_posting";
+
 /** Why a candidate was observed but intentionally not trusted. */
 export type EvidenceRejectionReason = "workday_structured_data_untrusted";
 
@@ -100,6 +107,8 @@ export type CapturedField<T> =
       value: T;
       confidence: Exclude<EvidenceConfidence, "ambiguous">;
       source: ExtractionSource;
+      /** Present for a strong generic title fallback; contains no page content. */
+      corroboratedBy?: readonly GenericFallbackCorroboration[];
       rejected?: readonly RejectedEvidence[];
     }
   | {
@@ -147,6 +156,7 @@ export type ExtractionDiagnostics = {
       state: CapturedField<string>["state"];
       confidence?: EvidenceConfidence;
       source?: ExtractionSource;
+      corroboratedBy?: readonly GenericFallbackCorroboration[];
       reason?: EvidenceRejectionReason;
       rejected?: readonly RejectedEvidence[];
       /** Present only for description; its contents never leave the extractor. */

@@ -23,6 +23,7 @@ import type {
   ExtractionSource,
   ExtractionWarning,
   ExtractedJob,
+  GenericFallbackCorroboration,
   PageSignals,
 } from "./types.js";
 
@@ -448,14 +449,24 @@ function declaresAJobPage(signals: PageSignals): boolean {
  * are plainly not a job: a careers landing page has a job-shaped address, and a
  * search results list has apply buttons on every row.
  */
-function looksLikeAPosting(signals: PageSignals): boolean {
-  const signalCount = [
-    addressNamesOnePosting(signals.pageUrl),
-    signals.evidence?.applyAffordance === true,
-    declaresAJobPage(signals),
-  ].filter(Boolean).length;
+function genericFallbackCorroboration(
+  signals: PageSignals,
+  declaredAPosting: boolean,
+): readonly GenericFallbackCorroboration[] {
+  if (declaredAPosting) return ["structured_job_posting"];
 
-  return signalCount >= 2;
+  const corroboration: GenericFallbackCorroboration[] = [];
+  if (addressNamesOnePosting(signals.pageUrl)) {
+    corroboration.push("job_shaped_url");
+  }
+  if (signals.evidence?.applyAffordance === true) {
+    corroboration.push("apply_control");
+  }
+  if (declaresAJobPage(signals)) {
+    corroboration.push("declared_job_page");
+  }
+
+  return corroboration.length >= 2 ? corroboration : [];
 }
 
 /**
@@ -468,9 +479,9 @@ function looksLikeAPosting(signals: PageSignals): boolean {
  */
 function fallbackTitle(
   signals: PageSignals,
-  declaredAPosting: boolean,
+  corroboration: readonly GenericFallbackCorroboration[],
 ): string | undefined {
-  if (!declaredAPosting && !looksLikeAPosting(signals)) return undefined;
+  if (corroboration.length === 0) return undefined;
 
   const siteName = signals.meta["og:site_name"];
   const candidates = [
@@ -598,9 +609,18 @@ function established<T>(
   value: T | undefined,
   confidence: Exclude<EvidenceConfidence, "ambiguous">,
   source: ExtractionSource | undefined,
+  corroboratedBy?: readonly GenericFallbackCorroboration[],
 ): CapturedField<T> {
   return value !== undefined && source
-    ? { state: "established", value, confidence, source }
+    ? {
+        state: "established",
+        value,
+        confidence,
+        source,
+        ...(corroboratedBy && corroboratedBy.length > 0
+          ? { corroboratedBy }
+          : {}),
+      }
     : absent();
 }
 
@@ -654,7 +674,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   const siteSource = sourceForSite(site);
 
   const [jsonLdPosting] = findJobPostings(signals.jsonLdBlocks);
-  const microdata = jsonLdPosting ? undefined : microdataPosting(signals);
+  const microdata = microdataPosting(signals);
   const structuredPosting = jsonLdPosting ?? microdata;
   const structuredSource: ExtractionSource | undefined = jsonLdPosting
     ? "json_ld_job_posting"
@@ -699,9 +719,12 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
     acceptFromSite(fromSite.jobTitle, signals, { site, field: "jobTitle" }),
     LIMITS.jobTitle,
   );
+  const fallbackCorroboration = site
+    ? []
+    : genericFallbackCorroboration(signals, Boolean(posting));
   const fallback = site
     ? undefined
-    : clamp(fallbackTitle(signals, Boolean(posting)), LIMITS.jobTitle);
+    : clamp(fallbackTitle(signals, fallbackCorroboration), LIMITS.jobTitle);
   const jobTitle =
     (posting ? clamp(firstString(posting["title"]), LIMITS.jobTitle) : undefined) ??
     siteTitle ??
@@ -768,6 +791,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
             jobTitle,
             titleSource === "generic_fallback" ? "strong" : "exact",
             titleSource,
+            titleSource === "generic_fallback" ? fallbackCorroboration : undefined,
           ),
     location:
       site === "workday"
@@ -791,7 +815,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
           )
         : established(
             description.text,
-            "exact",
+            descriptionSource === "generic_metadata" ? "strong" : "exact",
             descriptionSource,
           ),
     jobUrl: established(url, "exact", "posting_url"),
@@ -871,6 +895,9 @@ export function extractionDiagnostics(
         state: field.state,
         confidence: field.confidence,
         source: field.source,
+        ...(field.corroboratedBy
+          ? { corroboratedBy: field.corroboratedBy }
+          : {}),
         ...(field.rejected ? { rejected: field.rejected } : {}),
         ...(includeLength ? { valueLength: field.value.length } : {}),
       };
