@@ -30,7 +30,7 @@ describe("with nothing connected", () => {
     render(<ConnectedClients clients={[]} />);
 
     expect(
-      screen.getByText(/no assistants connected yet/i),
+      screen.getByText(/nothing connected yet/i),
     ).toBeInTheDocument();
   });
 
@@ -41,7 +41,7 @@ describe("with nothing connected", () => {
   });
 });
 
-describe("with connected assistants", () => {
+describe("with connections", () => {
   it("names each one so the student can recognize it", () => {
     render(<ConnectedClients clients={[CLAUDE, OTHER]} />);
 
@@ -49,7 +49,7 @@ describe("with connected assistants", () => {
     expect(screen.getByText("Another Assistant")).toBeInTheDocument();
   });
 
-  it("gives every assistant its own disconnect control", () => {
+  it("gives every connection its own disconnect control", () => {
     render(<ConnectedClients clients={[CLAUDE, OTHER]} />);
 
     expect(
@@ -60,7 +60,7 @@ describe("with connected assistants", () => {
     ).toBeInTheDocument();
   });
 
-  it("submits the client id of the assistant being disconnected", () => {
+  it("submits the client id of the connection being disconnected", () => {
     const { container } = render(<ConnectedClients clients={[CLAUDE, OTHER]} />);
 
     const values = [...container.querySelectorAll('input[name="clientId"]')].map(
@@ -76,7 +76,7 @@ describe("with connected assistants", () => {
     expect(screen.getByText(/^Connected /)).toBeInTheDocument();
   });
 
-  it("still lists an assistant whose grant date is unusable", () => {
+  it("still lists a connection whose grant date is unusable", () => {
     render(
       <ConnectedClients clients={[{ ...CLAUDE, grantedAt: "not a date" }]} />,
     );
@@ -87,7 +87,7 @@ describe("with connected assistants", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps each assistant's control inside its own row", () => {
+  it("keeps each connection's control inside its own row", () => {
     render(<ConnectedClients clients={[CLAUDE, OTHER]} />);
 
     const rows = screen.getAllByRole("listitem");

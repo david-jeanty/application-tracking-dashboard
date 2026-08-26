@@ -1,0 +1,227 @@
+/*
+ * The popup is 360px wide and has to hold a company name of any length, a role
+ * title of any length, three inputs, a status control, and an outcome. Almost
+ * every rule below exists to keep that from clipping, overflowing sideways, or
+ * shrinking a control to something a trackpad cannot hit.
+ *
+ * Colours follow the browser's own light/dark preference rather than a fixed
+ * palette: a popup that stays white in a dark browser is the one bright
+ * rectangle on the screen.
+ */
+
+:root {
+  --background: #ffffff;
+  --surface-muted: #f6f6f5;
+  --foreground: #1b1b19;
+  --foreground-secondary: #55534e;
+  --foreground-muted: #78756e;
+  --border: #dedcd7;
+  --accent: #1f5f4f;
+  --accent-foreground: #ffffff;
+  --problem: #9b2c2c;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #191917;
+    --surface-muted: #222220;
+    --foreground: #f2f1ee;
+    --foreground-secondary: #bdbab3;
+    --foreground-muted: #918e87;
+    --border: #38372f;
+    --accent: #7bc4ac;
+    --accent-foreground: #10231d;
+    --problem: #f0a5a5;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.shell {
+  /* A minimum rather than a fixed width, so a long word can widen the popup
+     instead of being cut in half by it. */
+  min-width: 320px;
+  width: 340px;
+  max-width: 100%;
+  padding: 14px 16px 16px;
+}
+
+.shell__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.wordmark {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--foreground-muted);
+}
+
+.announcement {
+  margin: 0;
+  /* Visually hidden, still announced. The visible states say the same things
+     in their own words; this exists so they are spoken as they change. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.muted {
+  color: var(--foreground-secondary);
+}
+
+.note {
+  margin: -2px 0 0;
+  font-size: 12.5px;
+  color: var(--foreground-muted);
+}
+
+.problem {
+  color: var(--problem);
+}
+
+.problem-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--problem);
+  font-size: 12.5px;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.field__label {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--foreground-muted);
+}
+
+.field__input {
+  /* 36px keeps the control comfortably clickable. A popup is small; the things
+     inside it should not be. */
+  min-height: 36px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+
+.field__input--strong {
+  font-weight: 600;
+}
+
+.field__input:focus-visible,
+.button:focus-visible,
+.link-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--accent-foreground);
+  font: inherit;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.button--secondary {
+  background: var(--surface-muted);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.link-button {
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--foreground-muted);
+  font: inherit;
+  font-size: 12.5px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.saved__headline {
+  font-weight: 600;
+}
+
+.saved__company {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.saved__title {
+  color: var(--foreground-secondary);
+}

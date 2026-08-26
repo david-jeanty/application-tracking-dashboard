@@ -91,7 +91,14 @@ test("the privacy page is public and linked from the homepage footer", async ({
       name: "Your application records stay yours.",
     }),
   ).toBeVisible();
-  await expect(page.getByText(/extension is not publicly released/i)).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: "The JobTrack Capture browser extension",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/installed locally as an unpacked extension/i),
+  ).toBeVisible();
 });
 
 test("a visitor can reach the demo from the homepage and the auth pages", async ({

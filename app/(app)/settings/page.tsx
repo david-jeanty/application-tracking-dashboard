@@ -27,14 +27,23 @@ const EXAMPLE_PROMPTS = [
   "Set my next action to follow up next Friday.",
 ];
 
+/**
+ * Written about a connection rather than about an assistant.
+ *
+ * Two different things can appear in the authorized list now — an AI assistant
+ * connected over MCP, and the JobTrack Capture browser extension — and Supabase
+ * reports only a client's name and id, not what kind of client it is. Rather
+ * than guessing from the name, the copy says the one thing that is true of
+ * every entry.
+ */
 const DISCONNECT_MESSAGES = {
   done: {
     tone: "success",
-    text: "That assistant has been disconnected. It will need your approval again before it can reach your applications.",
+    text: "That connection has been removed. It will need your approval again before it can reach your applications.",
   },
   error: {
     tone: "error",
-    text: "That assistant could not be disconnected. Try again in a moment.",
+    text: "That connection could not be removed. Try again in a moment.",
   },
   invalid: {
     tone: "error",
@@ -105,30 +114,39 @@ export default async function SettingsPage({
           Settings
         </h1>
         <p className="mt-2 max-w-2xl text-[15px] text-foreground-secondary">
-          Personalize JobTrack and manage connected assistants.
+          Personalize JobTrack and manage what you have connected to it.
         </p>
       </div>
 
       <AppearanceSettings />
 
-      <section aria-labelledby="assistants-heading" className="space-y-8">
+      <section aria-labelledby="connections-heading" className="space-y-8">
         <div>
           <div className="border-b border-border pb-2">
             <h2
               className="text-[17px] font-medium text-foreground"
-              id="assistants-heading"
+              id="connections-heading"
             >
-              Connected assistant
+              Connections
             </h2>
           </div>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-foreground-secondary">
-            JobTrack works completely on its own. If you already use an AI
-            assistant, you can also let it read and update your applications, so
-            you stop retyping what you just discussed with it.
+            JobTrack works completely on its own. Two optional things can connect
+            to it: an AI assistant you already use, and the JobTrack Capture
+            browser extension. Both act on your applications only after you
+            authorize them, and you can remove either at any time.
           </p>
         </div>
 
         {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
+
+        <Subsection title="AI assistant">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
+            If you already use an AI assistant, you can let it read and update
+            your applications, so you stop retyping what you just discussed with
+            it. Everything below this heading is about that connection.
+          </p>
+        </Subsection>
 
         <Subsection title="How this works">
           <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
@@ -221,17 +239,32 @@ export default async function SettingsPage({
           </Subsection>
         </div>
 
-        <Subsection title="Assistants you have connected">
+        <Subsection title="Browser extension">
           <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
-            Disconnecting takes access away immediately. Your applications are
-            not affected — only the assistant&apos;s permission to reach them.
+            JobTrack Capture saves the job posting you are looking at into your
+            tracker. You open it yourself on a posting you want to keep; it reads
+            that page then, and no other. It provides no AI of its own — it fills
+            in what the posting states, you confirm it, and the record is saved
+            here.
+          </p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-foreground-secondary">
+            It connects the same way an assistant does, so it appears in the list
+            below as its own connection and can be removed on its own.
+          </p>
+        </Subsection>
+
+        <Subsection title="Authorized connections">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
+            Removing a connection takes its access away immediately. Your
+            applications are not affected — only that connection&apos;s
+            permission to reach them.
           </p>
 
           <div className="mt-4">
             {grantsError ? (
               <Notice tone="error">
-                Your connected assistants could not be loaded. Refresh the page
-                to try again.
+                Your connections could not be loaded. Refresh the page to try
+                again.
               </Notice>
             ) : (
               <ConnectedClients clients={clients} />

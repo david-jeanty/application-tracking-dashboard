@@ -17,7 +17,11 @@
     "test:db": "supabase test db",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "extension:typecheck": "tsc --noEmit -p extension/tsconfig.test.json",
+    "extension:test": "vitest run --config extension/vitest.config.ts",
+    "extension:build": "tsc -p extension/tsconfig.json",
+    "extension:check": "npm run extension:typecheck && npm run extension:test && npm run extension:build",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run extension:check"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "2.0.0",

@@ -51,18 +51,18 @@ describe("the shape of the page", () => {
     expect(headings).toHaveLength(1);
     expect(headings[0]).toHaveTextContent("Settings");
     expect(
-      screen.getByText("Personalize JobTrack and manage connected assistants."),
+      screen.getByText("Personalize JobTrack and manage what you have connected to it."),
     ).toBeInTheDocument();
   });
 
-  it("keeps Appearance and the connected-assistant section", async () => {
+  it("keeps Appearance and the connections section", async () => {
     render(await renderPage());
 
     expect(
       screen.getByRole("heading", { level: 2, name: "Appearance" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 2, name: "Connected assistant" }),
+      screen.getByRole("heading", { level: 2, name: "Connections" }),
     ).toBeInTheDocument();
   });
 
@@ -70,11 +70,13 @@ describe("the shape of the page", () => {
     render(await renderPage());
 
     for (const title of [
+      "AI assistant",
       "How this works",
       "Setting it up in Claude",
       "Try saying",
       "What a connected assistant can do",
-      "Assistants you have connected",
+      "Browser extension",
+      "Authorized connections",
     ]) {
       expect(
         screen.getByRole("heading", { level: 3, name: title }),
@@ -181,7 +183,7 @@ describe("the connected assistants", () => {
   it("explains an empty list instead of showing nothing", async () => {
     render(await renderPage());
 
-    expect(screen.getByText("No assistants connected yet")).toBeInTheDocument();
+    expect(screen.getByText("Nothing connected yet")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Disconnect/ }),
     ).not.toBeInTheDocument();
@@ -191,10 +193,10 @@ describe("the connected assistants", () => {
     render(await renderPage({ fails: true }));
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Your connected assistants could not be loaded.",
+      "Your connections could not be loaded.",
     );
     expect(
-      screen.queryByText("No assistants connected yet"),
+      screen.queryByText("Nothing connected yet"),
     ).not.toBeInTheDocument();
   });
 
@@ -202,7 +204,51 @@ describe("the connected assistants", () => {
     render(await renderPage({ disconnect: "done" }));
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "That assistant has been disconnected.",
+      "That connection has been removed.",
     );
+  });
+
+  /*
+   * The browser extension authorizes through the same Supabase OAuth client
+   * list as an assistant does, and Supabase reports only a name. These two
+   * cases are why the copy around the list stopped saying "assistant": one
+   * heading now has to be true of both things a student can connect.
+   */
+  it("names the browser extension without calling it an AI assistant", async () => {
+    render(await renderPage());
+
+    const extension = screen
+      .getByRole("heading", { level: 3, name: "Browser extension" })
+      .closest("div");
+
+    expect(extension).toHaveTextContent("JobTrack Capture");
+    expect(extension).toHaveTextContent("provides no AI of its own");
+  });
+
+  it("lists an extension grant beside an assistant grant, uncategorized", async () => {
+    render(
+      await renderPage({
+        grants: [
+          {
+            client: { id: "11111111-1111-4111-8111-111111111111", name: "Claude" },
+            granted_at: "2026-08-22T14:30:00.000Z",
+          },
+          {
+            client: {
+              id: "22222222-2222-4222-8222-222222222222",
+              name: "JobTrack Capture",
+            },
+            granted_at: "2026-08-26T09:00:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Disconnect Claude" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Disconnect JobTrack Capture" }),
+    ).toBeInTheDocument();
   });
 });
