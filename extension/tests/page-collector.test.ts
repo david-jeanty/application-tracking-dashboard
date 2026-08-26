@@ -33,6 +33,16 @@ function preloadCard(
   </article>`;
 }
 
+function searchResultsHeader(jobId: string, title: string) {
+  return `<div>
+    <div><div aria-label="Company, Enterprise.">Enterprise</div></div>
+    <div><div data-display-contents="true"><p><a href="/jobs/view/${jobId}/?alternateChannel=search">${title}</a></p></div></div>
+    <div></div>
+    <p>Dollard-des-Ormeaux, QC · Reposted 2 weeks ago · 29 people clicked apply</p>
+    <div>Promoted by hirer · Responses managed off LinkedIn</div>
+  </div>`;
+}
+
 describe("the injected collector", () => {
   it("takes structured data, the canonical link, and standard metadata", () => {
     const signals = read(
@@ -346,6 +356,56 @@ describe("the injected collector", () => {
         ),
       ).siteFields?.["location"],
     ).toBe("St. John's (NL)");
+  });
+
+  it("reads the exact Enterprise search-results header, not its rail", () => {
+    const jobId = "4432403970";
+    document.documentElement.innerHTML = `<head>
+      <link rel="canonical" href="https://www.linkedin.com/jobs/view/${jobId}/" />
+    </head><body><main>
+      <aside>
+        <div aria-label="Company, Neighbour Corp.">Neighbour Corp</div>
+        <a href="/jobs/view/4000000000/">Neighbouring rail title</a>
+        <p>Toronto, ON · 10 applicants</p>
+      </aside>
+      ${searchResultsHeader(jobId, "Management Trainee Internship - Fall 2026")}
+      <div>On-site</div>
+      <section><div>Premium furniture</div><h2>About the job</h2><div data-testid="expandable-text-box"><p>Enterprise description</p></div></section>
+    </main></body>`;
+
+    const signals = collectPageSignals(
+      readRulesFor(
+        `https://www.linkedin.com/jobs/search-results/?currentJobId=${jobId}`,
+      ),
+    );
+
+    expect(signals.siteFields).toEqual({
+      title: "Management Trainee Internship - Fall 2026",
+      company: "Enterprise",
+      location: "Dollard-des-Ormeaux, QC",
+      description: "<p>Enterprise description</p>",
+    });
+    expect(signals.canonicalUrl).toBe(
+      `https://www.linkedin.com/jobs/view/${jobId}/`,
+    );
+    expect(JSON.stringify(signals.siteFields)).not.toContain("Neighbour");
+    expect(JSON.stringify(signals.siteFields)).not.toContain("Reposted");
+    expect(JSON.stringify(signals.siteFields)).not.toContain("29 people");
+  });
+
+  it("requires an exact selected-job link for the search-results fallback", () => {
+    document.documentElement.innerHTML = `<head></head><body>
+      ${searchResultsHeader("4000000000", "Wrong rail job")}
+      <div aria-label="Company, Wrong Job Company.">Wrong Job Company</div>
+    </body>`;
+
+    expect(
+      collectPageSignals(
+        readRulesFor(
+          "https://www.linkedin.com/jobs/search-results/?currentJobId=4432403970",
+        ),
+      ).siteFields,
+    ).toBeUndefined();
   });
 
   it("does not use a wrong preload marker when no selected root exists", () => {

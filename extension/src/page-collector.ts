@@ -472,7 +472,127 @@ export function collectPageSignals(
       const root =
         document.querySelector(`[data-job-id="${selected}"]`) ??
         document.querySelector(`[data-occludable-job-id="${selected}"]`);
-      if (!root) return;
+      if (!root) {
+        /**
+         * Search-results detail has neither a Primary-content landmark nor a
+         * selected-card marker. Its current-job link and labelled employer do
+         * still share a compact header, which establishes the posting without
+         * consulting the surrounding results rail.
+         */
+        const exactLinks = Array.from(
+          document.querySelectorAll('a[href*="/jobs/view/"]'),
+        ).filter((link) => {
+          const id = POSTING_LINK_PATTERN.exec(
+            link.getAttribute("href") ?? "",
+          )?.[1];
+          return id === selected;
+        });
+
+        const companies = Array.from(
+          document.querySelectorAll("[aria-label]"),
+        )
+          .slice(0, MAXIMUM_LABELLED_CANDIDATES)
+          .map((element) => ({ element, name: companyNameFrom(element) }))
+          .filter(
+            (
+              candidate,
+            ): candidate is { element: Element; name: string } =>
+              Boolean(candidate.name),
+          );
+
+        function boundedCommonHeader(
+          link: Element,
+          company: Element,
+        ): { header: Element; distance: number } | null {
+          const linkAncestors: Element[] = [];
+          let node: Element | null = link.parentElement;
+
+          for (
+            let depth = 0;
+            node && node !== document.body && depth < MAXIMUM_ANCESTOR_DEPTH;
+            depth += 1
+          ) {
+            linkAncestors.push(node);
+            node = node.parentElement;
+          }
+
+          node = company.parentElement;
+          for (
+            let depth = 1;
+            node && node !== document.body && depth < MAXIMUM_ANCESTOR_DEPTH;
+            depth += 1
+          ) {
+            const linkDistance = linkAncestors.indexOf(node) + 1;
+            if (linkDistance > 0) {
+              return { header: node, distance: linkDistance + depth };
+            }
+            node = node.parentElement;
+          }
+
+          return null;
+        }
+
+        const headers: Array<{
+          link: Element;
+          company: { element: Element; name: string };
+          header: Element;
+          distance: number;
+        }> = [];
+
+        for (const link of exactLinks) {
+          for (const company of companies) {
+            const relation = boundedCommonHeader(link, company.element);
+            if (relation) {
+              headers.push({ link, company, ...relation });
+            }
+          }
+        }
+
+        // A result rail can have a larger common ancestor with the selected
+        // link. Only one *closest* bounded relationship establishes the
+        // header; a tie is ambiguous and deliberately stays blank.
+        const shortestDistance = Math.min(
+          ...headers.map((relation) => relation.distance),
+        );
+        const closestHeaders = headers.filter(
+          (relation) => relation.distance === shortestDistance,
+        );
+        if (closestHeaders.length !== 1) return;
+
+        const closest = closestHeaders[0];
+        if (!closest) return;
+        const { link, company, header } = closest;
+        const title = trimmedText(link);
+        if (
+          !title ||
+          title.length > MAXIMUM_TITLE_CHARACTERS ||
+          title.includes("\n")
+        ) {
+          return;
+        }
+
+        siteFields["title"] = clamp(title, MAXIMUM_FIELD_CHARACTERS);
+        siteFields["company"] = clamp(company.name, MAXIMUM_FIELD_CHARACTERS);
+
+        const locationLine = Array.from(header.children).find(
+          (child) => child.tagName === "P",
+        );
+        const rawLocation = trimmedText(locationLine ?? null);
+        const location = rawLocation.split("·", 1)[0]?.trim() ?? "";
+        if (
+          location &&
+          location.length <= MAXIMUM_LOCATION_CHARACTERS &&
+          !location.includes("\n")
+        ) {
+          siteFields["location"] = clamp(location, MAXIMUM_FIELD_CHARACTERS);
+        }
+
+        const [about] = aboutTheJobHeadings();
+        const description = about ? descriptionUnder([about]) : undefined;
+        if (description) siteFields["description"] = description;
+
+        return;
+      }
 
       const exactPostingLink = Array.from(
         root.querySelectorAll('a[href*="/jobs/view/"]'),
