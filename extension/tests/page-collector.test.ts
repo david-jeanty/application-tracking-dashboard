@@ -235,6 +235,82 @@ describe("the injected collector", () => {
     expect(someoneElse.siteFields).toBeUndefined();
   });
 
+  /** The selected `/preload/` card has no Primary-content landmark. */
+  it("reads the selected GE preload card without leaking a neighbouring job", () => {
+    document.documentElement.innerHTML = `<head></head><body>
+      <article data-job-id="4000000000"><a href="/jobs/view/4000000000/"><span>Wrong title</span><span>Wrong Co</span><span>Elsewhere, ON (Remote)</span></a></article>
+      <article data-job-id="4459003223">
+        <a href="/jobs/view/4459003223/?alternateChannel=search" aria-label="GE Vernova Controls Product Management Intern - Summer 2027 with verification">
+          <span>GE Vernova Controls Product Management Intern - Summer 2027<strong>GE Vernova Controls Product Management Intern - Summer 2027</strong></span>
+          <span>GE Vernova</span>
+          <span>Greenville, SC (On-site)</span>
+          <span>Alumni at GE</span>
+        </a>
+      </article>
+      <section id="job-details"><h2> About the job </h2><p>GE description</p></section>
+      <article>Arbitrary iframe text must not become a description.</article>
+    </body>`;
+
+    const signals = collectPageSignals(
+      readRulesFor(
+        "https://www.linkedin.com/jobs/search/?currentJobId=4459003223",
+      ),
+    );
+
+    expect(signals.siteFields).toEqual({
+      title: "GE Vernova Controls Product Management Intern - Summer 2027",
+      company: "GE Vernova",
+      location: "Greenville, SC",
+      description: "<p>GE description</p>",
+    });
+    expect(JSON.stringify(signals.siteFields)).not.toContain("verification");
+    expect(JSON.stringify(signals.siteFields)).not.toContain("Alumni");
+  });
+
+  it("reads the selected IBM preload card and fails blank without job details", () => {
+    document.documentElement.innerHTML = `<head></head><body>
+      <article data-job-id="4446257399">
+        <a href="/jobs/view/4446257399/" aria-label="Senior Managing Consultant SAP HANA SD OTC with verification">
+          <span>Senior Managing Consultant SAP HANA SD OTC<strong>Senior Managing Consultant SAP HANA SD OTC</strong></span>
+          <span>IBM</span>
+          <span>Vancouver, BC (Hybrid)</span>
+        </a>
+      </article>
+      <div data-occludable-job-id="4470000002"><a href="/jobs/view/4470000002/"><span>Wrong company</span></a></div>
+      <div>Arbitrary iframe description</div>
+    </body>`;
+
+    const signals = collectPageSignals(
+      readRulesFor(
+        "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4446257399&referenceJobId=4443429701",
+      ),
+    );
+
+    expect(signals.siteFields).toEqual({
+      title: "Senior Managing Consultant SAP HANA SD OTC",
+      company: "IBM",
+      location: "Vancouver, BC",
+    });
+    expect(JSON.stringify(signals)).not.toContain("Arbitrary iframe description");
+  });
+
+  it("does not use a wrong preload marker when no selected root exists", () => {
+    document.documentElement.innerHTML = `<head></head><body>
+      <article data-job-id="4446257390">
+        <a href="/jobs/view/4446257399/"><span>Wrongly marked job</span><span>Wrong Co</span><span>Ottawa, ON (Remote)</span></a>
+      </article>
+      <section id="job-details"><h2>About the job</h2><p>Wrong description</p></section>
+    </body>`;
+
+    expect(
+      collectPageSignals(
+        readRulesFor(
+          "https://www.linkedin.com/jobs/search/?currentJobId=4446257399",
+        ),
+      ).siteFields,
+    ).toBeUndefined();
+  });
+
   it("is self-contained, because Chrome injects it as source text", () => {
     const source = collectPageSignals.toString();
 

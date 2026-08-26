@@ -458,8 +458,103 @@ export function collectPageSignals(
       found = document.querySelector(selector);
       if (found) break;
     }
-    // No bounded detail region, nothing to be sure about. Blank.
-    if (!found) return;
+    /**
+     * LinkedIn's same-origin `/preload/` document has no Primary-content
+     * region. It does, however, mark the selected card with the same
+     * current-job id the top-level route supplied to this collector. This is
+     * deliberately structural, rather than an address check: any document
+     * without a Primary-content region gets this path only when it can name
+     * the selected job itself.
+     */
+    if (!found) {
+      if (!selected) return;
+
+      const root =
+        document.querySelector(`[data-job-id="${selected}"]`) ??
+        document.querySelector(`[data-occludable-job-id="${selected}"]`);
+      if (!root) return;
+
+      const exactPostingLink = Array.from(
+        root.querySelectorAll('a[href*="/jobs/view/"]'),
+      ).find((link) => {
+        const href = link.getAttribute("href") ?? "";
+        const id = POSTING_LINK_PATTERN.exec(href)?.[1];
+        return id === selected;
+      });
+      if (!exactPostingLink) return;
+
+      // The accessible name includes LinkedIn's "with verification" suffix.
+      // A clean text descendant is the on-screen title and avoids persisting
+      // that presentation-only annotation.
+      const labelledTitle = (exactPostingLink.getAttribute("aria-label") ?? "")
+        .replace(/\s+with verification\s*$/i, "")
+        .trim();
+      const titleNode = Array.from(
+        exactPostingLink.querySelectorAll("span, strong"),
+      ).find((candidate) => {
+        const value = trimmedText(candidate);
+        return (
+          !candidate.querySelector("span, strong") &&
+          Boolean(value) &&
+          value.length <= MAXIMUM_TITLE_CHARACTERS &&
+          !value.includes("\n") &&
+          !/\bwith verification\b/i.test(value) &&
+          (!labelledTitle || value === labelledTitle)
+        );
+      });
+      const title = titleNode ? trimmedText(titleNode) : "";
+      if (!title) return;
+      siteFields["title"] = clamp(title, MAXIMUM_FIELD_CHARACTERS);
+
+      // The selected card presents title, company, then location. Restricting
+      // the walk to spans in the exact posting link means no neighbouring card
+      // or global iframe text can fill a field.
+      const metadata = Array.from(
+        exactPostingLink.querySelectorAll("span"),
+      )
+        .filter((candidate) => !candidate.querySelector("span, strong"))
+        .map((candidate) => trimmedText(candidate))
+        .filter(
+          (value) =>
+            value &&
+            value.length <= MAXIMUM_LOCATION_CHARACTERS &&
+            !value.includes("\n") &&
+            value !== title,
+        );
+
+      const [company, rawLocation] = metadata;
+      if (company) {
+        siteFields["company"] = clamp(company, MAXIMUM_FIELD_CHARACTERS);
+      }
+      if (rawLocation) {
+        const location = rawLocation
+          .replace(/\s+\((?:on-site|hybrid|remote)\)\s*$/i, "")
+          .trim();
+        if (location) {
+          siteFields["location"] = clamp(location, MAXIMUM_FIELD_CHARACTERS);
+        }
+      }
+
+      const details = document.querySelector("#job-details");
+      const about = details
+        ? Array.from(details.querySelectorAll("h2")).find((heading) =>
+            ABOUT_HEADING_PATTERN.test(trimmedText(heading)),
+          )
+        : undefined;
+      if (details && about) {
+        // Preserve the bounded rich description, excluding only its label.
+        const copy = details.cloneNode(true) as Element;
+        for (const heading of Array.from(copy.querySelectorAll("h2"))) {
+          if (ABOUT_HEADING_PATTERN.test(trimmedText(heading))) heading.remove();
+        }
+        const description = markupOf(copy);
+        if (description) {
+          siteFields["description"] = description;
+        }
+      }
+
+      return;
+    }
 
     const region = found;
 
