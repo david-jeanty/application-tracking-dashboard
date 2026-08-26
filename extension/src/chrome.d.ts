@@ -68,9 +68,16 @@ declare namespace chrome {
      * `args` are structured-cloned into the page, which is why the injected
      * function takes its site selectors as a parameter rather than closing
      * over them: Chrome serializes the function body alone.
+     *
+     * `allFrames` and `frameIds` are the two ways to say "not just the main
+     * frame", and LinkedIn is why either is here: a split-pane tab can render
+     * the posting the student is reading inside a same-origin iframe. Neither
+     * widens what the extension may touch — `activeTab` still grants one tab,
+     * once, and a cross-origin frame stays unreadable. They only say which of
+     * that tab's own documents the single injected read visits.
      */
     function executeScript<Result>(injection: {
-      target: { tabId: number };
+      target: { tabId: number; allFrames?: boolean; frameIds?: number[] };
       func: (...args: never[]) => Result;
       args?: unknown[];
       world?: "ISOLATED" | "MAIN";

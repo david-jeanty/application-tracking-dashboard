@@ -1,7 +1,15 @@
 import { buildCaptureRecord } from "./capture.js";
 import { extractJob } from "./extractor.js";
+import {
+  chooseLinkedInFrame,
+  planLinkedInRead,
+  probeLinkedInFrame,
+  withTopLevelIdentity,
+  type LinkedInFrameEvidence,
+  type LinkedInFrameProbe,
+} from "./linkedin-frames.js";
 import { collectPageSignals } from "./page-collector.js";
-import { readRulesFor } from "./sites.js";
+import { readRulesFor, type PageReadRules } from "./sites.js";
 import { render } from "./popup-render.js";
 import {
   canSave,
@@ -43,16 +51,84 @@ async function ask<T>(message: unknown): Promise<T | undefined> {
 }
 
 /**
+ * Runs the collector in one document of the tab, once.
+ *
+ * `world: "ISOLATED"` is the point of this call's shape: the extension reads
+ * the page's DOM without sharing a JavaScript context with it, so page code
+ * cannot reach this function or anything it returns.
+ */
+async function collectFrom(
+  tabId: number,
+  rules: PageReadRules,
+  frameId?: number,
+): Promise<PageSignals | undefined> {
+  const results = await chrome.scripting.executeScript<PageSignals>({
+    target:
+      typeof frameId === "number"
+        ? { tabId, frameIds: [frameId] }
+        : { tabId },
+    func: collectPageSignals,
+    args: [rules],
+    world: "ISOLATED",
+  });
+
+  return results[0]?.result;
+}
+
+/**
+ * Asks every same-origin document in the tab what it knows about one posting.
+ *
+ * The probe returns counts and booleans, so this is a far smaller act than
+ * reading every frame: the extension learns which document to read, not what
+ * any of the other documents said. A cross-origin frame is not readable and
+ * simply does not answer.
+ *
+ * A probe that fails outright answers with nothing rather than failing the
+ * capture. "No frame established the posting" is already a case each route has
+ * a safe answer for, and a broken probe should land in that case rather than
+ * turn a page the extension could have read into an error.
+ */
+async function probeFrames(
+  tabId: number,
+  jobId: string,
+): Promise<LinkedInFrameProbe[]> {
+  let results: chrome.scripting.InjectionResult<LinkedInFrameEvidence>[];
+  try {
+    results = await chrome.scripting.executeScript<LinkedInFrameEvidence>({
+      target: { tabId, allFrames: true },
+      func: probeLinkedInFrame,
+      args: [jobId],
+      world: "ISOLATED",
+    });
+  } catch {
+    return [];
+  }
+
+  return results.flatMap((result) =>
+    result.result ? [{ frameId: result.frameId, ...result.result }] : [],
+  );
+}
+
+/**
  * Reads the current tab, once, because the student asked.
  *
  * `chrome.scripting.executeScript` rejects on pages an extension may never
  * touch — `chrome://` pages, the Web Store, a PDF viewer, a file URL without
  * permission — and that is reported as "this page cannot be read" rather than
  * as a failure of the posting.
+ *
+ * On a LinkedIn split pane there is a step before the read: which of the tab's
+ * documents is drawing the posting. The current posting can be inside a
+ * same-origin `/preload/` iframe while the top document still holds the
+ * previous one, and injecting into the main frame — which is what this function
+ * used to do, unconditionally — read a page the student could not see.
  */
 async function readActivePage(): Promise<ExtractedJob | undefined> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (typeof tab?.id !== "number") return undefined;
+
+  const tabId = tab.id;
+  const tabUrl = tab.url;
 
   // Which named read path applies is decided here, from the address, and
   // handed to the collector as data. `sites.ts` stays the one place any site
@@ -62,21 +138,41 @@ async function readActivePage(): Promise<ExtractedJob | undefined> {
   // `activeTab` supplies the tab's URL once the student has invoked the
   // extension. If it is ever absent the list is empty, nothing site-specific
   // is collected, and the result is blanks rather than a guess.
-  const rules = tab.url ? readRulesFor(tab.url) : { fields: [] };
+  const rules = tabUrl ? readRulesFor(tabUrl) : { fields: [] };
 
-  const results = await chrome.scripting.executeScript<PageSignals>({
-    target: { tabId: tab.id },
-    func: collectPageSignals,
-    args: [rules],
-    // The isolated world: the extension reads the page's DOM without sharing a
-    // JavaScript context with it, so page code cannot reach this function or
-    // anything it returns.
-    world: "ISOLATED",
-  });
+  if (!rules.resolveFrame || !tabUrl) {
+    const signals = await collectFrom(tabId, rules);
 
-  const signals = results[0]?.result;
+    return signals ? extractJob(signals) : undefined;
+  }
 
-  return signals ? extractJob(signals) : undefined;
+  /**
+   * The same page, read with no site strategy at all.
+   *
+   * What "fail blank" means in practice: the fields stay empty, and the
+   * posting's identity — rebuilt from the top-level `currentJobId` — still
+   * reaches the record, so an empty capture is filed under the right job
+   * rather than becoming a second failure.
+   */
+  const withoutAStrategy: PageReadRules = {
+    fields: rules.fields,
+    ...(rules.jobId ? { jobId: rules.jobId } : {}),
+  };
+
+  const plan = planLinkedInRead(
+    chooseLinkedInFrame(await probeFrames(tabId, rules.resolveFrame.jobId)),
+    rules.resolveFrame.unresolved,
+  );
+
+  const signals = await collectFrom(
+    tabId,
+    plan.strategy ? rules : withoutAStrategy,
+    plan.frameId,
+  );
+
+  // Identity belongs to the tab. Fields may have come out of `/preload/`; the
+  // record is filed under the address the student is actually on.
+  return signals ? extractJob(withTopLevelIdentity(signals, tabUrl)) : undefined;
 }
 
 async function startExtraction(): Promise<void> {

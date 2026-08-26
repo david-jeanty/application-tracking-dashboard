@@ -1,6 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { extractJob } from "../src/extractor.js";
-import { canonicalPostingUrl, readRulesFor, siteFor } from "../src/sites.js";
+import {
+  chooseLinkedInFrame,
+  planLinkedInRead,
+  probeLinkedInFrame,
+  withTopLevelIdentity,
+} from "../src/linkedin-frames.js";
+import { collectPageSignals } from "../src/page-collector.js";
+import {
+  canonicalPostingUrl,
+  readRulesFor,
+  siteFor,
+  type PageReadRules,
+} from "../src/sites.js";
+import type { PageSignals } from "../src/types.js";
 import { readSitePage } from "./fixtures.js";
 
 /**
@@ -21,14 +34,16 @@ const LINKEDIN_JOB = "https://www.linkedin.com/jobs/view/4123456789/";
 const LINKEDIN_SEARCH =
   "https://www.linkedin.com/jobs/search/?currentJobId=4123456789&keywords=intern";
 /**
- * The route where the previous posting's markup outlives the transition.
+ * The route where the posting on screen is not in the top document at all.
  *
- * Live evidence: starting on a Microsoft posting and clicking a similar job
- * left the address naming the newly selected job in `currentJobId` and the
- * Microsoft one in `referenceJobId`, while Microsoft's DOM stayed in the page.
+ * Live evidence, captured from a real tab: the address named the IBM posting
+ * the student was reading in `currentJobId`, and the exacare ai posting they
+ * had come from in `referenceJobId`. The top document held exacare's markup,
+ * `JobDetails_*_4443429701` ids and all. The IBM posting — the one on screen —
+ * was rendered inside a same-origin `/preload/?_bprMode=vanilla` iframe.
  */
-const SELECTED_JOB = "4451682967";
-const PREVIOUS_JOB = "4459178947";
+const SELECTED_JOB = "4446257399";
+const PREVIOUS_JOB = "4443429701";
 const LINKEDIN_SIMILAR = `https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=${SELECTED_JOB}&originToLandingJobPostings=${SELECTED_JOB}&referenceJobId=${PREVIOUS_JOB}`;
 const INDEED_JOB = "https://ca.indeed.com/viewjob?jk=a1b2c3d4e5f6a7b8";
 const WORKDAY_JOB =
@@ -64,34 +79,72 @@ describe("recognizing a site", () => {
 
   /**
    * LinkedIn's routes do not all behave alike, and the address says which is
-   * which. Only the route that carries a reference job needs the stricter read.
+   * which. A job page is one posting at its own address; everything else is a
+   * split pane, where the posting on screen may not even be in the document
+   * `executeScript` reaches by default.
    */
-  it("keeps the verified LinkedIn routes on the read that works for them", () => {
+  it("keeps a job page on the read that is verified for it", () => {
+    const rules = readRulesFor(LINKEDIN_JOB);
+
+    expect(rules.strategy).toBe("linkedin-job-detail");
+    // Nothing for a second document to disagree with, so no frame is resolved.
+    expect(rules.resolveFrame).toBeUndefined();
+  });
+
+  it("routes every split pane to the bounded read", () => {
     for (const url of [
-      LINKEDIN_JOB,
       LINKEDIN_SEARCH,
+      LINKEDIN_SIMILAR,
       "https://www.linkedin.com/jobs/search-results/?currentJobId=4123456789",
       "https://www.linkedin.com/jobs/collections/recommended/?currentJobId=4123456789",
-    ]) {
-      expect(readRulesFor(url).strategy).toBe("linkedin-job-detail");
-    }
-  });
-
-  it("routes a page carrying a reference job to the stricter read", () => {
-    for (const url of [
-      LINKEDIN_SIMILAR,
       "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4457185005",
-      "https://www.linkedin.com/jobs/search-results/?currentJobId=4457185005&referenceJobId=4449683666",
     ]) {
-      expect(readRulesFor(url).strategy).toBe("linkedin-similar-jobs");
+      expect(readRulesFor(url).strategy).toBe("linkedin-split-pane");
     }
   });
 
-  it("carries the job the student selected, never the one they came from", () => {
+  /**
+   * The frame probe is corroborated against `currentJobId` and nothing else.
+   * `referenceJobId` names the posting the student came *from*, and asking the
+   * frames about it would select the document showing the job they left.
+   */
+  it("asks the frames about the job the student selected, never the one they came from", () => {
     const rules = readRulesFor(LINKEDIN_SIMILAR);
 
-    expect(rules.strategy).toBe("linkedin-similar-jobs");
     expect(rules.jobId).toBe(SELECTED_JOB);
+    expect(rules.resolveFrame?.jobId).toBe(SELECTED_JOB);
+    expect(rules.resolveFrame?.jobId).not.toBe(PREVIOUS_JOB);
+  });
+
+  /**
+   * The two split-pane routes differ in exactly one respect: what is safe to
+   * read when no frame establishes the posting. Search's top document holds the
+   * selected posting — the live GE Vernova capture proved it. Similar Jobs' top
+   * document holds the previous one, so there is nothing safe to read there.
+   */
+  it("says what is safe to read when no frame establishes the posting", () => {
+    expect(readRulesFor(LINKEDIN_SEARCH).resolveFrame?.unresolved).toBe(
+      "top-document",
+    );
+    expect(
+      readRulesFor(
+        "https://www.linkedin.com/jobs/collections/recommended/?currentJobId=4123456789",
+      ).resolveFrame?.unresolved,
+    ).toBe("top-document");
+
+    expect(readRulesFor(LINKEDIN_SIMILAR).resolveFrame?.unresolved).toBe("blank");
+    expect(
+      readRulesFor(
+        "https://www.linkedin.com/jobs/search-results/?currentJobId=4457185005&referenceJobId=4449683666",
+      ).resolveFrame?.unresolved,
+    ).toBe("blank");
+  });
+
+  it("resolves no frame for an address that names no selected posting", () => {
+    expect(
+      readRulesFor("https://www.linkedin.com/jobs/search/?keywords=intern")
+        .resolveFrame,
+    ).toBeUndefined();
   });
 
   /**
@@ -154,17 +207,40 @@ describe("LinkedIn", () => {
       <span data-testid="expandable-text-box">Unlock hiring insights on Northwind Photonics.</span>
     </section>`;
 
-  /** The results rail beside the pane, and the rest of the page's furniture. */
+  /**
+   * The results rail beside the pane, as LinkedIn actually builds one.
+   *
+   * `data-occludable-job-id` is LinkedIn's own marker for a card in the
+   * virtualized results list, and the card links to the posting it advertises.
+   * Both are load-bearing: they are how the bounded read tells a neighbour's
+   * card apart from the detail pane without resorting to "anything in a list
+   * item is a search result", which on Similar Jobs would discard the employer.
+   */
   const resultsList = `
     <ul>
-      <li class="_ff11aa22" aria-label="Company, Southgate Robotics.">
+      <li class="_ff11aa22" data-occludable-job-id="4470000002"
+          aria-label="Company, Southgate Robotics.">
         <div data-display-contents="true"><p>Sales Development Representative</p></div>
         <p><span>Austin, TX</span></p>
+        <a href="/jobs/view/4470000002/">Sales Development Representative</a>
       </li>
     </ul>`;
 
   const detail = (...parts: string[]) =>
     `<body><main><h1>Jobs</h1>${parts.join("")}</main></body>`;
+
+  /**
+   * The same page as a split pane, which is what a search route really is.
+   *
+   * Everything the bounded read is allowed to see lives inside
+   * `section[aria-label="Primary content"]`; the rail is in there too, because
+   * on the live page it is, and keeping it out is the read's job rather than
+   * the fixture's.
+   */
+  const searchPane = (...parts: string[]) =>
+    `<body><main><h1>Jobs</h1>
+       <section aria-label="Primary content">${parts.join("")}</section>
+     </main></body>`;
 
   it("reads the selected posting from a job detail page", () => {
     const job = extractJob(
@@ -193,7 +269,7 @@ describe("LinkedIn", () => {
   it("files a posting selected inside a search page under its own URL", () => {
     const job = extractJob(
       readSitePage(
-        detail(resultsList, topCard, aboutTheJob),
+        searchPane(resultsList, topCard, aboutTheJob),
         LINKEDIN_SEARCH,
       ),
     );
@@ -211,7 +287,7 @@ describe("LinkedIn", () => {
   });
 
   it("refuses a search page's canonical link in favour of the selected job", () => {
-    const html = `<head><link rel="canonical" href="https://www.linkedin.com/jobs/search/" /></head>${detail(
+    const html = `<head><link rel="canonical" href="https://www.linkedin.com/jobs/search/" /></head>${searchPane(
       topCard,
     )}`;
 
@@ -221,7 +297,7 @@ describe("LinkedIn", () => {
   });
 
   it("leaves everything blank when the detail pane is not there", () => {
-    const html = detail('<div class="_ab12cd34">Recommended for you</div>');
+    const html = searchPane('<div class="_ab12cd34">Recommended for you</div>');
 
     const job = extractJob(readSitePage(html, LINKEDIN_SEARCH));
 
@@ -298,7 +374,7 @@ describe("LinkedIn", () => {
 
     it("never takes the company from a result in the list beside the pane", () => {
       const job = extractJob(
-        readSitePage(detail(resultsList), LINKEDIN_SEARCH),
+        readSitePage(searchPane(resultsList), LINKEDIN_SEARCH),
       );
 
       expect(job.company).toBeUndefined();
@@ -310,7 +386,7 @@ describe("LinkedIn", () => {
   describe("the title and the location, reached only through the company", () => {
     it("takes them from the card the company belongs to, not the page", () => {
       const job = extractJob(
-        readSitePage(detail(resultsList, topCard), LINKEDIN_SEARCH),
+        readSitePage(searchPane(resultsList, topCard), LINKEDIN_SEARCH),
       );
 
       expect(job.jobTitle).toBe(
@@ -402,135 +478,206 @@ describe("LinkedIn", () => {
 });
 
 /**
- * LinkedIn's Similar Jobs route, where the previous posting's markup lingers.
+ * LinkedIn's split panes, where the posting on screen may be in another
+ * document entirely.
  *
- * The failure, as it happened: a student captured a Microsoft posting from
- * `/jobs/view/4459178947/` correctly, clicked a similar job, and watched the
- * screen change to a different employer — while Capture went on returning
- * Microsoft. The address had moved to `currentJobId=4451682967`, but Microsoft's
- * rendered-once DOM was still in the document, and the read took the first
- * labelled company it found.
+ * The failure, as it happened: a student reading an IBM posting on
+ * `/jobs/collections/similar-jobs/?currentJobId=4446257399&referenceJobId=4443429701`
+ * captured the exacare ai posting they had clicked away from. Three theories
+ * about that route were wrong before the real cause turned up, and it is worth
+ * naming all three, because each one produced a plausible fix that shipped:
  *
- * Two earlier theories died here and the fixtures below keep both dead. Naming
- * the stale job in `referenceJobId` does not make it avoidable by parameter —
- * that only says which posting the student came from. And `JobDetails_*_<id>`
- * component ids are no better: they go stale across the same transition, which
- * is why the stale block below carries a perfectly well-formed set of them.
+ * - `referenceJobId` is not "the stale one"; it only says where the student
+ *   came from.
+ * - `JobDetails_*_<id>` component ids are not a statement about what is on
+ *   screen; they go stale across the same transition.
+ * - Rendered geometry cannot decide it either. It cannot see across a frame
+ *   boundary, and on the live search page the selected posting measures `0×0`.
  *
- * What separates the two postings is that only one is drawn. jsdom lays nothing
- * out, so these tests stub `getBoundingClientRect` to model a laid-out page —
- * narrowly, here, rather than by weakening the production check. Anything
- * inside `data-stale="true"` measures zero, exactly as the departed posting
- * does in Chrome.
+ * What was actually true: the top document held the previous posting, and the
+ * posting the student was looking at was inside a same-origin
+ * `/preload/?_bprMode=vanilla` iframe. `chrome.scripting.executeScript` reads
+ * the main frame unless told otherwise, so Capture was reading a document
+ * nobody could see.
+ *
+ * These fixtures therefore model documents rather than one page, and drive the
+ * same three steps the popup does: probe every frame, choose one, read it.
  */
-describe("LinkedIn Similar Jobs", () => {
-  /** Lays the page out: drawn by default, zero-sized inside a stale subtree. */
-  function withRenderedGeometry<T>(run: () => T): T {
-    const original = Element.prototype.getBoundingClientRect;
 
-    Element.prototype.getBoundingClientRect = function (this: Element) {
-      const drawn = !this.closest('[data-stale="true"]');
-      const width = drawn ? 640 : 0;
-      const height = drawn ? 32 : 0;
+/** One frame of a tab: what Chrome would call it, where it is, what is in it. */
+type Frame = { frameId: number; url: string; html: string };
 
-      return {
-        width,
-        height,
-        x: 0,
-        y: 0,
-        top: 0,
-        left: 0,
-        right: width,
-        bottom: height,
-        toJSON: () => ({}),
-      } as DOMRect;
+/**
+ * The whole path the popup takes, with Chrome's frame tree modelled as HTML.
+ *
+ * Deliberately not a reimplementation of the popup's control flow: the decision
+ * itself is `planLinkedInRead`, which is the code that ships. What this adds is
+ * the part a unit test cannot otherwise reach — loading each document, probing
+ * it, and then collecting from whichever one was chosen.
+ */
+function captureAcrossFrames(
+  frames: readonly Frame[],
+  topUrl: string,
+): { plan: ReturnType<typeof planLinkedInRead>; job: ReturnType<typeof extractJob> } {
+  const rules = readRulesFor(topUrl);
+  const resolve = rules.resolveFrame;
+  if (!resolve) throw new Error(`${topUrl} resolves no frame`);
+
+  const probes = frames.map((frame) => {
+    document.documentElement.innerHTML = frame.html;
+
+    // jsdom serves every document from one address, so the frame's own URL is
+    // stated here rather than read — the same way `fixtures.ts` states the page
+    // URL. Everything else is genuinely probed out of the document.
+    return {
+      frameId: frame.frameId,
+      ...probeLinkedInFrame(resolve.jobId),
+      frameUrl: frame.url,
     };
+  });
 
-    try {
-      return run();
-    } finally {
-      Element.prototype.getBoundingClientRect = original;
-    }
+  const plan = planLinkedInRead(chooseLinkedInFrame(probes), resolve.unresolved);
+
+  const target = frames.find((frame) => frame.frameId === (plan.frameId ?? 0));
+  if (!target) throw new Error(`no frame ${plan.frameId} in this tab`);
+
+  // Failing blank means handing the collector no strategy at all: the fields
+  // come back empty, and the posting's identity still reaches the record.
+  const documentRules: PageReadRules = plan.strategy
+    ? rules
+    : { fields: rules.fields, ...(rules.jobId ? { jobId: rules.jobId } : {}) };
+
+  document.documentElement.innerHTML = target.html;
+
+  // Chrome reports the address of the document the read ran in — on this route
+  // the iframe's. Identity comes from the tab instead, or the record is filed
+  // under `/preload/`.
+  const signals: PageSignals = {
+    ...collectPageSignals(documentRules),
+    pageUrl: target.url,
+  };
+
+  return { plan, job: extractJob(withTopLevelIdentity(signals, topUrl)) };
+}
+
+/**
+ * Lays the whole page out at zero, which is what the live search page does.
+ *
+ * On the failing GE Vernova capture every element of the selected posting —
+ * the company, the title, the description, and every ancestor sampled above
+ * them — reported `0×0`. Any read that requires positive geometry returns
+ * nothing on that page, so these fixtures make sure none does.
+ */
+function withZeroGeometry<T>(run: () => T): T {
+  const original = Element.prototype.getBoundingClientRect;
+
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    return {
+      width: 0,
+      height: 0,
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      toJSON: () => ({}),
+    } as DOMRect;
+  };
+
+  try {
+    return run();
+  } finally {
+    Element.prototype.getBoundingClientRect = original;
   }
+}
 
-  /**
-   * One posting's detail surface, as the live route builds it.
-   *
-   * `stale` only changes whether it is drawn — the markup, the component ids
-   * and the labels are identical either way, because in Chrome they are.
-   */
-  const detailSurface = ({
-    jobId,
-    company,
-    title,
-    location,
-    description,
-    stale = false,
-  }: {
-    jobId: string;
-    company: string;
-    title: string;
-    location: string;
-    description: string;
-    stale?: boolean;
-  }) => `
-    <div class="_c753af09"${stale ? ' data-stale="true"' : ""}>
+/** One posting's detail pane, as the live routes build it. */
+function detailPane({
+  jobId,
+  company,
+  title,
+  location,
+  description,
+  identified = true,
+}: {
+  jobId: string;
+  company: string;
+  title: string;
+  location: string;
+  description: string;
+  /** Whether this document carries the attributes that name its own posting. */
+  identified?: boolean;
+}): string {
+  const slug = company.toLowerCase().replace(/\s+/g, "-");
+
+  return `
+    <div class="_c753af09"${identified ? ` data-job-id="${jobId}"` : ""}>
       <div id="JobDetails_ManageJobBanner_${jobId}"></div>
-      <div id="JobDetailsPeopleWhoCanHelpSlot_${jobId}"></div>
       <div class="_a11f22e3">
         <div data-display-contents="true"><p class="_0508a270">${title}</p></div>
         <ul><li>
           <div class="_72963fa6" aria-label="Company, ${company}.">
-            <a href="/company/${company.toLowerCase().replace(/\s+/g, "-")}">${company}</a>
+            <a href="/company/${slug}">${company}</a>
           </div>
         </li></ul>
         <div data-display-contents="true">
           <p><span>${location}</span><span> · 2 days ago · 12 applicants</span></p>
         </div>
-        <button>Easy Apply</button>
+        ${identified ? `<a class="_apply" href="/jobs/view/${jobId}/">Easy Apply</a>` : "<button>Easy Apply</button>"}
       </div>
       <div id="JobDetails_AboutTheJob_${jobId}">
         <h2>About the job</h2>
         <span data-testid="expandable-text-box"><p>${description}</p></span>
       </div>
     </div>`;
+}
 
-  const microsoft = (stale: boolean) =>
-    detailSurface({
-      jobId: PREVIOUS_JOB,
-      company: "Microsoft",
-      title: "Software Engineering Intern",
-      location: "Redmond, WA",
-      description: "Build platform tooling with the Azure team.",
-      stale,
-    });
+/** A card in the virtualized results list, with LinkedIn's own markers on it. */
+function resultCard(jobId: string, company: string, title: string): string {
+  return `
+    <li data-occludable-job-id="${jobId}" aria-label="Company, ${company}.">
+      <div data-display-contents="true"><p>${title}</p></div>
+      <p><span>Somewhere, ON</span></p>
+      <a href="/jobs/view/${jobId}/">${title}</a>
+    </li>`;
+}
 
-  const acadium = (stale = false) =>
-    detailSurface({
-      jobId: SELECTED_JOB,
-      company: "Acadium",
-      title: "Multimedia Marketing Intern",
-      location: "Canada",
-      description: "Produce short-form video for the growth team.",
-      stale,
-    });
+/** A whole LinkedIn jobs UI: a rail of postings, and the pane beside it. */
+function jobsUi(rail: string, pane: string): string {
+  return `<body><main><h1>Jobs</h1>
+     <section aria-label="Primary content">${rail}${pane}</section>
+   </main></body>`;
+}
 
-  /** A third posting, for the second hop. */
-  const northwind = (stale = false) =>
-    detailSurface({
-      jobId: "4460000001",
-      company: "Northwind Photonics",
-      title: "Optics Test Technician",
-      location: "Boise, ID",
-      description: "Run bench measurements on prototype assemblies.",
-      stale,
-    });
+describe("LinkedIn Similar Jobs, across the frame boundary", () => {
+  const exacare = detailPane({
+    jobId: PREVIOUS_JOB,
+    company: "Exacare AI",
+    title: "Solutions Consultant",
+    location: "Remote — Canada",
+    description: "Support onboarding for care providers.",
+  });
 
-  /** The rail the student picks the next posting out of. */
-  const moreJobs = `
+  const ibm = detailPane({
+    jobId: SELECTED_JOB,
+    company: "IBM",
+    title: "Senior Managing Consultant SAP HANA SD OTC",
+    location: "Vancouver, BC",
+    description: "Lead order-to-cash delivery for enterprise clients.",
+  });
+
+  /**
+   * The top document's More jobs rail, which links to the posting the student
+   * clicked — one lone href naming the selected job, in a document that is not
+   * showing it. Believing a single href would choose this frame, and this is
+   * the fixture that says so.
+   */
+  const moreJobsRail = `
     <div id="JobDetailsSimilarJobsSlot_${PREVIOUS_JOB}">
       <h2>More jobs</h2>
       <ul>
+        <li><a href="/jobs/view/${SELECTED_JOB}/">Senior Managing Consultant</a></li>
         <li aria-label="Company, Southgate Robotics.">
           <div data-display-contents="true"><p>Warehouse Coordinator</p></div>
           <p><span>Mississauga, ON</span></p>
@@ -539,105 +686,168 @@ describe("LinkedIn Similar Jobs", () => {
       </ul>
     </div>`;
 
+  /** The results list inside the frame that is drawing the current posting. */
+  const preloadRail = `<ul>
+     ${resultCard(SELECTED_JOB, "IBM", "Senior Managing Consultant SAP HANA SD OTC")}
+     ${resultCard("4470000002", "Southgate Robotics", "Warehouse Coordinator")}
+   </ul>`;
+
   const distractors = `
     <section>
       <h2>Hiring insights</h2>
       <span data-testid="expandable-text-box">Unlock hiring insights with Premium.</span>
-    </section>
-    <div data-display-contents="true"><p>Use AI to assess how you fit</p></div>`;
+    </section>`;
 
-  const page = (...parts: string[]) =>
-    `<body><main><h1>Jobs</h1>
-       <section aria-label="Primary content">${parts.join("")}</section>
-     </main></body>`;
+  /** The top document: the posting the student came from, still intact. */
+  const topFrame: Frame = {
+    frameId: 0,
+    url: LINKEDIN_SIMILAR,
+    html: jobsUi(moreJobsRail, exacare + distractors),
+  };
 
-  const capture = (html: string, url = LINKEDIN_SIMILAR) =>
-    withRenderedGeometry(() => extractJob(readSitePage(html, url)));
+  /** An unrelated same-origin frame, of the sort a big page carries several of. */
+  const trackingFrame: Frame = {
+    frameId: 1,
+    url: "https://www.linkedin.com/li/track",
+    html: "<body><p>Nothing to do with jobs</p></body>",
+  };
+
+  /** The frame the student is actually looking at. */
+  const preloadFrame: Frame = {
+    frameId: 2,
+    url: "https://www.linkedin.com/preload/?_bprMode=vanilla",
+    html: jobsUi(preloadRail, ibm + distractors),
+  };
+
+  const tab = [topFrame, trackingFrame, preloadFrame];
+
+  const capture = (frames: readonly Frame[] = tab, url = LINKEDIN_SIMILAR) =>
+    withZeroGeometry(() => captureAcrossFrames(frames, url));
 
   /** The reported failure, end to end. */
-  it("reads the posting on screen after a similar-job click", () => {
-    const job = capture(page(microsoft(true), acadium(), moreJobs, distractors));
+  it("reads the posting inside the frame the student is looking at", () => {
+    const { job } = capture();
 
-    expect(job.company).toBe("Acadium");
-    expect(job.jobTitle).toBe("Multimedia Marketing Intern");
-    expect(job.location).toBe("Canada");
+    expect(job.company).toBe("IBM");
+    expect(job.jobTitle).toBe("Senior Managing Consultant SAP HANA SD OTC");
+    expect(job.location).toBe("Vancouver, BC");
     expect(job.jobDescription).toBe(
-      "Produce short-form video for the growth team.",
+      "Lead order-to-cash delivery for enterprise clients.",
     );
   });
 
-  it("lets no part of the departed posting reach the record", () => {
-    const job = capture(page(microsoft(true), acadium(), moreJobs, distractors));
+  it("chooses that frame by corroboration, not by it being the main one", () => {
+    const { plan } = capture();
 
-    expect(JSON.stringify(job)).not.toContain("Microsoft");
-    expect(JSON.stringify(job)).not.toContain("Redmond");
-    expect(JSON.stringify(job)).not.toContain("Software Engineering Intern");
-    expect(job.jobDescription).not.toContain("Azure");
+    expect(plan).toEqual({ frameId: 2, strategy: true });
+    expect(plan.frameId).not.toBe(0);
+  });
+
+  /**
+   * The top document's rail links to the selected posting, exactly as the live
+   * one does. One href is a coincidence, not an identification.
+   */
+  it("is not persuaded by the lone link the top document happens to carry", () => {
+    const probe = (() => {
+      document.documentElement.innerHTML = topFrame.html;
+
+      return probeLinkedInFrame(SELECTED_JOB);
+    })();
+
+    expect(probe.currentIdLinks).toBe(1);
+    expect(probe.dataJobId).toBe(false);
+    expect(probe.dataOccludableJobId).toBe(false);
+  });
+
+  it("lets no part of the posting the student came from reach the record", () => {
+    const { job } = capture();
+
+    expect(JSON.stringify(job)).not.toContain("Exacare");
+    expect(JSON.stringify(job)).not.toContain("Solutions Consultant");
+    expect(JSON.stringify(job)).not.toContain(PREVIOUS_JOB);
+    expect(job.jobDescription).not.toContain("care providers");
     expect(job.jobDescription).not.toContain("Unlock hiring insights");
   });
 
-  it("files the record under the job the student selected", () => {
-    const job = capture(page(microsoft(true), acadium(), moreJobs, distractors));
+  /**
+   * Identity is the tab's, not the frame's. The fields came out of
+   * `/preload/?_bprMode=vanilla`; the record is filed under the posting the
+   * top-level `currentJobId` names.
+   */
+  it("files the record under the job the top-level address names", () => {
+    const { job } = capture();
 
     expect(job.jobUrl).toBe(
       `https://www.linkedin.com/jobs/view/${SELECTED_JOB}/`,
     );
+    expect(job.jobUrl).not.toContain("preload");
     expect(job.jobUrl).not.toContain(PREVIOUS_JOB);
     expect(job.source).toBe("LinkedIn");
   });
 
-  /**
-   * The stale surface keeps a complete, well-formed set of `JobDetails_*` ids.
-   * If those ever decide anything again, this fails.
-   */
-  it("ignores the component ids the departed posting still carries", () => {
-    const job = capture(page(microsoft(true), acadium(), moreJobs));
-
-    expect(job.company).toBe("Acadium");
-    expect(JSON.stringify(job)).not.toContain(PREVIOUS_JOB);
-  });
-
-  /** A second hop: two postings have now departed and a third is on screen. */
-  it("follows a second similar-job click past two stale surfaces", () => {
-    const url = `https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4460000001&referenceJobId=${SELECTED_JOB}`;
-    const job = capture(
-      page(microsoft(true), acadium(true), northwind(), moreJobs, distractors),
-      url,
-    );
-
-    expect(job.company).toBe("Northwind Photonics");
-    expect(job.jobTitle).toBe("Optics Test Technician");
-    expect(job.location).toBe("Boise, ID");
-    expect(job.jobDescription).toBe(
-      "Run bench measurements on prototype assemblies.",
-    );
-    expect(job.jobUrl).toBe(
-      "https://www.linkedin.com/jobs/view/4460000001/",
-    );
-    expect(JSON.stringify(job)).not.toContain("Microsoft");
-    expect(JSON.stringify(job)).not.toContain("Acadium");
-  });
-
-  it("takes nothing from the More jobs rail", () => {
-    const job = capture(page(microsoft(true), acadium(), moreJobs));
+  it("takes nothing from the results rail inside the chosen frame", () => {
+    const { job } = capture();
 
     expect(job.company).not.toBe("Southgate Robotics");
     expect(job.jobTitle).not.toBe("Warehouse Coordinator");
-    expect(job.location).not.toBe("Mississauga, ON");
+    expect(job.location).not.toBe("Somewhere, ON");
   });
 
   /**
    * The employer sits inside a list item on this route. A blanket "anything in
-   * an `li` is a search result" test would discard the field being looked for,
-   * which is why the rail is identified structurally instead.
+   * an `li` is a search result" rule would discard the field being looked for,
+   * which is why the rail is identified by LinkedIn's own card markers and by
+   * links naming another posting instead.
    */
   it("reads a company the detail header renders inside a list", () => {
-    expect(capture(page(acadium(), moreJobs)).company).toBe("Acadium");
+    const { job } = capture([
+      { ...preloadFrame, html: jobsUi("", ibm) },
+    ]);
+
+    expect(job.company).toBe("IBM");
   });
 
-  it("stores nothing when two employers are drawn at once", () => {
-    const job = capture(page(microsoft(false), acadium(), moreJobs));
+  /**
+   * `/preload/` is where the posting happened to be, not a rule. A `/preload/`
+   * document with nothing to say about `currentJobId` loses to one that has it.
+   */
+  it("does not choose a document for having a /preload/ address", () => {
+    const stalePreload: Frame = {
+      ...preloadFrame,
+      html: jobsUi(moreJobsRail, exacare),
+    };
+    const liveFrame: Frame = {
+      frameId: 3,
+      url: "https://www.linkedin.com/jobs/collections/similar-jobs/",
+      html: jobsUi(preloadRail, ibm),
+    };
 
+    const { plan, job } = capture([topFrame, stalePreload, liveFrame]);
+
+    expect(plan.frameId).toBe(3);
+    expect(job.company).toBe("IBM");
+  });
+
+  /** Fixture C: two documents claim the posting and nothing separates them. */
+  it("stores nothing when two frames both establish the posting", () => {
+    const rival: Frame = {
+      frameId: 4,
+      url: "https://www.linkedin.com/preload/?_bprMode=vanilla",
+      html: jobsUi(
+        preloadRail,
+        detailPane({
+          jobId: SELECTED_JOB,
+          company: "Not IBM",
+          title: "Something else entirely",
+          location: "Nowhere",
+          description: "A second document claiming the same job.",
+        }),
+      ),
+    };
+
+    const { plan, job } = capture([topFrame, preloadFrame, rival]);
+
+    expect(plan).toEqual({ strategy: false });
     expect(job.company).toBeUndefined();
     expect(job.jobTitle).toBeUndefined();
     expect(job.location).toBeUndefined();
@@ -645,22 +855,15 @@ describe("LinkedIn Similar Jobs", () => {
     expect(job.warnings).toContain("no_job_posting_found");
   });
 
-  it("stores nothing when nothing is drawn at all", () => {
-    const job = capture(page(microsoft(true), acadium(true), moreJobs));
+  /** Fixture D: nothing establishes the posting, and the parent is not a guess. */
+  it("does not fall back to the posting the parent document still holds", () => {
+    const { plan, job } = capture([topFrame, trackingFrame]);
 
+    expect(plan).toEqual({ strategy: false });
     expect(job.company).toBeUndefined();
     expect(job.jobTitle).toBeUndefined();
-    expect(JSON.stringify(job)).not.toContain("Microsoft");
-  });
-
-  it("stores nothing when the page has no Primary content region", () => {
-    const job = capture(
-      `<body><main>${acadium()}${distractors}</main></body>`,
-    );
-
-    expect(job.company).toBeUndefined();
-    expect(job.jobTitle).toBeUndefined();
-    expect(job.warnings).toContain("no_job_posting_found");
+    expect(JSON.stringify(job)).not.toContain("Exacare");
+    expect(JSON.stringify(job)).not.toContain("Solutions Consultant");
   });
 
   /**
@@ -668,11 +871,221 @@ describe("LinkedIn Similar Jobs", () => {
    * chose — so the URL stays right rather than becoming a second failure.
    */
   it("still files an empty capture under the selected job", () => {
-    const job = capture(page(microsoft(true), acadium(true), moreJobs));
+    const { job } = capture([topFrame, trackingFrame]);
 
     expect(job.jobUrl).toBe(
       `https://www.linkedin.com/jobs/view/${SELECTED_JOB}/`,
     );
+  });
+
+  /**
+   * Two employers in one region, neither of them claiming to be another
+   * posting. The document is describing two jobs at once and there is no
+   * honest way to pick one.
+   */
+  it("stores nothing when the chosen document names two employers", () => {
+    const anonymousRival = detailPane({
+      jobId: "4470000009",
+      company: "Halden Optics",
+      title: "Optics Test Technician",
+      location: "Boise, ID",
+      description: "Run bench measurements on prototype assemblies.",
+      identified: false,
+    });
+
+    const confused: Frame = {
+      ...preloadFrame,
+      html: jobsUi(preloadRail, ibm + anonymousRival),
+    };
+
+    const { job } = capture([topFrame, confused]);
+
+    expect(job.company).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
+    expect(job.warnings).toContain("no_job_posting_found");
+  });
+
+  /**
+   * A block that says which posting it belongs to, and says a different one, is
+   * not a competing claim — it is another job's markup left in the document.
+   * `data-job-id` is trusted for that and for nothing else: it excludes, it
+   * never selects.
+   */
+  it("ignores a leftover pane that names a different posting", () => {
+    const withLeftovers: Frame = {
+      ...preloadFrame,
+      html: jobsUi(preloadRail, ibm + exacare),
+    };
+
+    const { job } = capture([topFrame, withLeftovers]);
+
+    expect(job.company).toBe("IBM");
+    expect(JSON.stringify(job)).not.toContain("Exacare");
+  });
+
+  it("stores nothing when the chosen document has no Primary content region", () => {
+    const shapeless: Frame = {
+      ...preloadFrame,
+      html: `<body><main>${preloadRail}${ibm}</main></body>`,
+    };
+
+    const { job } = capture([topFrame, shapeless]);
+
+    expect(job.company).toBeUndefined();
+    expect(job.warnings).toContain("no_job_posting_found");
+  });
+});
+
+/**
+ * LinkedIn's general search, where the selected posting is present and unread.
+ *
+ * The second live failure, independently proven. On
+ * `/jobs/search/?currentJobId=4459003223` the student saw GE Vernova's Controls
+ * Product Management Intern posting and Capture returned four blanks; opening
+ * `/jobs/view/4459003223/` directly captured it correctly.
+ *
+ * The diagnostic said why. `section[aria-label="Primary content"]` held
+ * `aria-label="Company, GE Vernova."`, the title leaf, the location and the
+ * description — and every one of those elements, and every ancestor sampled
+ * above them, reported `0×0`. The old read wanted positive geometry, and it
+ * scanned the first labelled elements in the *whole* document, which on a
+ * results page means the rail. Both of those are fixed here, and the fixture
+ * keeps them fixed: the rail is large, it is inside Primary content, and
+ * nothing on the page has a size.
+ */
+describe("LinkedIn search, where the selected posting measures nothing", () => {
+  const GE_JOB = "4459003223";
+  const GE_SEARCH = `https://www.linkedin.com/jobs/search/?currentJobId=${GE_JOB}&keywords=product%20management%20intern`;
+  const GE_TITLE = "GE Vernova Controls Product Management Intern - Summer 2027";
+  const GE_DESCRIPTION =
+    "Join the Controls organisation for a summer of product work on grid software.";
+
+  /** The left rail: other people's employers, plenty of them. */
+  const rail = `<ul>
+     ${resultCard("4470000011", "Northgate Systems", "Operations Analyst")}
+     ${resultCard("4470000012", "Halden Optics", "Manufacturing Intern")}
+     ${resultCard("4470000013", "Southgate Robotics", "Field Technician")}
+     ${resultCard("4470000014", "Bright Harbour Media", "Marketing Co-op")}
+   </ul>`;
+
+  /** The rail as it looks once the selected posting's own card is in view. */
+  const railWithSelected = `<ul>
+     ${resultCard("4470000011", "Northgate Systems", "Operations Analyst")}
+     ${resultCard(GE_JOB, "GE Vernova", GE_TITLE)}
+     ${resultCard("4470000013", "Southgate Robotics", "Field Technician")}
+   </ul>`;
+
+  const geDetail = (identified: boolean) =>
+    detailPane({
+      jobId: GE_JOB,
+      company: "GE Vernova",
+      title: GE_TITLE,
+      location: "Greenville, SC",
+      description: GE_DESCRIPTION,
+      identified,
+    });
+
+  const search = (frames: readonly Frame[]) =>
+    withZeroGeometry(() => captureAcrossFrames(frames, GE_SEARCH));
+
+  /** The tab as Chrome serves it: one document, and it identifies its posting. */
+  const identifiedTab: readonly Frame[] = [
+    {
+      frameId: 0,
+      url: GE_SEARCH,
+      html: jobsUi(railWithSelected, geDetail(true)),
+    },
+  ];
+
+  /**
+   * The same page with nothing that names the selected posting — the card
+   * scrolled out of the virtualized list, and no `data-job-id` on the pane. No
+   * frame establishes anything, and search is the route whose top document may
+   * still be read.
+   */
+  const unidentifiedTab: readonly Frame[] = [
+    { frameId: 0, url: GE_SEARCH, html: jobsUi(rail, geDetail(false)) },
+  ];
+
+  it("reads the selected posting out of Primary content", () => {
+    const { job } = search(identifiedTab);
+
+    expect(job.company).toBe("GE Vernova");
+    expect(job.jobTitle).toBe(GE_TITLE);
+    expect(job.location).toBe("Greenville, SC");
+    expect(job.jobDescription).toBe(GE_DESCRIPTION);
+    expect(job.jobUrl).toBe(`https://www.linkedin.com/jobs/view/${GE_JOB}/`);
+    expect(job.warnings).toEqual([]);
+  });
+
+  it("requires no geometry, because the live page has none to offer", () => {
+    // Every element on the page measured `0×0` for the assertion above. This
+    // says so out loud: the same capture with a laid-out page is identical.
+    const laidOut = captureAcrossFrames(identifiedTab, GE_SEARCH);
+
+    expect(laidOut.job.company).toBe("GE Vernova");
+    expect(laidOut.job.jobTitle).toBe(GE_TITLE);
+  });
+
+  it("lets no employer from the left rail win", () => {
+    const { job } = search(identifiedTab);
+
+    for (const other of [
+      "Northgate Systems",
+      "Halden Optics",
+      "Southgate Robotics",
+      "Bright Harbour Media",
+    ]) {
+      expect(job.company).not.toBe(other);
+    }
+    expect(job.jobTitle).not.toBe("Operations Analyst");
+    expect(job.location).not.toBe("Somewhere, ON");
+  });
+
+  /**
+   * Step three of the search fix: when no frame establishes the posting, this
+   * route reads its own top document — bounded to Primary content — rather than
+   * falling back to the global scan that returned blanks.
+   */
+  it("reads the top document's Primary content when no frame establishes the job", () => {
+    const { plan, job } = search(unidentifiedTab);
+
+    expect(plan).toEqual({ strategy: true });
+    expect(job.company).toBe("GE Vernova");
+    expect(job.jobTitle).toBe(GE_TITLE);
+    expect(job.location).toBe("Greenville, SC");
+    expect(job.jobDescription).toBe(GE_DESCRIPTION);
+    expect(job.jobUrl).toBe(`https://www.linkedin.com/jobs/view/${GE_JOB}/`);
+  });
+
+  it("still refuses a search page with no bounded detail region", () => {
+    const { job } = search([
+      {
+        frameId: 0,
+        url: GE_SEARCH,
+        html: `<body><main><h1>Jobs</h1>${rail}</main></body>`,
+      },
+    ]);
+
+    expect(job.company).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
+    expect(job.warnings).toContain("no_job_posting_found");
+  });
+
+  /** A search tab can render its pane in a frame too, and the same path works. */
+  it("follows the posting into a frame when the search tab uses one", () => {
+    const { plan, job } = search([
+      { frameId: 0, url: GE_SEARCH, html: jobsUi(rail, "") },
+      {
+        frameId: 5,
+        url: "https://www.linkedin.com/preload/?_bprMode=vanilla",
+        html: jobsUi(railWithSelected, geDetail(true)),
+      },
+    ]);
+
+    expect(plan).toEqual({ frameId: 5, strategy: true });
+    expect(job.company).toBe("GE Vernova");
+    expect(job.jobUrl).toBe(`https://www.linkedin.com/jobs/view/${GE_JOB}/`);
   });
 });
 

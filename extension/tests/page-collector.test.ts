@@ -184,22 +184,55 @@ describe("the injected collector", () => {
        <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
      </main></body>`;
 
-    const similar = readRulesFor(
-      "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4451682967&referenceJobId=4459178947",
+    const splitPane = readRulesFor(
+      "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4446257399&referenceJobId=4443429701",
     );
 
-    expect(similar.strategy).toBe("linkedin-similar-jobs");
-    expect(similar.jobId).toBe("4451682967");
+    expect(splitPane.strategy).toBe("linkedin-split-pane");
+    expect(splitPane.jobId).toBe("4446257399");
 
-    // No Primary content region here, so the stricter read establishes nothing
-    // — which is correct, and not what the ordinary read does with the same
+    // No Primary content region here, so the bounded read establishes nothing
+    // — which is correct, and not what the job-page read does with the same
     // markup.
-    expect(collectPageSignals(similar).siteFields).toBeUndefined();
+    expect(collectPageSignals(splitPane).siteFields).toBeUndefined();
     expect(
       collectPageSignals(
-        readRulesFor("https://www.linkedin.com/jobs/view/4451682967/"),
+        readRulesFor("https://www.linkedin.com/jobs/view/4446257399/"),
       ).siteFields?.["company"],
     ).toBe("Northwind Photonics");
+  });
+
+  /**
+   * The bounded read is bounded by the region and by the selected posting, and
+   * it is handed both. Given the same document and a different `currentJobId`,
+   * the pane that names another job is no longer the pane it may read.
+   */
+  it("uses the selected job to tell the pane from a neighbour's markup", () => {
+    const pane = (jobId: string, company: string) => `
+      <div data-job-id="${jobId}">
+        <div data-display-contents="true"><p>Optics Test Technician</p></div>
+        <div aria-label="Company, ${company}.">${company}</div>
+      </div>`;
+
+    document.documentElement.innerHTML = `<head></head><body><main>
+       <section aria-label="Primary content">
+         ${pane("4446257399", "Northwind Photonics")}
+       </section>
+     </main></body>`;
+
+    const selected = collectPageSignals(
+      readRulesFor(
+        "https://www.linkedin.com/jobs/search/?currentJobId=4446257399",
+      ),
+    );
+    const someoneElse = collectPageSignals(
+      readRulesFor(
+        "https://www.linkedin.com/jobs/search/?currentJobId=4459003223",
+      ),
+    );
+
+    expect(selected.siteFields?.["company"]).toBe("Northwind Photonics");
+    expect(someoneElse.siteFields).toBeUndefined();
   });
 
   it("is self-contained, because Chrome injects it as source text", () => {

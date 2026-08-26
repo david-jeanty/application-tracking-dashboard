@@ -1,4 +1,5 @@
 import { htmlToPlainText } from "./html-text.js";
+import type { UnresolvedFallback } from "./linkedin-frames.js";
 import type { ExtractedJob, PageSignals } from "./types.js";
 
 /**
@@ -38,6 +39,12 @@ import type { ExtractedJob, PageSignals } from "./types.js";
  * implements those relational reads. They are strategies rather than a
  * framework: there are two, both LinkedIn's, and each exists because a live
  * failure proved the other one wrong on that route.
+ *
+ * This file also says, for a LinkedIn split pane, that the popup must work out
+ * *which document* to read before it reads anything — the current posting can
+ * be inside a same-origin iframe while the top document still holds the last
+ * one. The mechanism for that is `linkedin-frames.ts`; what belongs here is the
+ * fact that the route needs it, and which posting id it must corroborate.
  */
 
 export type SiteId = "linkedin" | "indeed" | "workday";
@@ -55,12 +62,43 @@ export type SiteFieldKey = "title" | "company" | "location" | "description";
  * and a scraping engine is the thing this extension is not.
  *
  * There are two, and they are both LinkedIn's, because LinkedIn's routes differ
- * in a way that matters. On a job page and in search results, the first labelled
- * company on the page belongs to the posting on screen. On the Similar Jobs
- * route it need not: the previous posting's markup survives the in-page
- * transition, so the read there has to ask which surface is actually rendered.
+ * in a way that matters:
+ *
+ * - `linkedin-job-detail` is a page showing one posting at one address. The
+ *   first labelled company on it belongs to that posting.
+ * - `linkedin-split-pane` is search, recommended, and Similar Jobs: a rail of
+ *   other people's postings beside a detail pane, in a document that is not
+ *   necessarily the one the address describes. Everything is read inside the
+ *   pane's own region and nothing is read outside it.
  */
-export type SiteStrategy = "linkedin-job-detail" | "linkedin-similar-jobs";
+export type SiteStrategy = "linkedin-job-detail" | "linkedin-split-pane";
+
+/**
+ * How to find the document that is actually showing the selected posting.
+ *
+ * A split-pane LinkedIn tab does not always render the posting in its main
+ * frame. On the live Similar Jobs route the current posting is inside a
+ * same-origin `/preload/?_bprMode=vanilla` iframe while the top document still
+ * holds the previous one, so the popup resolves a frame before it collects
+ * anything. `linkedin-frames.ts` holds that mechanism; this says which posting
+ * it must corroborate, and what to do when no frame does.
+ */
+export type FrameResolution = {
+  /** The posting the top-level address names, and the only id that decides. */
+  jobId: string;
+  /**
+   * What to read when no frame establishes `jobId`.
+   *
+   * `top-document` for search and the recommended collections, where the live
+   * GE Vernova diagnostic proved the selected posting really is in the top
+   * document's Primary content — laid out at `0×0`, but present and correct.
+   *
+   * `blank` for Similar Jobs, where the top document holds the posting the
+   * student came *from*. Reading it would file the previous employer under the
+   * current job's address, which is the failure this whole path exists for.
+   */
+  unresolved: UnresolvedFallback;
+};
 
 /** What the collector should do on this page: selectors, a strategy, or both. */
 export type PageReadRules = {
@@ -70,9 +108,19 @@ export type PageReadRules = {
    * The posting the address says the student selected — `currentJobId`.
    *
    * Identity, not a field. Nothing is ever stored from it except through
-   * `canonicalPostingUrl`.
+   * `canonicalPostingUrl`, and the collector uses it only to tell the selected
+   * posting's markup apart from a neighbouring card's.
    */
   jobId?: string;
+  /** Present when the popup must choose a document before it collects. */
+  resolveFrame?: FrameResolution;
+};
+
+/** What one address resolves to, before the site's defaults are applied. */
+type RoutedRead = {
+  strategy: SiteStrategy;
+  jobId?: string;
+  resolveFrame?: FrameResolution;
 };
 
 type SiteRule = {
@@ -82,7 +130,7 @@ type SiteRule = {
   fields: FieldRule[];
   strategy?: SiteStrategy;
   /** For a site whose routes need different reads, which one this address is. */
-  route?: (url: URL) => { strategy: SiteStrategy; jobId?: string };
+  route?: (url: URL) => RoutedRead;
 };
 
 /** A job identifier: digits, or the short alphanumerics Indeed hands out. */
@@ -108,36 +156,55 @@ function isSimilarJobsRoute(url: URL): boolean {
   );
 }
 
+/** A page whose own address names one posting: `/jobs/view/<id>`. */
+function directPostingRoute(url: URL): boolean {
+  return /^\/jobs\/view\/[A-Za-z0-9_-]+/.test(url.pathname);
+}
+
 /**
  * Which LinkedIn read this address needs.
  *
- * The Similar Jobs route is the one that differs, and the address says so
- * itself: it carries `referenceJobId` alongside `currentJobId`. On a job page
- * and in search results the page shows one posting and the address names it. On
- * this route the address names two, and — the part that cost a release —
- * **neither parameter reliably names the pane on screen**.
+ * `/jobs/view/<id>` is a page. Everything else a student reads jobs on —
+ * `/jobs/search/`, `/jobs/collections/recommended/`,
+ * `/jobs/collections/similar-jobs/` — is a split pane: a rail of postings
+ * beside one selected posting, at an address that keeps changing without a
+ * navigation. `currentJobId` is the parameter LinkedIn rewrites when the
+ * student picks a different posting, so it names the job they selected, and it
+ * alone decides identity and the stored URL.
  *
- * Live Chrome evidence: starting on a Microsoft posting and clicking a similar
- * job gave `currentJobId=4451682967&referenceJobId=4459178947` while the screen
- * showed the newly selected employer. `currentJobId` is the parameter LinkedIn
- * rewrites when the student picks a different posting, so it names the job they
- * selected — and it, alone, decides identity and the stored URL.
+ * What the address cannot say is which *document* is drawing that posting, and
+ * three earlier theories died guessing. `referenceJobId` only names the posting
+ * the student came from. `JobDetails_*_<id>` component ids go stale across an
+ * in-page transition. Rendered geometry cannot see across a frame boundary, and
+ * on the live search page the selected posting measures `0×0` anyway. The
+ * answer is a frame probe corroborated against `currentJobId`, which is what
+ * `resolveFrame` asks the popup to run.
  *
- * What the address cannot say is which markup is on screen. The previous
- * posting's DOM survives the in-page transition, and so do its `JobDetails_*`
- * component ids — an earlier version of this file trusted those ids and filed
- * the stale job. Only the strategy differs by route, then: the Similar Jobs
- * read takes its fields from the currently rendered detail surface, and takes
- * its identity from here.
+ * The two split-pane routes differ in one respect only: what is safe to read
+ * when no frame establishes the posting. Search may fall back to the top
+ * document, because its Primary content holds the selected posting. Similar
+ * Jobs may not, because its top document holds the previous one.
  */
-function linkedInRoute(url: URL): { strategy: SiteStrategy; jobId?: string } {
+function linkedInRoute(url: URL): RoutedRead {
   const jobId = selectedLinkedInJob(url);
 
+  // A job page is one posting at its own address, and stays on the read that
+  // is verified for it. No frame is resolved, because there is nothing for a
+  // second document to disagree with.
+  if (directPostingRoute(url) || !jobId) {
+    return {
+      strategy: "linkedin-job-detail",
+      ...(jobId ? { jobId } : {}),
+    };
+  }
+
   return {
-    strategy: isSimilarJobsRoute(url)
-      ? "linkedin-similar-jobs"
-      : "linkedin-job-detail",
-    ...(jobId ? { jobId } : {}),
+    strategy: "linkedin-split-pane",
+    jobId,
+    resolveFrame: {
+      jobId,
+      unresolved: isSimilarJobsRoute(url) ? "blank" : "top-document",
+    },
   };
 }
 
@@ -261,7 +328,7 @@ export function readRulesFor(url: string): PageReadRules {
   const rule = ruleFor(url);
   if (!rule) return { fields: [] };
 
-  let routed: { strategy: SiteStrategy; jobId?: string } | undefined;
+  let routed: RoutedRead | undefined;
   if (rule.route) {
     try {
       routed = rule.route(new URL(url));
@@ -277,6 +344,7 @@ export function readRulesFor(url: string): PageReadRules {
     fields: rule.fields,
     ...(strategy ? { strategy } : {}),
     ...(routed?.jobId ? { jobId: routed.jobId } : {}),
+    ...(routed?.resolveFrame ? { resolveFrame: routed.resolveFrame } : {}),
   };
 }
 
