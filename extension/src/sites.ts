@@ -34,9 +34,10 @@ import type { ExtractedJob, PageSignals } from "./types.js";
  * description through a `data-testid`, and the title and location only as
  * unattributed leaves whose classes are generated hashes. A list of selectors
  * cannot express "the title inside the card this company belongs to", so
- * LinkedIn is described here as a named strategy instead, and the collector
- * implements that one relational read. It is a strategy rather than a
- * framework: there is exactly one, and adding a second would need a reason.
+ * LinkedIn is described here as named strategies instead, and the collector
+ * implements those relational reads. They are strategies rather than a
+ * framework: there are two, both LinkedIn's, and each exists because a live
+ * failure proved the other one wrong on that route.
  */
 
 export type SiteId = "linkedin" | "indeed" | "workday";
@@ -100,35 +101,43 @@ function selectedLinkedInJob(url: URL): string | undefined {
   );
 }
 
+/** Whether this LinkedIn address is one where two postings are in play. */
+function isSimilarJobsRoute(url: URL): boolean {
+  return (
+    Boolean(jobIdentifier(url.searchParams.get("referenceJobId"))) ||
+    /^\/jobs\/collections\/similar-jobs\b/.test(url.pathname)
+  );
+}
+
 /**
  * Which LinkedIn read this address needs.
  *
  * The Similar Jobs route is the one that differs, and the address says so
- * itself: it carries `referenceJobId` alongside `currentJobId`, naming both the
- * posting the student selected and the one their browsing began at. Real-Chrome
- * testing found the page keeping the reference job's rendered-once markup —
- * including a perfectly valid `aria-label="Company, …"` for it — while showing
- * the selected job, so the ordinary read returned the wrong posting entirely.
+ * itself: it carries `referenceJobId` alongside `currentJobId`. On a job page
+ * and in search results the page shows one posting and the address names it. On
+ * this route the address names two, and — the part that cost a release —
+ * **neither parameter reliably names the pane on screen**.
  *
- * `referenceJobId` is the marker rather than the path, because the parameter is
- * what indicates two postings are in play. `currentJobId` is authoritative
- * about which one the student chose, and `referenceJobId` is never treated as
- * posting identity anywhere.
+ * Live Chrome evidence: a page whose address read
+ * `currentJobId=4455239909&referenceJobId=4455304273` rendered a detail pane
+ * whose every `JobDetails_*` component id ended `_4455304273`, whose company
+ * label named that posting's employer, and where nothing carrying 4455239909
+ * was rendered outside a result card at all. The first correction assumed
+ * `currentJobId` was authoritative and read the wrong pane; assuming
+ * `referenceJobId` instead would be the same mistake with a different
+ * parameter.
+ *
+ * So the address routes, and the page identifies. The `jobId` passed along is
+ * route context — used to corroborate, never to decide — and the posting the
+ * fields belong to comes back from the pane itself.
  */
 function linkedInRoute(url: URL): { strategy: SiteStrategy; jobId?: string } {
   const jobId = selectedLinkedInJob(url);
-  const carriesAReference = Boolean(
-    jobIdentifier(url.searchParams.get("referenceJobId")),
-  );
-  const isSimilarJobsPath = /^\/jobs\/collections\/similar-jobs\b/.test(
-    url.pathname,
-  );
 
   return {
-    strategy:
-      carriesAReference || isSimilarJobsPath
-        ? "linkedin-similar-jobs"
-        : "linkedin-job-detail",
+    strategy: isSimilarJobsRoute(url)
+      ? "linkedin-similar-jobs"
+      : "linkedin-job-detail",
     ...(jobId ? { jobId } : {}),
   };
 }
@@ -290,7 +299,11 @@ export const RECOGNIZED_SITES: readonly SiteId[] = SITE_RULES.map(
  * The rebuilt URL always stays on the origin the student is actually on, so a
  * `ca.linkedin.com` capture is not silently refiled under `www.linkedin.com`.
  */
-export function canonicalPostingUrl(pageUrl: string): string | undefined {
+export function canonicalPostingUrl(
+  pageUrl: string,
+  /** The posting the detail region the fields came from said it was. */
+  paneJobId?: string,
+): string | undefined {
   const site = siteFor(pageUrl);
   if (!site) return undefined;
 
@@ -302,9 +315,16 @@ export function canonicalPostingUrl(pageUrl: string): string | undefined {
   }
 
   if (site === "linkedin") {
-    // `currentJobId` only, on every route. On Similar Jobs the address also
-    // carries `referenceJobId` — the posting the student came from — and
-    // filing the record under that would name a job they did not select.
+    // The pane wins wherever it spoke, because the fields came from it and a
+    // record must not describe one posting while being filed under another.
+    const stated = jobIdentifier(paneJobId);
+    if (stated) return `${parsed.origin}/jobs/view/${stated}/`;
+
+    // On Similar Jobs the address names two postings and neither reliably names
+    // the pane. With no pane to ask, there is no honest URL to build: picking a
+    // parameter would be a guess, and a guess here is a duplicate key.
+    if (isSimilarJobsRoute(parsed)) return undefined;
+
     const selected = selectedLinkedInJob(parsed);
 
     return selected ? `${parsed.origin}/jobs/view/${selected}/` : undefined;
