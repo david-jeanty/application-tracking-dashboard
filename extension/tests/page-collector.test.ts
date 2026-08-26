@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { collectPageSignals } from "../src/page-collector.js";
-import { fieldRulesFor } from "../src/sites.js";
+import { readRulesFor } from "../src/sites.js";
 
 /**
  * What the injected collector is willing to take off a page.
@@ -122,7 +122,7 @@ describe("the injected collector", () => {
     expect(JSON.stringify(withApply)).not.toContain("Apply now");
   });
 
-  it("collects nothing site-specific when it is handed no selectors", () => {
+  it("collects nothing site-specific when it is handed no rules", () => {
     const signals = read(
       '<head></head><body><h2 data-testid="jobsearch-JobInfoHeader-title">Co-op</h2></body>',
     );
@@ -138,10 +138,40 @@ describe("the injected collector", () => {
        </body>`;
 
     const signals = collectPageSignals(
-      fieldRulesFor("https://ca.indeed.com/viewjob?jk=abc123"),
+      readRulesFor("https://ca.indeed.com/viewjob?jk=abc123"),
     );
 
     expect(signals.siteFields?.["title"]).toBe("Current markup");
+  });
+
+  /**
+   * The collector holds the mechanics of LinkedIn's relational read, but never
+   * decides to use them. A page it is handed no strategy for is read
+   * generically, whatever its markup happens to look like.
+   */
+  it("performs no relational read unless it is told to", () => {
+    document.documentElement.innerHTML = `<head></head><body>
+       <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
+     </body>`;
+
+    expect(collectPageSignals().siteFields).toBeUndefined();
+    expect(collectPageSignals({ fields: [] }).siteFields).toBeUndefined();
+  });
+
+  it("runs the LinkedIn read only for the site that asks for it", () => {
+    document.documentElement.innerHTML = `<head></head><body><main>
+       <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
+     </main></body>`;
+
+    const linkedin = collectPageSignals(
+      readRulesFor("https://www.linkedin.com/jobs/view/4123456789/"),
+    );
+    const workday = collectPageSignals(
+      readRulesFor("https://acme.wd3.myworkdayjobs.com/en-US/External/job/x"),
+    );
+
+    expect(linkedin.siteFields?.["company"]).toBe("Northwind Photonics");
+    expect(workday.siteFields).toBeUndefined();
   });
 
   it("is self-contained, because Chrome injects it as source text", () => {

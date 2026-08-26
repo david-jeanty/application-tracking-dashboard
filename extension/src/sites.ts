@@ -14,17 +14,29 @@ import type { ExtractedJob, PageSignals } from "./types.js";
  * fallback is switched off on them entirely: a recognized site that yields
  * nothing yields blanks, never the page's first heading.
  *
- * What is in this file is a table of selectors and a little URL arithmetic. It
- * does not know that JobTrack exists. It performs no network request, executes
- * nothing from the page, and calls no site API. Every value it produces is read
- * out of the DOM the student is already looking at, and every value it cannot
- * read is absent.
+ * What is in this file is a table of selectors, one named relational strategy,
+ * and a little URL arithmetic. It does not know that JobTrack exists. It
+ * performs no network request, executes nothing from the page, and calls no
+ * site API. Every value it produces is read out of the DOM the student is
+ * already looking at, and every value it cannot read is absent.
  *
  * Selector preference, highest first: structured data (handled before this file
  * is reached), semantic and accessibility attributes, stable data attributes
  * the site itself maintains for its own automation, then narrowly scoped
  * component containers. Nothing here keys off generated class hashes,
  * `nth-child`, colour, or nesting depth.
+ *
+ * Indeed and Workday are selector tables and Workday is confirmed working in
+ * real Chrome. LinkedIn is not: the class names this file first carried —
+ * `.job-details-jobs-unified-top-card__job-title` and its neighbours — matched
+ * nothing on the LinkedIn being served, and every field came back blank. The
+ * markup that is served exposes the company through an `aria-label`, the
+ * description through a `data-testid`, and the title and location only as
+ * unattributed leaves whose classes are generated hashes. A list of selectors
+ * cannot express "the title inside the card this company belongs to", so
+ * LinkedIn is described here as a named strategy instead, and the collector
+ * implements that one relational read. It is a strategy rather than a
+ * framework: there is exactly one, and adding a second would need a reason.
  */
 
 export type SiteId = "linkedin" | "indeed" | "workday";
@@ -34,58 +46,40 @@ export type FieldRule = { key: SiteFieldKey; selectors: string[] };
 
 export type SiteFieldKey = "title" | "company" | "location" | "description";
 
+/**
+ * A relational read the collector performs, for a site no selector list fits.
+ *
+ * There is one, and it is named rather than described, because the alternative
+ * — a data language for "walk up from this anchor until…" — would be a scraping
+ * engine, and a scraping engine is the thing this extension is not.
+ */
+export type SiteStrategy = "linkedin-job-detail";
+
+/** What the collector should do on this page: selectors, a strategy, or both. */
+export type PageReadRules = {
+  fields: readonly FieldRule[];
+  strategy?: SiteStrategy;
+};
+
 type SiteRule = {
   id: SiteId;
   /** Registrable-suffix matches, compared against the page's own hostname. */
   hosts: string[];
   fields: FieldRule[];
+  strategy?: SiteStrategy;
 };
 
 const SITE_RULES: readonly SiteRule[] = [
   {
     id: "linkedin",
     hosts: ["linkedin.com"],
-    fields: [
-      {
-        key: "title",
-        // Scoped to the detail pane first, because the same page also renders
-        // a list of other jobs and a recommendations rail. An unscoped title
-        // selector on `/jobs/search` would be a coin toss between the posting
-        // the student selected and the one the feed put at the top.
-        selectors: [
-          ".jobs-search__job-details .job-details-jobs-unified-top-card__job-title",
-          ".jobs-details .job-details-jobs-unified-top-card__job-title",
-          ".job-details-jobs-unified-top-card__job-title",
-          ".jobs-unified-top-card__job-title",
-          ".top-card-layout__title",
-        ],
-      },
-      {
-        key: "company",
-        selectors: [
-          ".jobs-search__job-details .job-details-jobs-unified-top-card__company-name",
-          ".jobs-details .job-details-jobs-unified-top-card__company-name",
-          ".job-details-jobs-unified-top-card__company-name",
-          ".jobs-unified-top-card__company-name",
-          ".topcard__org-name-link",
-        ],
-      },
-      {
-        key: "location",
-        selectors: [".jobs-unified-top-card__bullet", ".topcard__flavor--bullet"],
-      },
-      {
-        key: "description",
-        selectors: [
-          ".jobs-search__job-details #job-details",
-          "#job-details",
-          ".jobs-description__content",
-          ".jobs-box__html-content",
-          ".show-more-less-html__markup",
-          ".description__text",
-        ],
-      },
-    ],
+    // No selector list. The classes that were here were guesses from older
+    // LinkedIn markup, they matched nothing live, and leaving them in would
+    // only give a future page a chance to match one of them by accident. The
+    // public guest pages that did carry those classes also publish JSON-LD,
+    // which the extractor reads before it ever reaches this file.
+    fields: [],
+    strategy: "linkedin-job-detail",
   },
   {
     id: "indeed",
@@ -184,14 +178,20 @@ export function siteFor(url: string): SiteId | undefined {
 }
 
 /**
- * The selectors the injected collector should try on this page.
+ * What the injected collector should do on this page.
  *
- * Resolved here rather than inside the page, so the injected function stays a
- * generic reader with no site knowledge of its own and this file remains the
- * single place any site is described.
+ * Resolved here rather than inside the page, so this file remains the single
+ * place any site is described. The collector holds the mechanics of the one
+ * strategy; it is told which page to use it on, and never decides for itself.
  */
-export function fieldRulesFor(url: string): FieldRule[] {
-  return ruleFor(url)?.fields ?? [];
+export function readRulesFor(url: string): PageReadRules {
+  const rule = ruleFor(url);
+  if (!rule) return { fields: [] };
+
+  return {
+    fields: rule.fields,
+    ...(rule.strategy ? { strategy: rule.strategy } : {}),
+  };
 }
 
 /** Every rule, for tests and for asserting the recognized set has not grown. */

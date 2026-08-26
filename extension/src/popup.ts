@@ -1,7 +1,7 @@
 import { buildCaptureRecord } from "./capture.js";
 import { extractJob } from "./extractor.js";
 import { collectPageSignals } from "./page-collector.js";
-import { fieldRulesFor } from "./sites.js";
+import { readRulesFor } from "./sites.js";
 import { render } from "./popup-render.js";
 import {
   canSave,
@@ -54,15 +54,15 @@ async function readActivePage(): Promise<ExtractedJob | undefined> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (typeof tab?.id !== "number") return undefined;
 
-  // Which named read path applies is decided here, from the address, and the
-  // resulting selectors are handed to the collector as data. The collector
-  // stays a generic reader that knows no site, and `sites.ts` stays the one
-  // place any site is described.
+  // Which named read path applies is decided here, from the address, and
+  // handed to the collector as data. `sites.ts` stays the one place any site
+  // is described, and the collector never decides for itself which page it is
+  // looking at.
   //
   // `activeTab` supplies the tab's URL once the student has invoked the
   // extension. If it is ever absent the list is empty, nothing site-specific
   // is collected, and the result is blanks rather than a guess.
-  const rules = tab.url ? fieldRulesFor(tab.url) : [];
+  const rules = tab.url ? readRulesFor(tab.url) : { fields: [] };
 
   const results = await chrome.scripting.executeScript<PageSignals>({
     target: { tabId: tab.id },

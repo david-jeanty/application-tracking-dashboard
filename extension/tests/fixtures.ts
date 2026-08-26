@@ -1,5 +1,5 @@
 import { collectPageSignals } from "../src/page-collector.js";
-import { fieldRulesFor } from "../src/sites.js";
+import { readRulesFor } from "../src/sites.js";
 import type { PageSignals } from "../src/types.js";
 
 /**
@@ -30,17 +30,17 @@ export function readPage(
 }
 
 /**
- * The same read, with the selectors a recognized site's address resolves to.
+ * The same read, with the rules a recognized site's address resolves to.
  *
  * The popup does exactly this: it decides which named read path applies from
- * the tab's address and hands the collector the resulting selectors as data.
- * Going through `fieldRulesFor` here means a test exercises the real table
- * rather than a list written beside the assertion.
+ * the tab's address and hands the collector the result as data. Going through
+ * `readRulesFor` here means a test exercises the real table rather than a list
+ * written beside the assertion.
  */
 export function readSitePage(html: string, pageUrl: string): PageSignals {
   document.documentElement.innerHTML = html;
 
-  return { ...collectPageSignals(fieldRulesFor(pageUrl)), pageUrl };
+  return { ...collectPageSignals(readRulesFor(pageUrl)), pageUrl };
 }
 
 export function jsonLd(value: unknown): string {

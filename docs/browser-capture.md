@@ -179,8 +179,9 @@ extension/
   src/
     background.ts        service worker: the only holder of credentials
     popup.ts             wiring; popup-render.ts draws; popup-state.ts decides
-    page-collector.ts    the injected reader — self-contained, by necessity,
-                         and knowing no site: its selectors arrive as an argument
+    page-collector.ts    the injected reader — self-contained, by necessity;
+                         its rules arrive as an argument and it never decides
+                         which site it is on
     extractor.ts         structured data, then a recognized site, then a
                          corroborated title; json-ld.ts, html-text.ts,
                          source.ts and sites.ts are its parts
@@ -272,10 +273,10 @@ exist; site rules extract facts from a page and stop there.
    property paths. Employer careers sites publish microdata far more often than
    job boards do, and reading it costs no site knowledge.
 2. **A recognized site.** `extension/src/sites.ts` names LinkedIn, Indeed and
-   Workday, and nothing else. It holds a table of selectors and a little URL
-   arithmetic. The injected collector receives the selectors for the current
-   address as an argument, so it stays a generic reader and every site is
-   described in exactly one file.
+   Workday, and nothing else. It holds a table of selectors, one named
+   relational strategy, and a little URL arithmetic. The injected collector
+   receives the rules for the current address as an argument, so it never
+   decides which site it is on and every site is described in exactly one file.
 3. **The page's own headings**, but only on an unrecognized site, and only with
    corroboration (below).
 
@@ -308,13 +309,31 @@ or nesting depth. A site that cannot be read reliably returns blanks.
 
 #### Per-site notes
 
-- **LinkedIn.** Title, company, location and description are read from the job
-  detail pane, scoped so a result-list card or a recommendations rail cannot
-  supply them. LinkedIn is a single-page application, so the student may move
-  between postings without a navigation; the extension runs only on an explicit
-  click and reads whatever is selected at that moment. No observer, no
-  background listener, nothing watching navigation. Source is `LinkedIn`, which
-  the hostname settles.
+- **LinkedIn.** Not a selector list. The class names this adapter first carried
+  matched nothing on the LinkedIn actually being served, and every field came
+  back blank in real Chrome. The live markup names the employer in an
+  `aria-label` of the form `Company, <employer>.` and marks the description
+  container with `data-testid="expandable-text-box"`; the title and the
+  location carry no id, role, `aria-label` or `data-testid` at all, and their
+  classes are generated hashes such as `_c753af09` that change on any deploy.
+
+  A list of selectors cannot express "the title inside the card this company
+  belongs to", so LinkedIn is described as a named strategy — one, not a
+  framework — and the collector implements it: find the labelled company, climb
+  a bounded path to the card it belongs to, and take the title and the location
+  from inside that card and nowhere else. A company anchor inside a list item is
+  skipped, because the search view renders every result as one and each names a
+  company too. The description is anchored to the visible "About the job"
+  heading, because more than one element on the page carries the description
+  container's test id and one of them is a hiring-insights upsell — taking the
+  first would store an advertisement as the saved posting.
+
+  Every step is bounded and every step that cannot be completed leaves its field
+  blank. LinkedIn is a single-page application, so the student may move between
+  postings without a navigation; the extension runs only on an explicit click
+  and reads whatever is selected at that moment. No observer, no background
+  listener, nothing watching navigation. Source is `LinkedIn`, which the
+  hostname settles.
 - **Indeed.** Employer, title, location and description from Indeed's own test
   attributes and the stable description id. Source is `Indeed`.
 - **Workday.** Title, location and description from `data-automation-id`.
@@ -533,6 +552,14 @@ this document's extraction section reads the way it does.
 | BMO on Workday | Title **wrong** — "Search for Jobs". Company, location, description missing. |
 | L3Harris direct careers page | Title correct. Company, location, description missing. |
 
+A second pass in real Chrome, after the corrections above were built and
+loaded, confirmed Workday now fills title, location and description, and found
+that the LinkedIn selector list still filled nothing: none of its class names
+match what LinkedIn serves. That produced the DOM evidence the LinkedIn
+strategy is now built on, and is why LinkedIn is no longer a selector list at
+all. IBM's direct careers page fills a title but remains weak on company,
+location and description; that is separate evidence, not addressed here.
+
 Two different problems. The blanks were the design working: nothing was
 established, so nothing was claimed. The two wrong titles were the design
 failing — the generic fallback was willing to promote any first heading, and a
@@ -561,18 +588,22 @@ at CONNECT — so no live DOM was inspected while writing the selectors above.
   fixtures carrying the container, attribute and nesting each read path depends
   on. Structure is what a parser is proved by; no real posting is committed,
   because a real one would be somebody else's copyrighted text.
-- **Not verified:** that the selectors in `sites.ts` match what LinkedIn, Indeed
-  and Workday actually serve today. They are chosen from the most stable
-  category each site offers — Indeed's `data-testid`, Workday's
-  `data-automation-id`, LinkedIn's detail-pane component classes — and every one
-  of them fails safe: a stale selector yields a blank field, never a wrong one.
+- **Verified in real Chrome:** Workday fills title, location and description.
+- **Not verified:** that Indeed's `data-testid` selectors match what Indeed
+  serves today, and that LinkedIn's relational strategy resolves against the
+  live page. The LinkedIn strategy is built from DOM observed in real Chrome on
+  26 August 2026 — the company `aria-label`, the description `data-testid`, and
+  the unattributed title and location leaves — but the strategy written from
+  that evidence has not itself been run against LinkedIn. Every step fails safe:
+  a relationship that cannot be established yields a blank field, never a wrong
+  one.
 
 **Still required, in real Chrome, locally**
 
 1. Load the unpacked extension and connect it to a real JobTrack account.
 2. Open a public posting on each of LinkedIn (both `/jobs/view/` and a job
-   selected inside `/jobs/search/`), Indeed, a Workday tenant, and the KPMG and
-   L3Harris careers pages.
+   selected inside `/jobs/search/`), Indeed, a Workday tenant, and the KPMG,
+   IBM and L3Harris careers pages.
 3. Record, per site: which fields extracted correctly, which were absent, which
    were wrong, and whether the popup made the result usable anyway.
 4. Confirm specifically that the KPMG posting no longer stores a salary, that
