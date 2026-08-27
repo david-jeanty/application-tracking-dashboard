@@ -262,6 +262,90 @@ export function collectPageSignals(
     return Boolean(element.closest(RESULT_CARD_SELECTOR));
   }
 
+  /**
+   * A posting's arrangement, written as a fact of its own rather than as a
+   * suffix on its location.
+   *
+   * Live LinkedIn states it both ways. `Toronto, Ontario, Canada (Hybrid)` is
+   * handled where the location is read; this is the other shape — a small
+   * standalone `Hybrid`, `Remote` or `On-site` beside the location line. The
+   * value has to *be* one of those words: `Remote-first`, `Mostly remote` and
+   * `Flexible` are prose about the company, and `Full-time`, `Internship` and
+   * `Contract` are the employment type, which is a different field entirely.
+   *
+   * The surrounding parentheses are optional because the same pill is
+   * sometimes drawn as `(Hybrid)` beside the place name.
+   */
+  const ARRANGEMENT_PILL_PATTERN =
+    /^[(\[]?\s*(remote|hybrid|on[\s-]?site)\s*[)\]]?$/i;
+  const PILL_SELECTOR = "span, li, p, div, strong, em, button";
+  const MAXIMUM_PILL_CANDIDATES = 300;
+
+  /**
+   * Every arrangement stated inside one region that is already the selected
+   * posting's, as the page wrote it.
+   *
+   * The region is the whole scope: this never looks at the document, because a
+   * results rail, a Similar Jobs block, a recommended card or a previous SPA
+   * state all say `Remote` about somebody else's job, and the first `Remote` on
+   * a LinkedIn page is almost never the selected posting's.
+   *
+   * Only leaves are read. A pill is a leaf, and counting containers too would
+   * report one statement several times and let a wrapper's assembled text
+   * qualify as a stated word.
+   */
+  function statedArrangements(
+    region: Element,
+    locationElement?: Element | null,
+    rejected?: (element: Element) => boolean,
+  ): string[] {
+    /** Keyed by the word, so `On-site`, `Onsite` and `On site` are one fact. */
+    const stated = new Map<string, string>();
+
+    const candidates = Array.from(region.querySelectorAll(PILL_SELECTOR)).slice(
+      0,
+      MAXIMUM_PILL_CANDIDATES,
+    );
+
+    for (const candidate of candidates) {
+      if (candidate.firstElementChild) continue;
+      // The place is never the evidence. A location reading `Remote` is where
+      // the work happens as the posting files it, and inferring an arrangement
+      // from a place is the mistake this whole field is careful about.
+      if (
+        locationElement &&
+        (locationElement === candidate ||
+          locationElement.contains(candidate) ||
+          candidate.contains(locationElement))
+      ) {
+        continue;
+      }
+      if (rejected?.(candidate)) continue;
+
+      const word = ARRANGEMENT_PILL_PATTERN.exec(trimmedText(candidate))?.[1];
+      if (word) stated.set(word.toLowerCase().replace(/[\s-]/g, ""), word);
+    }
+
+    return [...stated.values()];
+  }
+
+  /**
+   * Records what the selected posting stated, without choosing between them.
+   *
+   * One value is the fact. Two contradictory ones are both recorded, because
+   * `rich-fields.ts` resolves a site's candidates exactly the way it resolves
+   * any others: disagreement ends the field. Picking the first would be a coin
+   * toss written into a record the student has no reason to doubt.
+   */
+  function recordArrangements(values: readonly string[]): void {
+    if (values.length === 0) return;
+
+    siteFields["workplaceType"] = clamp(
+      values.join(", "),
+      MAXIMUM_FIELD_CHARACTERS,
+    );
+  }
+
   function aboutTheJobHeadings(): Element[] {
     return Array.from(document.querySelectorAll(HEADING_SELECTOR))
       .slice(0, MAXIMUM_HEADING_CANDIDATES)
@@ -377,6 +461,7 @@ export function collectPageSignals(
       // card renders location, posting age and applicant count as sibling spans
       // of one paragraph, and the location leads it — so the first span is the
       // place, and the rest of the line is not swept in with it.
+      let locationElement: Element | null = null;
       for (const candidate of Array.from(
         topCard.querySelectorAll("p > span"),
       )) {
@@ -394,8 +479,13 @@ export function collectPageSignals(
         }
 
         siteFields["location"] = value;
+        locationElement = candidate;
         break;
       }
+
+      // The arrangement, read only inside the card the employer, the title and
+      // the location all came from. Nothing outside that card is consulted.
+      recordArrangements(statedArrangements(topCard, locationElement));
     }
 
     // The first "About the job" heading on the page, and only that one: on
@@ -587,6 +677,11 @@ export function collectPageSignals(
           siteFields["location"] = clamp(location, MAXIMUM_FIELD_CHARACTERS);
         }
 
+        // The arrangement, inside the same compact header the selected
+        // posting's own link and employer established. The results rail around
+        // it shares no such header, so its pills are out of scope.
+        recordArrangements(statedArrangements(header, locationLine));
+
         const [about] = aboutTheJobHeadings();
         const description = about ? descriptionUnder([about]) : undefined;
         if (description) siteFields["description"] = description;
@@ -673,9 +768,12 @@ export function collectPageSignals(
             (child) => child.tagName === "UL",
           )
         : undefined;
-      const rawLocation = locationList
-        ? trimmedText(locationList.querySelector("li > span"))
-        : "";
+      const locationElement = locationList
+        ? locationList.querySelector("li > span")
+        : null;
+      const rawLocation = trimmedText(locationElement);
+      /** Every way this card stated its arrangement, deduplicated below. */
+      const arrangements: string[] = [];
       if (rawLocation && rawLocation.length <= MAXIMUM_LOCATION_CHARACTERS) {
         // `Toronto, Ontario, Canada (Hybrid)`. The parenthesized half is the
         // selected posting's own statement of how the role is worked, and it
@@ -684,12 +782,7 @@ export function collectPageSignals(
         const arrangement = /\s+\((on-site|hybrid|remote)\)\s*$/i.exec(
           rawLocation,
         )?.[1];
-        if (arrangement) {
-          siteFields["workplaceType"] = clamp(
-            arrangement,
-            MAXIMUM_FIELD_CHARACTERS,
-          );
-        }
+        if (arrangement) arrangements.push(arrangement);
 
         const location = rawLocation
           .replace(/\s+\((?:on-site|hybrid|remote)\)\s*$/i, "")
@@ -698,6 +791,19 @@ export function collectPageSignals(
           siteFields["location"] = clamp(location, MAXIMUM_FIELD_CHARACTERS);
         }
       }
+
+      // The other shape: a standalone pill inside this card. `root` is the
+      // element LinkedIn itself marked with the selected job's id, so a
+      // neighbouring card's pill is not in scope here at all.
+      for (const stated of statedArrangements(root, locationElement)) {
+        const known = arrangements.some(
+          (value) =>
+            value.toLowerCase().replace(/[\s-]/g, "") ===
+            stated.toLowerCase().replace(/[\s-]/g, ""),
+        );
+        if (!known) arrangements.push(stated);
+      }
+      recordArrangements(arrangements);
 
       const details = document.querySelector("#job-details");
       const about = details
@@ -846,6 +952,7 @@ export function collectPageSignals(
         }
       }
 
+      let locationElement: Element | null = null;
       for (const candidate of Array.from(card.querySelectorAll("p > span"))) {
         if (inTheRail(candidate) || company.element.contains(candidate)) continue;
 
@@ -861,8 +968,12 @@ export function collectPageSignals(
         }
 
         siteFields["location"] = value;
+        locationElement = candidate;
         break;
       }
+
+      // The arrangement, from the detail pane's own card and never the rail's.
+      recordArrangements(statedArrangements(card, locationElement, inTheRail));
     }
 
     /**

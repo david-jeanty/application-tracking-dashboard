@@ -204,6 +204,7 @@ describe("the arrangement a LinkedIn selected posting states", () => {
     title: string,
     company: string,
     location: string,
+    pill = "",
   ) => `<article data-job-id="${jobId}">
       <div>
         <div><div><div><div>
@@ -213,6 +214,7 @@ describe("the arrangement a LinkedIn selected posting states", () => {
         </div></div></div></div>
         <div><span>${company}</span></div>
         <div><ul><li><span>${location}</span></li></ul></div>
+        ${pill ? `<div><ul><li>${pill}</li><li>Internship</li></ul></div>` : ""}
       </div>
     </article>`;
 
@@ -277,6 +279,46 @@ describe("the arrangement a LinkedIn selected posting states", () => {
     expect(selected.workArrangement).toBe("Hybrid");
     expect(theOtherOne.company).toBe("Southgate Robotics");
     expect(theOtherOne.workArrangement).toBe("Remote");
+  });
+
+  it("establishes the arrangement the selected card states on its own", () => {
+    for (const [pill, expected] of [
+      ["Hybrid", "Hybrid"],
+      ["Remote", "Remote"],
+      ["On-site", "On-site"],
+    ] as const) {
+      const report = extractJobReport(
+        readSitePage(
+          `<head></head><body>${card("4446257399", "Analyst Intern", "Northwind", "Greater Toronto Area, Canada", pill)}</body>`,
+          selectedIn("4446257399"),
+        ),
+      );
+
+      expect(toExtractedJob(report).workArrangement).toBe(expected);
+      expect(toExtractedJob(report).location).toBe("Greater Toronto Area, Canada");
+      expect(report.fields.workArrangement).toMatchObject({
+        state: "established",
+        confidence: "exact",
+        source: "linkedin_selected_posting",
+      });
+    }
+  });
+
+  it("refuses a card that states two arrangements, rather than picking one", () => {
+    const report = extractJobReport(
+      readSitePage(
+        `<head></head><body>${card("4446257399", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada (Hybrid)", "Remote")}</body>`,
+        selectedIn("4446257399"),
+      ),
+    );
+
+    expect(toExtractedJob(report).workArrangement).toBeUndefined();
+    expect(report.fields.workArrangement).toMatchObject({
+      state: "ambiguous",
+      confidence: "ambiguous",
+      source: "linkedin_selected_posting",
+      reason: "conflicting_evidence",
+    });
   });
 
   it("refuses a Similar Jobs reference posting's arrangement", () => {
@@ -426,6 +468,269 @@ describe("work term", () => {
       source: "linkedin_selected_posting",
     });
     expect(toExtractedJob(report).duration).toBeUndefined();
+  });
+});
+
+/**
+ * The term formats live Canadian student postings actually use.
+ *
+ * `Summer 2027` was the only shape PR #30 recognized, and real Chrome testing
+ * found three postings stating their term perfectly plainly in shapes it did
+ * not read: `Winter Intern 2027` in a title, `Internship (Jan-April '27)` in a
+ * title, `The Co-op term is from January to August, 2027` in a description.
+ *
+ * What is added is recognition, not inference. A month range stays a month
+ * range — it is never mapped onto a university season, and its length is never
+ * counted — and a range in prose is still not a term, because a description
+ * states real date ranges for training, for benefits, and for when applications
+ * close, every one of which reads exactly like the sentence that is the answer.
+ */
+describe("the term formats a title states", () => {
+  it("reads a season and a year an employment word stands between", () => {
+    for (const [title, expected] of [
+      ["Winter Intern 2027", "Winter 2027"],
+      ["Winter Internship 2027", "Winter 2027"],
+      ["Winter Co-op 2027", "Winter 2027"],
+      ["Winter CoOp 2027", "Winter 2027"],
+      ["Winter Co op 2027", "Winter 2027"],
+      ["Summer Student 2027", "Summer 2027"],
+      ["Fall Work Term 2026", "Fall 2026"],
+      ["2027 Winter Intern", "Winter 2027"],
+      ["2027 Winter Internship", "Winter 2027"],
+      ["2027 Winter Co-op", "Winter 2027"],
+      ["2027 Winter CoOp", "Winter 2027"],
+      ["2026 Fall Student, Data Analytics", "Fall 2026"],
+    ] as const) {
+      expect(extractWorkTerm({ title })).toMatchObject({
+        state: "established",
+        value: expected,
+        confidence: "strong",
+        origin: "title",
+      });
+    }
+  });
+
+  it("refuses a season and a year that only share a sentence", () => {
+    for (const title of [
+      "Winter recruiting events for our 2027 strategy",
+      "Winter opportunities across our 2027 portfolio",
+      "Winter and beyond: our 2027 hiring plans",
+      "Available during the winter",
+      "Summer Internship, Analytics",
+    ]) {
+      expect(extractWorkTerm({ title }).state).toBe("absent");
+    }
+  });
+
+  it("reads a term the title states in parentheses beside the job word", () => {
+    for (const [title, expected] of [
+      [
+        "Management Consulting OTTAWA: Consultant, Internship (Jan-April '27)",
+        "January-April 2027",
+      ],
+      ["Consultant, Internship (Jan-April 2027)", "January-April 2027"],
+      ["Marketing Co-op (January to August 2027)", "January-August 2027"],
+      ["Finance Student [May-August 2027]", "May-August 2027"],
+    ] as const) {
+      expect(extractWorkTerm({ title })).toMatchObject({
+        state: "established",
+        value: expected,
+        confidence: "strong",
+        origin: "title",
+      });
+    }
+  });
+
+  it("refuses a parenthetical that is not a term, and a term with no job word", () => {
+    for (const title of [
+      "Consultant, Internship (Hybrid)",
+      "Consultant, Internship (Ottawa)",
+      "Consultant, Internship (2027)",
+      "Client offsite (January to April 2027)",
+    ]) {
+      expect(extractWorkTerm({ title }).state).toBe("absent");
+    }
+  });
+});
+
+describe("the term formats a description labels", () => {
+  it("reads a month range the posting calls the term", () => {
+    for (const [description, expected] of [
+      ["Work term: Jan-April '27", "January-April 2027"],
+      ["Co-op term: January-April 2027", "January-April 2027"],
+      ["Internship term: January to April 2027", "January-April 2027"],
+      ["The Co-op term is from January to August, 2027.", "January-August 2027"],
+      ["Term is from January 2027 to April 2027.", "January-April 2027"],
+      ["The work term runs from January through April 2027.", "January-April 2027"],
+      ["The internship runs from January to April 2027.", "January-April 2027"],
+      ["The co-op is scheduled for from May to August 2027.", "May-August 2027"],
+    ] as const) {
+      expect(extractWorkTerm({ description })).toMatchObject({
+        state: "established",
+        value: expected,
+        confidence: "exact",
+        origin: "description",
+      });
+    }
+  });
+
+  it("keeps both years of a term that crosses one", () => {
+    expect(
+      extractWorkTerm({
+        description: "Work term: September 2026 to April 2027",
+      }),
+    ).toMatchObject({ value: "September 2026-April 2027" });
+  });
+
+  it("refuses every date range in a description that is not the term", () => {
+    for (const description of [
+      "Applications close in January 2027.",
+      "Training runs from January to April 2027.",
+      "Benefits enrollment period is January to April 2027.",
+      "The office is open from January to August 2027.",
+      "Our client engagement spans January to April 2027.",
+      "Possible extension into Fall 2027.",
+      "Winter recruiting events for our 2027 strategy.",
+      "Available during the winter.",
+      "January 2027",
+      "2027",
+      "Please note that the internship/coop is for a 4-month term.",
+    ]) {
+      expect(extractWorkTerm({ description }).state).toBe("absent");
+    }
+  });
+
+  it("refuses two month ranges that disagree", () => {
+    expect(
+      extractWorkTerm({
+        title: "Consultant, Internship (Jan-April '27)",
+        description: "Co-op term: January to August 2027.",
+      }),
+    ).toMatchObject({ state: "conflict" });
+
+    expect(
+      extractWorkTerm({
+        title: "Winter Intern 2027",
+        description: "Work term: Summer 2027",
+      }),
+    ).toMatchObject({ state: "conflict" });
+  });
+
+  it("never counts a month range into a duration", () => {
+    expect(
+      extractDuration({
+        description: "The Co-op term is from January to August, 2027.",
+      }).state,
+    ).toBe("absent");
+    expect(
+      extractDuration({ title: "Consultant, Internship (Jan-April '27)" }).state,
+    ).toBe("absent");
+  });
+});
+
+/**
+ * The three live postings this follow-up exists for.
+ *
+ * Each is the real title and the real stated term, over the minimum markup the
+ * live card actually uses. None carries a copied job description: what is
+ * asserted is the sentence that states the fact, which is all the parser reads.
+ *
+ * Passing these is not the acceptance test. The acceptance test is opening the
+ * same three postings in Chrome, because a fixture proves the parser and only
+ * the live page proves the selector.
+ */
+describe("the three live postings that failed in Chrome", () => {
+  const linkedInPosting = (
+    jobId: string,
+    title: string,
+    company: string,
+    location: string,
+    pill: string,
+    description = "",
+  ) => `<head></head><body>
+      <article data-job-id="${jobId}">
+        <div>
+          <div><div><div><div>
+            <a href="/jobs/view/${jobId}/" aria-label="${title} with verification">
+              <span>${title}</span><span>${title}</span>
+            </a>
+          </div></div></div></div>
+          <div><span>${company}</span></div>
+          <div><ul><li><span>${location}</span></li></ul></div>
+          <div><ul><li>${pill}</li><li>Internship</li></ul></div>
+        </div>
+      </article>
+      ${description ? `<section id="job-details"><h2>About the job</h2><p>${description}</p></section>` : ""}
+    </body>`;
+
+  const captured = (html: string, jobId: string) =>
+    toExtractedJob(
+      extractJobReport(
+        readSitePage(
+          html,
+          `https://www.linkedin.com/jobs/search/?currentJobId=${jobId}`,
+        ),
+      ),
+    );
+
+  it("captures Mackenzie's Hybrid arrangement and its Winter 2027 term", () => {
+    const job = captured(
+      linkedInPosting(
+        "4459045300",
+        "Winter Intern 2027 - Value Delivery Office",
+        "Mackenzie Investments",
+        "Greater Toronto Area, Canada",
+        "Hybrid",
+      ),
+      "4459045300",
+    );
+
+    expect(job.company).toBe("Mackenzie Investments");
+    expect(job.jobTitle).toBe("Winter Intern 2027 - Value Delivery Office");
+    expect(job.location).toBe("Greater Toronto Area, Canada");
+    expect(job.workArrangement).toBe("Hybrid");
+    expect(job.workTerm).toBe("Winter 2027");
+    expect(job.duration).toBeUndefined();
+  });
+
+  it("captures KPMG's On-site arrangement, its 4-month length and its term", () => {
+    const job = captured(
+      linkedInPosting(
+        "4459045301",
+        "Management Consulting OTTAWA: Consultant, Internship (Jan-April '27)",
+        "KPMG Canada",
+        "Ottawa, ON",
+        "On-site",
+        "Please note that the internship/coop is for a 4-month term. The placement is starting in January 2027 to April 2027.",
+      ),
+      "4459045301",
+    );
+
+    expect(job.company).toBe("KPMG Canada");
+    expect(job.location).toBe("Ottawa, ON");
+    expect(job.workArrangement).toBe("On-site");
+    expect(job.duration).toBe("4 months");
+    expect(job.workTerm).toBe("January-April 2027");
+  });
+
+  it("captures J&J's Hybrid arrangement and its January-August 2027 term", () => {
+    const job = captured(
+      linkedInPosting(
+        "4459045302",
+        "Marketing Co-Op",
+        "Johnson & Johnson MedTech",
+        "Toronto, ON",
+        "Hybrid",
+        "The Co-op term is from January to August, 2027.",
+      ),
+      "4459045302",
+    );
+
+    expect(job.company).toBe("Johnson & Johnson MedTech");
+    expect(job.workArrangement).toBe("Hybrid");
+    expect(job.workTerm).toBe("January-August 2027");
+    // Eight months is arithmetic the posting never did, so the field stays blank.
+    expect(job.duration).toBeUndefined();
   });
 });
 

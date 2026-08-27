@@ -164,11 +164,18 @@ function arrangementWord(raw: string): CaptureWorkArrangement | undefined {
 export function extractWorkArrangement(input: {
   jobLocationType?: string;
   /**
-   * An arrangement a recognized site stated for the selected posting.
+   * The arrangement a recognized site stated for the selected posting.
    *
-   * LinkedIn writes it beside the location on the card its address names —
-   * `Toronto, Ontario, Canada (Hybrid)` — which makes it a dedicated statement
-   * about that posting rather than something read out of prose.
+   * LinkedIn writes it on the card its address names, either beside the
+   * location — `Toronto, Ontario, Canada (Hybrid)` — or as a standalone pill
+   * next to it, which makes it a dedicated statement about that posting rather
+   * than something read out of prose.
+   *
+   * The site may pass more than one stated word, comma-separated, when the
+   * selected posting stated the fact in both places. They are read through the
+   * same table below and become separate candidates, so a card that
+   * contradicts itself ends the field instead of handing over whichever the
+   * collector happened to see first.
    */
   siteWorkplaceType?: string;
   title?: string;
@@ -188,11 +195,11 @@ export function extractWorkArrangement(input: {
     });
   }
 
-  const fromSite = input.siteWorkplaceType
-    ? arrangementWord(input.siteWorkplaceType)
-    : undefined;
-  if (fromSite) {
-    candidates.push({ value: fromSite, confidence: "exact", origin: "site" });
+  for (const stated of (input.siteWorkplaceType ?? "").split(",")) {
+    const fromSite = arrangementWord(stated);
+    if (fromSite) {
+      candidates.push({ value: fromSite, confidence: "exact", origin: "site" });
+    }
   }
 
   for (const [origin, text] of [
@@ -254,10 +261,159 @@ const SHARED_YEAR_PATTERN =
 const TERM_LABEL_PATTERN =
   /\b(?:work term(?: season)?|co-?op term|recruiting term|term)\s*[:\-–—]\s*(winter|spring|summer|fall)\s+(20\d{2})\b/gi;
 
+/**
+ * The words a title is allowed to put between its season and its year.
+ *
+ * Live Canadian student postings write the term as `Winter Intern 2027` and
+ * `2027 Winter Co-op` at least as often as they write `Winter 2027`, and all
+ * three say the same thing. What separates them from `Winter recruiting events
+ * for our 2027 strategy` is what stands in the middle: this list is the things
+ * an employer hires, deliberately narrow and deliberately about employment, so
+ * an arbitrary sentence cannot bridge a season to an unrelated year.
+ */
+const TERM_BRIDGE = String.raw`(?:internships?|interns?|co-?\s?ops?|coops?|students?|work terms?)`;
+
+/** `Winter Intern 2027` — the season, the thing being hired, then the year. */
+const TERM_BRIDGED_PATTERN = new RegExp(
+  String.raw`\b(winter|spring|summer|fall)\s+${TERM_BRIDGE}\s+(20\d{2})\b`,
+  "gi",
+);
+
+/** `2027 Winter Co-op` — the same statement, written year first. */
+const TERM_YEAR_FIRST_PATTERN = new RegExp(
+  String.raw`\b(20\d{2})\s+(winter|spring|summer|fall)\s+${TERM_BRIDGE}\b`,
+  "gi",
+);
+
+const MONTH_NAMES: Readonly<Record<string, string>> = {
+  jan: "January",
+  january: "January",
+  feb: "February",
+  february: "February",
+  mar: "March",
+  march: "March",
+  apr: "April",
+  april: "April",
+  may: "May",
+  jun: "June",
+  june: "June",
+  jul: "July",
+  july: "July",
+  aug: "August",
+  august: "August",
+  sep: "September",
+  sept: "September",
+  september: "September",
+  oct: "October",
+  october: "October",
+  nov: "November",
+  november: "November",
+  dec: "December",
+  december: "December",
+};
+
+const MONTH = String.raw`(?:january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sept|sep|october|oct|november|nov|december|dec)\b\.?`;
+/** `2027`, or the `'27` a posting writes inside a title's parentheses. */
+const YEAR = String.raw`(?:20\d{2}|['’]\d{2})`;
+const RANGE_SEPARATOR = String.raw`(?:\s*[-–—]\s*|\s+(?:to|through|thru|until|till)\s+)`;
+
+/**
+ * A stated month range, in the two shapes a posting writes one.
+ *
+ * Groups 1–4 are the both-years shape — `January 2027 to April 2027` — and
+ * groups 5–7 the shared-year one — `January to August, 2027`. Every lead that
+ * uses this fragment keeps its own groups non-capturing, so the numbering is
+ * the same wherever it appears.
+ */
+const RANGE = String.raw`(?:(${MONTH})\s*,?\s*(${YEAR})${RANGE_SEPARATOR}(${MONTH})\s*,?\s*(${YEAR})|(${MONTH})${RANGE_SEPARATOR}(${MONTH})\s*,?\s*(${YEAR}))`;
+
+/**
+ * A range the posting labels as the term itself: `Co-op term is from …`.
+ *
+ * The word `term` has to be there. A description is full of real date ranges
+ * that are not the work term — training, benefits enrollment, a hiring
+ * campaign — and every one of them reads exactly like this sentence without it.
+ */
+const TERM_RANGE_LABEL_PATTERN = new RegExp(
+  String.raw`\bterm\b(?:\s*[:\-–—]\s*|\s+(?:is|are|runs?|will\s+run)\s+(?:for\s+)?(?:from\s+)?|\s+from\s+|\s+for\s+)` +
+    RANGE,
+  "gi",
+);
+
+/** `The internship runs from January to April 2027` — the job, then its dates. */
+const TERM_RANGE_RUNS_PATTERN = new RegExp(
+  String.raw`\b(?:internships?|interns?|co-?\s?ops?|coops?|placements?|work[\s-]?terms?)(?:\s*\/\s*(?:internships?|co-?\s?ops?|coops?))?\s+(?:is|are|runs?|will\s+run)\s+(?:scheduled\s+)?(?:for\s+)?from\s+` +
+    RANGE,
+  "gi",
+);
+
+/**
+ * `Consultant, Internship (Jan-April '27)` — a title's parenthetical term.
+ *
+ * Only a parenthetical that follows the word for the job itself, and closely.
+ * That is what makes it the posting's statement of its own term rather than
+ * some other bracketed aside, and it is strong rather than exact because a
+ * title states things without labelling them.
+ */
+const TERM_RANGE_TITLE_PATTERN = new RegExp(
+  String.raw`\b(?:internships?|interns?|co-?\s?ops?|coops?|students?|placements?|work[\s-]?terms?)\b[^()\[\]\n]{0,24}[(\[]\s*` +
+    RANGE +
+    String.raw`\s*[)\]]`,
+  "gi",
+);
+
 function term(season: string | undefined, year: string | undefined): string | undefined {
   const name = SEASONS[(season ?? "").toLowerCase()];
 
   return name && year ? `${name} ${year}` : undefined;
+}
+
+/** `'27` is 2027. A two-digit year is expanded, never otherwise interpreted. */
+function fullYear(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+
+  return digits.length === 4 ? digits : `20${digits}`;
+}
+
+/**
+ * One deterministic spelling of a stated month range, and no interpretation.
+ *
+ * `Jan-April '27` and `January to April 2027` are the same statement written
+ * twice, so both become `January-April 2027`. What does not happen here is
+ * anything the posting did not say: a range is never mapped onto a university
+ * season, and its length is never counted — `January-August 2027` is eight
+ * months only if the posting says so somewhere else, and `extractDuration` is
+ * the only thing that reads that.
+ */
+function monthRange(match: RegExpMatchArray): string | undefined {
+  const monthName = (raw: string | undefined): string | undefined =>
+    MONTH_NAMES[(raw ?? "").toLowerCase().replace(/\.$/, "")];
+
+  const [, fromDated, fromYear, toDated, toYear, from, to, sharedYear] = match;
+
+  if (fromDated && fromYear && toDated && toYear) {
+    const start = monthName(fromDated);
+    const end = monthName(toDated);
+    if (!start || !end) return undefined;
+
+    const opens = fullYear(fromYear);
+    const closes = fullYear(toYear);
+
+    // A term that crosses a year keeps both. Collapsing `September 2026-April
+    // 2027` onto one year would state a term the posting never advertised.
+    return opens === closes
+      ? `${start}-${end} ${closes}`
+      : `${start} ${opens}-${end} ${closes}`;
+  }
+
+  if (from && to && sharedYear) {
+    const start = monthName(from);
+    const end = monthName(to);
+
+    return start && end ? `${start}-${end} ${fullYear(sharedYear)}` : undefined;
+  }
+
+  return undefined;
 }
 
 /**
@@ -266,8 +422,16 @@ function term(season: string | undefined, year: string | undefined): string | un
  * A season needs its year: "summer" alone is a word, and supplying the year
  * from today's date, from the posting date, or from a university calendar would
  * be inventing the field. The title may state the term as a title states things
- * — "Summer 2027 Marketing Intern" — but the description must label it, because
- * a description mentioning a season is usually talking about something else.
+ * — "Summer 2027 Marketing Intern", "Winter Intern 2027", "Internship
+ * (Jan-April '27)" — but the description must label it, because a description
+ * mentioning a season or a pair of months is usually talking about something
+ * else: when applications close, when training runs, when benefits enrollment
+ * opens. None of those is the term, and each of them reads like one.
+ *
+ * A month range is kept as a month range. `January-April 2027` is not filed as
+ * `Winter 2027`, because which season a term belongs to is a fact about a
+ * university calendar rather than about this posting, and no length is counted
+ * from it either.
  */
 export function extractWorkTerm(input: {
   title?: string;
@@ -293,6 +457,27 @@ export function extractWorkTerm(input: {
         candidates.push({ value, confidence: "strong", origin: "title" });
       }
     }
+
+    for (const match of title.matchAll(TERM_BRIDGED_PATTERN)) {
+      const value = term(match[1], match[2]);
+      if (value) {
+        candidates.push({ value, confidence: "strong", origin: "title" });
+      }
+    }
+
+    for (const match of title.matchAll(TERM_YEAR_FIRST_PATTERN)) {
+      const value = term(match[2], match[1]);
+      if (value) {
+        candidates.push({ value, confidence: "strong", origin: "title" });
+      }
+    }
+
+    for (const match of title.matchAll(TERM_RANGE_TITLE_PATTERN)) {
+      const value = monthRange(match);
+      if (value) {
+        candidates.push({ value, confidence: "strong", origin: "title" });
+      }
+    }
   }
 
   const description = scannable(input.description);
@@ -302,6 +487,18 @@ export function extractWorkTerm(input: {
       const value = term(match[1], match[2]);
       if (value) {
         candidates.push({ value, confidence: "exact", origin: "description" });
+      }
+    }
+
+    for (const pattern of [
+      TERM_RANGE_LABEL_PATTERN,
+      TERM_RANGE_RUNS_PATTERN,
+    ]) {
+      for (const match of description.matchAll(pattern)) {
+        const value = monthRange(match);
+        if (value) {
+          candidates.push({ value, confidence: "exact", origin: "description" });
+        }
       }
     }
   }

@@ -23,25 +23,34 @@ function preloadCard(
   company: string,
   location: string,
   duplicateTitle = title,
+  /** The standalone facts the live card renders beneath its location line. */
+  pills: readonly string[] = [],
 ) {
+  const stated = pills.map((pill) => `<li>${pill}</li>`).join("");
+
   return `<article data-job-id="${jobId}">
     <div>
       <div><div><div><div><a href="/jobs/view/${jobId}/" aria-label="${title} with verification"><span>${title}</span><span>${duplicateTitle}</span></a></div></div></div></div>
       <div><span>${company}</span></div>
       <div><ul><li><span>${location}</span></li></ul></div>
+      ${stated ? `<div><ul>${stated}</ul></div>` : ""}
     </div>
   </article>`;
 }
 
-function searchResultsHeader(jobId: string, title: string) {
+function searchResultsHeader(jobId: string, title: string, pills = "") {
   return `<div>
     <div><div aria-label="Company, Enterprise.">Enterprise</div></div>
     <div><div data-display-contents="true"><p><a href="/jobs/view/${jobId}/?alternateChannel=search">${title}</a></p></div></div>
     <div></div>
     <p>Dollard-des-Ormeaux, QC · Reposted 2 weeks ago · 29 people clicked apply</p>
+    ${pills}
     <div>Promoted by hirer · Responses managed off LinkedIn</div>
   </div>`;
 }
+
+const selectedIn = (jobId: string) =>
+  `https://www.linkedin.com/jobs/search/?currentJobId=${jobId}`;
 
 describe("the injected collector", () => {
   it("takes structured data, the canonical link, and standard metadata", () => {
@@ -448,6 +457,230 @@ describe("the injected collector", () => {
         ),
       ).siteFields,
     ).toBeUndefined();
+  });
+
+  /**
+   * The other shape LinkedIn states an arrangement in, and the reason this
+   * follow-up exists.
+   *
+   * Real Chrome testing on three live postings found the arrangement rendered
+   * as a standalone fact beside the location rather than as a suffix inside it,
+   * and PR #30 read only the suffix. What must not change is where the fact is
+   * allowed to come from: a LinkedIn page is full of other people's postings
+   * saying `Remote`, and the first one on the page is almost never the selected
+   * job's. Every assertion below is about that boundary.
+   */
+  describe("the dedicated arrangement of the selected posting", () => {
+    it("reads each of the three words the selected card states", () => {
+      for (const [pill, expected] of [
+        ["Hybrid", "Hybrid"],
+        ["Remote", "Remote"],
+        ["On-site", "On-site"],
+        ["(Hybrid)", "Hybrid"],
+        ["Onsite", "Onsite"],
+      ] as const) {
+        document.documentElement.innerHTML = `<head></head><body>
+          ${preloadCard("4459045210", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada", undefined, [pill])}
+        </body>`;
+
+        const signals = collectPageSignals(
+          readRulesFor(selectedIn("4459045210")),
+        );
+
+        expect(signals.siteFields?.["workplaceType"]).toBe(expected);
+        expect(signals.siteFields?.["location"]).toBe("Toronto, Ontario, Canada");
+      }
+    });
+
+    it("never reads the employment type, or prose about flexibility", () => {
+      document.documentElement.innerHTML = `<head></head><body>
+        ${preloadCard("4459045211", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada", undefined, [
+          "Internship",
+          "Full-time",
+          "Part-time",
+          "Contract",
+          "Temporary",
+          "Remote-first",
+          "Hybrid flexibility",
+          "Mostly remote",
+          "On site occasionally",
+          "Flexible",
+        ])}
+      </body>`;
+
+      const signals = collectPageSignals(
+        readRulesFor(selectedIn("4459045211")),
+      );
+
+      expect(signals.siteFields).not.toHaveProperty("workplaceType");
+      expect(signals.siteFields?.["title"]).toBe("Analyst Intern");
+    });
+
+    it("keeps a Full-time pill beside a real one out of the answer", () => {
+      document.documentElement.innerHTML = `<head></head><body>
+        ${preloadCard("4459045212", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada", undefined, ["Hybrid", "Full-time", "Internship"])}
+      </body>`;
+
+      expect(
+        collectPageSignals(readRulesFor(selectedIn("4459045212"))).siteFields?.[
+          "workplaceType"
+        ],
+      ).toBe("Hybrid");
+    });
+
+    it("does not let a neighbouring card's arrangement reach the selected one", () => {
+      document.documentElement.innerHTML = `<head></head><body>
+        ${preloadCard("4459045213", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada", undefined, ["Hybrid"])}
+        ${preloadCard("4000000000", "Warehouse Coordinator", "Southgate Robotics", "Mississauga, ON", undefined, ["Remote"])}
+      </body>`;
+
+      const selected = collectPageSignals(
+        readRulesFor(selectedIn("4459045213")),
+      );
+      const theOtherOne = collectPageSignals(
+        readRulesFor(selectedIn("4000000000")),
+      );
+
+      expect(selected.siteFields?.["workplaceType"]).toBe("Hybrid");
+      expect(theOtherOne.siteFields?.["workplaceType"]).toBe("Remote");
+    });
+
+    it("states nothing when the selected posting states nothing and a neighbour does", () => {
+      document.documentElement.innerHTML = `<head></head><body>
+        ${preloadCard("4459045214", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada")}
+        ${preloadCard("4000000000", "Warehouse Coordinator", "Southgate Robotics", "Mississauga, ON", undefined, ["Hybrid"])}
+      </body>`;
+
+      const signals = collectPageSignals(
+        readRulesFor(selectedIn("4459045214")),
+      );
+
+      expect(signals.siteFields).not.toHaveProperty("workplaceType");
+      expect(signals.siteFields?.["company"]).toBe("Northwind");
+    });
+
+    it("refuses the arrangement of the Similar Jobs posting the student came from", () => {
+      document.documentElement.innerHTML = `<head></head><body>
+        ${preloadCard("4443429701", "Solutions Consultant", "Exacare AI", "Remote — Canada", undefined, ["Remote"])}
+        ${preloadCard("4446257399", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada", undefined, ["Hybrid"])}
+      </body>`;
+
+      expect(
+        collectPageSignals(
+          readRulesFor(
+            "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4446257399&referenceJobId=4443429701",
+          ),
+        ).siteFields?.["workplaceType"],
+      ).toBe("Hybrid");
+    });
+
+    it("records both when one card contradicts itself, and chooses neither", () => {
+      document.documentElement.innerHTML = `<head></head><body>
+        ${preloadCard("4459045215", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada (Hybrid)", undefined, ["Remote"])}
+      </body>`;
+
+      const signals = collectPageSignals(
+        readRulesFor(selectedIn("4459045215")),
+      );
+
+      // `rich-fields.ts` reads these as two candidates and refuses the field.
+      expect(signals.siteFields?.["workplaceType"]).toBe("Hybrid, Remote");
+      expect(signals.siteFields?.["location"]).toBe("Toronto, Ontario, Canada");
+    });
+
+    it("agrees with itself when the suffix and the pill say the same thing", () => {
+      document.documentElement.innerHTML = `<head></head><body>
+        ${preloadCard("4459045216", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada (Hybrid)", undefined, ["Hybrid"])}
+      </body>`;
+
+      expect(
+        collectPageSignals(readRulesFor(selectedIn("4459045216"))).siteFields?.[
+          "workplaceType"
+        ],
+      ).toBe("Hybrid");
+    });
+
+    it("reads the pill inside the search-results header and not beside it", () => {
+      const jobId = "4432403970";
+      const withoutPill = `<head></head><body><main>
+        ${searchResultsHeader(jobId, "Management Trainee Internship - Fall 2026")}
+        <div>Remote</div>
+      </main></body>`;
+      const withPill = `<head></head><body><main>
+        ${searchResultsHeader(jobId, "Management Trainee Internship - Fall 2026", "<div><span>On-site</span><span>Internship</span></div>")}
+        <div>Remote</div>
+      </main></body>`;
+      const address = `https://www.linkedin.com/jobs/search-results/?currentJobId=${jobId}`;
+
+      document.documentElement.innerHTML = withoutPill;
+      expect(
+        collectPageSignals(readRulesFor(address)).siteFields,
+      ).not.toHaveProperty("workplaceType");
+
+      document.documentElement.innerHTML = withPill;
+      const signals = collectPageSignals(readRulesFor(address));
+      expect(signals.siteFields?.["workplaceType"]).toBe("On-site");
+      expect(signals.siteFields?.["location"]).toBe("Dollard-des-Ormeaux, QC");
+    });
+
+    it("reads the pill inside a job page's own top card", () => {
+      document.documentElement.innerHTML = `<head></head><body><main>
+        <div>
+          <div><div data-display-contents="true"><p>Analyst Intern</p></div></div>
+          <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
+          <p><span>Toronto, Ontario, Canada</span><span>2 weeks ago</span></p>
+          <ul><li>Hybrid</li><li>Full-time</li></ul>
+        </div>
+        <section><h3>More jobs for you</h3><ul><li><span>Remote</span></li></ul></section>
+      </main></body>`;
+
+      const signals = collectPageSignals(
+        readRulesFor("https://www.linkedin.com/jobs/view/4123456789/"),
+      );
+
+      expect(signals.siteFields?.["workplaceType"]).toBe("Hybrid");
+      expect(signals.siteFields?.["location"]).toBe("Toronto, Ontario, Canada");
+      expect(signals.siteFields?.["title"]).toBe("Analyst Intern");
+    });
+
+    it("reads the pill inside the split pane's card and never the rail's", () => {
+      document.documentElement.innerHTML = `<head></head><body><main>
+        <section aria-label="Primary content">
+          <div>
+            <div data-display-contents="true"><p>Analyst Intern</p></div>
+            <div aria-label="Company, Northwind Photonics."><a href="/company/northwind">Northwind Photonics</a></div>
+            <div data-display-contents="true"><p><span>Boise, ID</span></p></div>
+            <ul><li>Hybrid</li><li>Internship</li></ul>
+          </div>
+          <ul>
+            <li data-occludable-job-id="4470000002" aria-label="Company, Southgate Robotics.">
+              <a href="/jobs/view/4470000002/">Warehouse Coordinator</a><span>Remote</span>
+            </li>
+          </ul>
+        </section>
+      </main></body>`;
+
+      const signals = collectPageSignals(
+        readRulesFor(selectedIn("4123456789")),
+      );
+
+      expect(signals.siteFields?.["workplaceType"]).toBe("Hybrid");
+      expect(signals.siteFields?.["company"]).toBe("Northwind Photonics");
+      expect(signals.siteFields?.["location"]).toBe("Boise, ID");
+    });
+
+    it("never turns a location that reads `Remote` into an arrangement", () => {
+      document.documentElement.innerHTML = `<head></head><body>
+        ${preloadCard("4459045217", "Solutions Consultant", "Exacare AI", "Remote")}
+      </body>`;
+
+      const signals = collectPageSignals(
+        readRulesFor(selectedIn("4459045217")),
+      );
+
+      expect(signals.siteFields?.["location"]).toBe("Remote");
+      expect(signals.siteFields).not.toHaveProperty("workplaceType");
+    });
   });
 
   it("is self-contained, because Chrome injects it as source text", () => {

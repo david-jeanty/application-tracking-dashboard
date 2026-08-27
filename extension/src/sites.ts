@@ -58,14 +58,19 @@ export type SiteFieldKey =
   | "location"
   | "description"
   /**
-   * The arrangement a selected posting states beside its own location.
+   * The arrangement the selected posting states about itself.
    *
-   * LinkedIn writes it as a parenthesized suffix — `Toronto, Ontario, Canada
-   * (Hybrid)` — on the card the address names. It is read out of the same
-   * bounded element the location comes from, so it is the selected posting's
-   * fact and no other's, and it is returned verbatim: the mapping from that
-   * word to a stored value belongs to `rich-fields.ts`, which owns the one
-   * table of arrangement words.
+   * LinkedIn writes it two ways, and live testing found both. One is a
+   * parenthesized suffix on the location — `Toronto, Ontario, Canada (Hybrid)`
+   * — read out of the same bounded element the location comes from. The other
+   * is a standalone `Hybrid`, `Remote` or `On-site` beside the location line,
+   * read only inside the region that already established the selected
+   * posting's employer, title and location.
+   *
+   * The words are returned verbatim, and more than one may be returned,
+   * comma-separated, when the posting stated the fact in both places. Mapping
+   * them to a value — and refusing when they disagree — belongs to
+   * `rich-fields.ts`, which owns the one table of arrangement words.
    */
   | "workplaceType";
 
