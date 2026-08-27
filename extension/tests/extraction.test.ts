@@ -7,6 +7,7 @@ import {
   DESCRIPTION_LIMIT,
 } from "../src/extractor.js";
 import type { ExtractionReport } from "../src/types.js";
+import { unwrapLinkedInSafetyGoDestination } from "../src/source.js";
 import {
   applyControl,
   jobPosting,
@@ -25,8 +26,7 @@ const JNJ_LINKEDIN_POSTING = `<head></head><body>
     <p><span>Toronto, ON</span></p>
   </section></main>
   <section><h2>About the job</h2><div data-testid="expandable-text-box">
-    <a href="https://www.jnj.com/medtech">J&amp;J MedTech</a>
-    <a href="https://careers.jnj.com/jobs/marketing">Careers</a>
+    <a href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.jnj.com%2Fmedtech&amp;trk=test">jnj.com</a>
   </div></section>
 </body>`;
 
@@ -267,8 +267,7 @@ describe("the employer's domain", () => {
     const report = extractJobReport(signals);
 
     expect(signals.selectedLinks?.descriptionUrls).toEqual([
-      "https://www.jnj.com/medtech",
-      "https://careers.jnj.com/jobs/marketing",
+      "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.jnj.com%2Fmedtech&trk=test",
     ]);
     expect(toExtractedJob(report).companyDomain).toBe("jnj.com");
     expect(report.fields.companyDomain).toMatchObject({
@@ -293,6 +292,58 @@ describe("the employer's domain", () => {
         selectedLinks,
       }).companyDomain,
     ).toBe(expected);
+  });
+
+  it.each([
+    [
+      "LinkedIn safety URL for a recruitment subdomain",
+      "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fcareers.jnj.com%2Fjobs%2F123",
+      "jnj.com",
+    ],
+    [
+      "LinkedIn safety URL for a Greenhouse board",
+      "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fboards.greenhouse.io%2Facme%2Fjobs%2F1",
+      undefined,
+    ],
+    [
+      "LinkedIn safety URL for LinkedIn itself",
+      "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.linkedin.com%2Fjobs%2Fview%2F1",
+      undefined,
+    ],
+  ] as const)("handles %s through the existing employer rejection pipeline", (_label, url, expected) => {
+    expect(
+      extractJob({
+        jsonLdBlocks: [],
+        meta: {},
+        pageUrl: "https://www.linkedin.com/jobs/view/123",
+        selectedLinks: { descriptionUrls: [url] },
+      }).companyDomain,
+    ).toBe(expected);
+  });
+
+  it("uses a LinkedIn safety URL for the selected Apply destination", () => {
+    expect(
+      extractJob({
+        jsonLdBlocks: [],
+        meta: {},
+        pageUrl: "https://www.linkedin.com/jobs/view/123",
+        selectedLinks: {
+          applyUrl:
+            "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fkpmg.com%2Fca%2Fen%2Fhome%2Fcareers.html&trk=test",
+        },
+      }).companyDomain,
+    ).toBe("kpmg.com");
+  });
+
+  it.each([
+    ["a missing destination", "https://www.linkedin.com/safety/go/?trk=test"],
+    ["multiple destinations", "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fjnj.com&url=https%3A%2F%2Fkpmg.com"],
+    ["a non-http destination", "https://www.linkedin.com/safety/go/?url=javascript%3Aalert%281%29"],
+    ["a malformed destination", "https://www.linkedin.com/safety/go/?url=https%3A%2F%2F%25"],
+    ["an unrelated LinkedIn route", "https://www.linkedin.com/jobs/view/123?url=https%3A%2F%2Fjnj.com"],
+    ["an unrelated redirect route", "https://example.com/redirect?url=https%3A%2F%2Fjnj.com"],
+  ])("does not unwrap %s", (_label, url) => {
+    expect(unwrapLinkedInSafetyGoDestination(url)).toBeUndefined();
   });
 
   it.each([

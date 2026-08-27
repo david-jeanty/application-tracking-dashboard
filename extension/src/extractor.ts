@@ -636,10 +636,12 @@ function established<T>(
 /**
  * Employer identity evidence already inside the selected posting.
  *
- * This does not inspect the address bar, follow a link, or unwrap a redirect.
- * An Apply destination is stronger than the description because its role is
- * explicit. Description links must agree after rejected job-board/ATS hosts
- * are removed; choosing the first of two employers would be a guess.
+ * This does not inspect the address bar or follow redirects. LinkedIn's own
+ * exact safety-link wrapper is normalized once in `employerDomainFromUrl`;
+ * every other URL is taken as written. An Apply destination is stronger than
+ * the description because its role is explicit. Description links must agree
+ * after rejected job-board/ATS hosts are removed; choosing the first of two
+ * employers would be a guess.
  */
 function selectedCompanyDomain(
   links: PageSignals["selectedLinks"],
