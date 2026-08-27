@@ -1,4 +1,9 @@
-import { CAPTURE_STATUSES, type CaptureStatus } from "./types.js";
+import {
+  CAPTURE_STATUSES,
+  CAPTURE_WORK_ARRANGEMENTS,
+  type CaptureStatus,
+  type CaptureWorkArrangement,
+} from "./types.js";
 import type { CaptureRecord } from "./capture.js";
 
 /**
@@ -25,6 +30,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function optionalString(value: unknown, limit: number): string | undefined {
   return typeof value === "string" && value.length > 0 && value.length <= limit
     ? value
+    : undefined;
+}
+
+/** The three arrangements a page may establish. `Unknown` is not one of them. */
+function captureWorkArrangement(
+  value: unknown,
+): CaptureWorkArrangement | undefined {
+  return typeof value === "string" &&
+    (CAPTURE_WORK_ARRANGEMENTS as readonly string[]).includes(value)
+    ? (value as CaptureWorkArrangement)
     : undefined;
 }
 
@@ -59,6 +74,9 @@ function readCaptureRecord(value: unknown): CaptureRecord | undefined {
   const source = optionalString(value["source"], 100);
   const deadline = optionalString(value["deadline"], 10);
   const salary = optionalString(value["salary"], 100);
+  const workArrangement = captureWorkArrangement(value["work_arrangement"]);
+  const workTerm = optionalString(value["work_term"], 80);
+  const duration = optionalString(value["duration"], 80);
 
   return {
     company,
@@ -71,6 +89,9 @@ function readCaptureRecord(value: unknown): CaptureRecord | undefined {
     ...(source ? { source } : {}),
     ...(deadline ? { deadline } : {}),
     ...(salary ? { salary } : {}),
+    ...(workArrangement ? { work_arrangement: workArrangement } : {}),
+    ...(workTerm ? { work_term: workTerm } : {}),
+    ...(duration ? { duration } : {}),
   };
 }
 

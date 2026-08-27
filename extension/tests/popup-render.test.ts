@@ -233,6 +233,79 @@ describe("the read-only summary of what else is saved", () => {
     ]);
   });
 
+  it("names the rich facts it is storing without asking the student to type them", () => {
+    const state = reduce(
+      { view: "extracting" },
+      {
+        type: "extracted",
+        job: {
+          ...job,
+          deadline: "2026-09-13",
+          salary: "CAD 25 per hour",
+          workArrangement: "Hybrid",
+          workTerm: "Summer 2027",
+          duration: "4 months",
+          source: "LinkedIn",
+          jobUrl: "https://www.linkedin.com/jobs/view/4123456789/",
+        },
+      },
+    );
+
+    render(document, state);
+
+    expect(summaryRows()).toEqual([
+      ["Job description", "Saved"],
+      ["Deadline", "Sep 13, 2026"],
+      ["Salary", "CAD 25 per hour"],
+      ["Work arrangement", "Hybrid"],
+      ["Work term", "Summer 2027"],
+      ["Duration", "4 months"],
+      ["Source", "LinkedIn"],
+      ["Original posting", "Saved"],
+    ]);
+
+    // The value, and nothing about how it was established.
+    expect(document.querySelector("#also-found-list")?.textContent).not.toMatch(
+      /exact|strong|ambiguous|linkedin_selected_posting/i,
+    );
+  });
+
+  it("promises no rich fact the page did not establish", () => {
+    const state = reduce(
+      { view: "extracting" },
+      { type: "extracted", job: { ...job, workTerm: "Fall 2026" } },
+    );
+
+    render(document, state);
+
+    // An ambiguous arrangement has no projected value, so there is nothing to
+    // list — the summary says what is being stored, not what was considered.
+    expect(summaryRows()).toEqual([
+      ["Job description", "Saved"],
+      ["Work term", "Fall 2026"],
+    ]);
+  });
+
+  it("leaves the rich facts read-only, with no control of their own", () => {
+    const state = reduce(
+      { view: "extracting" },
+      {
+        type: "extracted",
+        job: { ...job, workArrangement: "Remote", duration: "8 months" },
+      },
+    );
+
+    render(document, state);
+
+    const summary = document.querySelector("#also-found");
+
+    expect(summary?.querySelectorAll("input, select, button, textarea").length).toBe(
+      0,
+    );
+    // The form is still the three fields and the status control it always was.
+    expect(document.querySelectorAll("#capture-form input").length).toBe(3);
+  });
+
   it("says a description was shortened rather than only that it was saved", () => {
     const state = reduce(
       { view: "extracting" },

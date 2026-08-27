@@ -10,6 +10,14 @@ import {
   type JsonLdNode,
 } from "./json-ld.js";
 import {
+  extractDuration,
+  extractWorkArrangement,
+  extractWorkTerm,
+  type RichConfidence,
+  type RichOrigin,
+  type RichResult,
+} from "./rich-fields.js";
+import {
   canonicalPostingUrl,
   readSiteFields,
   siteFor,
@@ -564,6 +572,7 @@ function microdataPosting(signals: PageSignals): JsonLdNode | undefined {
     title: text("title"),
     description: properties["description"],
     validThrough: text("validThrough"),
+    jobLocationType: text("jobLocationType"),
     baseSalary: money,
     hiringOrganization: {
       name: text("hiringOrganization.name") ?? text("hiringOrganization"),
@@ -828,6 +837,182 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
       site === "workday"
         ? workdayField(undefined, undefined, structuredSalaryCandidate, structuredSource)
         : established(salary, "exact", structuredSource),
+  };
+
+  /**
+   * Rich capture: three facts stated by the posting the student selected.
+   *
+   * Parsed from fields that are already established and already bounded to
+   * that posting — its title, its description, and the structured
+   * `jobLocationType` where structured data is trusted at all — so a rich fact
+   * inherits the evidence of the field it was read out of. That is why there
+   * is no new source vocabulary here: a work term read out of a LinkedIn
+   * selected posting came from `linkedin_selected_posting`, and naming the
+   * regex instead would describe the extension rather than the page.
+   */
+  const establishedValue = <T>(field: CapturedField<T>): T | undefined =>
+    field.state === "established" ? field.value : undefined;
+  const fieldSource = <T>(field: CapturedField<T>): ExtractionSource | undefined =>
+    field.state === "established" ? field.source : undefined;
+
+  const richSource = (origin: RichOrigin): ExtractionSource | undefined => {
+    if (origin === "structured") return structuredSource;
+    if (origin === "site") return siteSource;
+    if (origin === "title") return fieldSource(fields.jobTitle);
+
+    return fieldSource(fields.jobDescription);
+  };
+
+  /**
+   * The evidence the field this fact was read out of carries.
+   *
+   * A derived fact cannot be better attested than its source. A `Work
+   * arrangement: Hybrid` line is an exact statement wherever it appears, but
+   * when the line was found in page metadata rather than in a description the
+   * posting published, the page's own claim about the job is only strong — and
+   * so the arrangement read out of it is strong too. `structured` and `site`
+   * facts come from the publisher's own declaration and the site's dedicated
+   * field, both of which the established fields already call exact.
+   */
+  const richOriginConfidence = (origin: RichOrigin): RichConfidence => {
+    const field =
+      origin === "title"
+        ? fields.jobTitle
+        : origin === "description"
+          ? fields.jobDescription
+          : undefined;
+    if (!field || field.state !== "established") return "exact";
+
+    return field.confidence === "strong" ? "strong" : "exact";
+  };
+
+  const richField = <T extends string>(result: RichResult<T>): CapturedField<T> => {
+    if (result.state === "established") {
+      const source = richSource(result.origin);
+      // The weaker of the pattern's own evidence and the origin field's.
+      const confidence: RichConfidence =
+        richOriginConfidence(result.origin) === "strong"
+          ? "strong"
+          : result.confidence;
+
+      return source
+        ? {
+            state: "established",
+            value: result.value,
+            confidence,
+            source,
+          }
+        : absent();
+    }
+
+    if (result.state === "conflict") {
+      // The posting stated the fact twice and disagreed with itself. Kept as
+      // sanitized evidence, never as a value.
+      const source = result.origins
+        .map(richSource)
+        .find((candidate): candidate is ExtractionSource => Boolean(candidate));
+
+      return source
+        ? {
+            state: "ambiguous",
+            confidence: "ambiguous",
+            source,
+            reason: "conflicting_evidence",
+          }
+        : absent();
+    }
+
+    return absent();
+  };
+
+  /** Workday's stale structured data may be observed here, never trusted. */
+  const workdayRichField = <T extends string>(
+    trusted: RichResult<T>,
+    structured: RichResult<T>,
+  ): CapturedField<T> => {
+    const field = richField(trusted);
+
+    if (field.state === "established") {
+      return structured.state === "established" && structuredSource
+        ? {
+            ...field,
+            rejected: [
+              {
+                source: structuredSource,
+                reason: "workday_structured_data_untrusted" as const,
+              },
+            ],
+          }
+        : field;
+    }
+    if (field.state === "ambiguous") return field;
+
+    return structured.state === "established" && structuredSource
+      ? {
+          state: "ambiguous",
+          confidence: "ambiguous",
+          source: structuredSource,
+          reason: "workday_structured_data_untrusted",
+        }
+      : absent();
+  };
+
+  const postingTitle = establishedValue(fields.jobTitle);
+  const postingDescription = establishedValue(fields.jobDescription);
+  const trustedLocationType = posting
+    ? firstString(posting["jobLocationType"])
+    : undefined;
+
+  const richInput = { title: postingTitle, description: postingDescription };
+  const workArrangement = extractWorkArrangement({
+    ...richInput,
+    ...(trustedLocationType ? { jobLocationType: trustedLocationType } : {}),
+    ...(fromSite.workplaceType
+      ? { siteWorkplaceType: fromSite.workplaceType }
+      : {}),
+  });
+  const workTerm = extractWorkTerm(richInput);
+  const duration = extractDuration(richInput);
+
+  const structuredRichInput = {
+    ...(structuredTitleCandidate ? { title: structuredTitleCandidate } : {}),
+    ...(structuredDescriptionCandidate
+      ? { description: structuredDescriptionCandidate }
+      : {}),
+  };
+  const structuredLocationType = structuredPosting
+    ? firstString(structuredPosting["jobLocationType"])
+    : undefined;
+
+  const richFields = {
+    workArrangement:
+      site === "workday"
+        ? workdayRichField(
+            workArrangement,
+            extractWorkArrangement({
+              ...structuredRichInput,
+              ...(structuredLocationType
+                ? { jobLocationType: structuredLocationType }
+                : {}),
+            }),
+          )
+        : richField(workArrangement),
+    workTerm:
+      site === "workday"
+        ? workdayRichField(workTerm, extractWorkTerm(structuredRichInput))
+        : richField(workTerm),
+    duration:
+      site === "workday"
+        ? workdayRichField(duration, extractDuration(structuredRichInput))
+        : richField(duration),
+  } satisfies Pick<
+    ExtractionReport["fields"],
+    "workArrangement" | "workTerm" | "duration"
+  >;
+
+  const allFields = {
+    ...fields,
+    ...richFields,
   } satisfies ExtractionReport["fields"];
 
   if (
@@ -843,7 +1028,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   if (description.shortened) warnings.push("description_too_long");
 
   return {
-    fields,
+    fields: allFields,
     warnings,
     ...(site ? { recognizedSite: site } : {}),
     ...(siteSource ?? structuredSource ?? fallback
@@ -859,7 +1044,9 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
 
 /** Backward-compatible projection: ambiguous and absent fields stay blank. */
 export function toExtractedJob(report: ExtractionReport): ExtractedJob {
-  const value = (field: CapturedField<string>): string | undefined =>
+  // Reads the value only in the established case, so a field carrying a
+  // candidate it was never allowed to project cannot leak one at runtime.
+  const value = <T>(field: CapturedField<T>): T | undefined =>
     field.state === "established" ? field.value : undefined;
 
   return {
@@ -878,6 +1065,15 @@ export function toExtractedJob(report: ExtractionReport): ExtractedJob {
     ...(value(report.fields.source) ? { source: value(report.fields.source) } : {}),
     ...(value(report.fields.deadline) ? { deadline: value(report.fields.deadline) } : {}),
     ...(value(report.fields.salary) ? { salary: value(report.fields.salary) } : {}),
+    ...(value(report.fields.workArrangement)
+      ? { workArrangement: value(report.fields.workArrangement) }
+      : {}),
+    ...(value(report.fields.workTerm)
+      ? { workTerm: value(report.fields.workTerm) }
+      : {}),
+    ...(value(report.fields.duration)
+      ? { duration: value(report.fields.duration) }
+      : {}),
     warnings: report.warnings,
   };
 }
@@ -886,8 +1082,8 @@ export function toExtractedJob(report: ExtractionReport): ExtractedJob {
 export function extractionDiagnostics(
   report: ExtractionReport,
 ): ExtractionDiagnostics {
-  const diagnose = (
-    field: CapturedField<string>,
+  const diagnose = <T>(
+    field: CapturedField<T>,
     includeLength = false,
   ): ExtractionDiagnostics["fields"][keyof ExtractionDiagnostics["fields"]] => {
     if (field.state === "established") {
@@ -899,7 +1095,7 @@ export function extractionDiagnostics(
           ? { corroboratedBy: field.corroboratedBy }
           : {}),
         ...(field.rejected ? { rejected: field.rejected } : {}),
-        ...(includeLength ? { valueLength: field.value.length } : {}),
+        ...(includeLength ? { valueLength: String(field.value).length } : {}),
       };
     }
     if (field.state === "ambiguous") {
@@ -929,6 +1125,9 @@ export function extractionDiagnostics(
       source: diagnose(report.fields.source),
       deadline: diagnose(report.fields.deadline),
       salary: diagnose(report.fields.salary),
+      workArrangement: diagnose(report.fields.workArrangement),
+      workTerm: diagnose(report.fields.workTerm),
+      duration: diagnose(report.fields.duration),
     },
   };
 }

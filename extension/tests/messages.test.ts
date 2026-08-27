@@ -85,6 +85,37 @@ describe("what the background worker will act on", () => {
     expect(readBackgroundRequest(message)).toBeUndefined();
   });
 
+  it("carries the rich capture fields, and only their allowed values", () => {
+    const request = readBackgroundRequest({
+      type: "capture",
+      record: {
+        ...record,
+        work_arrangement: "Hybrid",
+        work_term: "Summer 2027",
+        duration: "4 months",
+      },
+    });
+
+    expect(request).toEqual({
+      type: "capture",
+      record: {
+        ...record,
+        work_arrangement: "Hybrid",
+        work_term: "Summer 2027",
+        duration: "4 months",
+      },
+    });
+
+    // `Unknown` is a stored value the server defaults to, not one a page can
+    // establish, so it does not cross this boundary either.
+    const refused = readBackgroundRequest({
+      type: "capture",
+      record: { ...record, work_arrangement: "Unknown", work_term: "x".repeat(81) },
+    });
+
+    expect(refused).toEqual({ type: "capture", record });
+  });
+
   it("rebuilds a capture record field by field, dropping anything invented", () => {
     const request = readBackgroundRequest({
       type: "capture",

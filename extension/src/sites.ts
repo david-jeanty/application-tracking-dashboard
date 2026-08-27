@@ -52,7 +52,27 @@ export type SiteId = "linkedin" | "indeed" | "workday";
 /** One field the injected collector should try to read, in preference order. */
 export type FieldRule = { key: SiteFieldKey; selectors: string[] };
 
-export type SiteFieldKey = "title" | "company" | "location" | "description";
+export type SiteFieldKey =
+  | "title"
+  | "company"
+  | "location"
+  | "description"
+  /**
+   * The arrangement the selected posting states about itself.
+   *
+   * LinkedIn writes it two ways, and live testing found both. One is a
+   * parenthesized suffix on the location — `Toronto, Ontario, Canada (Hybrid)`
+   * — read out of the same bounded element the location comes from. The other
+   * is a standalone `Hybrid`, `Remote` or `On-site` beside the location line,
+   * read only inside the region that already established the selected
+   * posting's employer, title and location.
+   *
+   * The words are returned verbatim, and more than one may be returned,
+   * comma-separated, when the posting stated the fact in both places. Mapping
+   * them to a value — and refusing when they disagree — belongs to
+   * `rich-fields.ts`, which owns the one table of arrangement words.
+   */
+  | "workplaceType";
 
 /**
  * A relational read the collector performs, for a site no selector list fits.
@@ -421,7 +441,10 @@ function tidyIndeedTitle(value: string): string {
 export function readSiteFields(
   site: SiteId,
   fields: Record<string, string> | undefined,
-): Pick<ExtractedJob, "company" | "jobTitle" | "location" | "jobDescription"> {
+): Pick<ExtractedJob, "company" | "jobTitle" | "location" | "jobDescription"> & {
+  /** As the posting wrote it: `Hybrid`, `Remote`, `On-site`. */
+  workplaceType?: string;
+} {
   if (!fields) return {};
 
   const text = (key: SiteFieldKey): string | undefined => {
@@ -442,6 +465,7 @@ export function readSiteFields(
     ...(title ? { jobTitle: title } : {}),
     ...(text("location") ? { location: text("location") } : {}),
     ...(text("description") ? { jobDescription: text("description") } : {}),
+    ...(text("workplaceType") ? { workplaceType: text("workplaceType") } : {}),
   };
 }
 

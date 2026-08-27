@@ -272,7 +272,8 @@ candidates are retained only as sanitized rejection metadata and project to a
 blank `ExtractedJob` field. Local diagnostics contain strategy/source codes,
 warning codes and description length, never page HTML, full descriptions,
 tokens or cookies. The popup, browser-capture API and payload remain on the
-same `ExtractedJob` contract. Rich Capture fields remain future work.
+same `ExtractedJob` contract, which now also carries the three Rich Capture
+fields below.
 
 Nothing below the first level knows that JobTrack, Supabase, OAuth,
 `applicationCreationSchema` or MCP exist; site rules extract facts from a page
@@ -464,6 +465,76 @@ one, in a field a student would use to compare offers.
   every number in it is zero.
 - A bare number with no currency is still left out.
 
+#### Rich capture: work arrangement, work term, duration
+
+Capture also persists three factual details about the term itself —
+`work_arrangement` (`Remote`, `Hybrid` or `On-site`), `work_term` (`Summer
+2027`) and `duration` (`4 months`, `16 weeks`) — on the existing external record
+contract's own field names. No server, schema or API change was needed: those
+fields were already part of `externalJobRecordSchema`.
+
+They are extracted, not classified. `extension/src/rich-fields.ts` holds three
+small pure helpers that read statements out of text the extractor has already
+tied to the selected posting — its title, its description, and structured
+`jobLocationType` where structured data is trusted at all. There is no model, no
+network call and no new dependency.
+
+- **Work arrangement** comes from a dedicated posting field (`Work arrangement:
+  Hybrid`, `Work model: Remote`, `Work setting: On-site`), from the arrangement
+  a recognized site states for the selected posting (below), from an arrangement
+  the title states as its own (`Analytics Intern (Hybrid)`, `Analytics Intern —
+  Remote`), or from `schema.org`'s one standardized structured signal,
+  `jobLocationType` naming telecommuting. Nothing else: a city is not an
+  arrangement, "flexible working environment" is not Hybrid, "may work remotely
+  on Fridays" is not Remote, and an office address is not On-site.
+- **Work term** needs a season *and* its year, stated by the posting —
+  `Summer 2027 Internship`, `Work term: Fall 2026`. Casing is normalized and
+  nothing else is rewritten. A term is never derived from the posting date, the
+  deadline, today's date, a start date, or a university calendar, and a bare
+  season in prose establishes nothing.
+- **Duration** comes from a labelled length (`Duration: 4 months`, `Term length:
+  16 weeks`) or from a length stated against the job itself (`8-month co-op`,
+  `16-week internship`). A `2-week training`, a `3-month probation` and
+  `5 years of experience` are lengths of something that is not the job, and none
+  of them reaches the field. No start/end-date arithmetic happens anywhere, and
+  weeks are never converted into months.
+
+Two statements that disagree end the field. `Summer/Fall 2027`, a title saying
+Hybrid against a description saying Remote, a `4-month internship` beside a
+`Duration: 8 months` — each is recorded as an ambiguous field with the reason
+`conflicting_evidence` and projects to a blank. There is no precedence table
+that resolves them, because no general fact about publishing makes either side
+right, and a coin toss is exactly the kind of wrong that survives unnoticed.
+
+**LinkedIn states the arrangement beside the location.** On the card the
+address names, the live markup writes `Toronto, Ontario, Canada (Hybrid)`. The
+collector was already removing that suffix to normalize the location and then
+throwing it away; it is now kept as its own bounded fact, `workplaceType`, read
+from the same element the location comes from and therefore belonging to the
+same selected posting. Only the three explicit suffixes are recognized —
+`(Hybrid)`, `(Remote)`, `(On-site)` — the normalized location output is
+unchanged, and nothing about which posting is selected, which frame is read, or
+how company, title and location are chosen was touched. A location that states
+no suffix establishes no arrangement, and `St. John's (NL)` keeps its
+parentheses because only a terminal work mode is a work mode.
+
+Each established rich field inherits the evidence of the bounded field it was
+read out of, so a work term read from a LinkedIn selected posting records
+`linkedin_selected_posting` rather than the pattern that matched it — no new
+source vocabulary was added. Confidence is `exact` for a dedicated field and
+`strong` where a title or a sentence had to be read conservatively. Workday's
+structured data stays untrusted for these fields exactly as it is for the
+others: a stale JSON-LD arrangement cannot override the selected posting, and
+where only stale structured data states a rich fact the field is ambiguous and
+projects nothing.
+
+**The extension sends no default.** A missing arrangement is omitted rather than
+sent as `Unknown`, and a missing work term is omitted rather than sent as
+`Not specified`. Both of those are stored defaults the server's mapper already
+owns, and a client that also wrote them would be a second implementation of one
+rule — the one shipped inside a browser, which is the harder of the two to
+change.
+
 ### Popup
 
 Three editable fields — company, job title, location — a status control offering
@@ -485,16 +556,26 @@ asserted without a browser.
 
 Below the status control, a compact read-only **Also found** list names what is
 being saved that the student did not type: whether a job description was saved
-(and whether it was shortened), a deadline, a salary, a source, and that the
-original posting URL was stored. It lists only what will actually be stored, so
+(and whether it was shortened), a deadline, a salary, the work arrangement, the
+work term, the duration, a source, and that the original posting URL was
+stored. It lists only what will actually be stored, so
 a deadline the extractor refused never appears there as a promise, and it
 disappears entirely when there is nothing extra to report.
 
-It is not a second copy of the JobTrack form. Category, work term, work
-arrangement, every other stored field, and any notion of extraction confidence
-stay out of it. The point is narrow: important data should not enter a tracker
-invisibly, and a wrong deadline or a bogus salary is exactly the kind that
-survives unnoticed when nobody is shown it.
+It is not a second copy of the JobTrack form. Category, every other stored
+field, and any notion of extraction confidence stay out of it. The point is
+narrow: important data should not enter a tracker invisibly, and a wrong
+deadline or a bogus salary is exactly the kind that survives unnoticed when
+nobody is shown it.
+
+The three Rich Capture fields appear in that list too — `Work arrangement`,
+`Work term`, `Duration` — for exactly the same reason the deadline and the
+salary do: they are stored without being typed, and the student should not have
+to take the extension's word for what it saved. They are read-only rows built
+from the projected `ExtractedJob`, so an ambiguous candidate has no value to
+list. Nothing else about the popup changed: one click, the same three editable
+fields, the same status control, no confidence badges, no diagnostics, no extra
+screen and no extra step.
 
 Accessibility: every control has a `<label>`, the summary is a labelled region
 with a real heading, one polite live region announces each state change, focus
