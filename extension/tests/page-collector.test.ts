@@ -52,6 +52,63 @@ function searchResultsHeader(jobId: string, title: string, pills = "") {
 const selectedIn = (jobId: string) =>
   `https://www.linkedin.com/jobs/search/?currentJobId=${jobId}`;
 
+/**
+ * The live `/jobs/search-results/` detail pane, in the shape real Chrome
+ * renders it.
+ *
+ * The one thing that matters here, and the thing `searchResultsHeader` above
+ * does not reproduce, is where the dedicated arrangement pill sits: the compact
+ * header holds the selected job's link, its labelled employer and its location
+ * line, and the pill is a *sibling block beside that header* rather than inside
+ * it. That is what a DevTools reproduction of the production boundary found on
+ * the live Mackenzie posting, and it is why the field came back absent.
+ */
+function searchResultsDetail(
+  jobId: string,
+  title: string,
+  company: string,
+  location: string,
+  pills: readonly string[] = [],
+  description = "",
+) {
+  const stated = pills.map((pill) => `<li><span>${pill}</span></li>`).join("");
+
+  return `<div>
+    <div>
+      <div>
+        <div><div aria-label="Company, ${company}.">${company}</div></div>
+        <div><div data-display-contents="true"><p><a href="/jobs/view/${jobId}/?alternateChannel=search">${title}</a></p></div></div>
+        <p>${location} · Reposted 1 week ago · 42 people clicked apply</p>
+      </div>
+      ${stated ? `<div><div><ul>${stated}</ul></div></div>` : ""}
+    </div>
+    ${description ? `<section><h2>About the job</h2><div data-testid="expandable-text-box">${description}</div></section>` : ""}
+  </div>`;
+}
+
+/**
+ * A neighbouring posting in the results rail, stating its own arrangement.
+ *
+ * Deliberately no landmark of its own: the rail shares one plain wrapper with
+ * the detail pane, so one further step of widening would reach it. That is what
+ * makes these fixtures test the guard that names the selected posting rather
+ * than the rule that refuses to read a page landmark.
+ */
+function resultsRailCard(
+  jobId: string,
+  title: string,
+  company: string,
+  pill: string,
+) {
+  return `<ul>
+    <li data-occludable-job-id="${jobId}">
+      <div aria-label="Company, ${company}.">${company}</div>
+      <a href="/jobs/view/${jobId}/">${title}</a>
+      <ul><li><span>${pill}</span></li></ul>
+    </li>
+  </ul>`;
+}
+
 describe("the injected collector", () => {
   it("takes structured data, the canonical link, and standard metadata", () => {
     const signals = read(
@@ -680,6 +737,160 @@ describe("the injected collector", () => {
 
       expect(signals.siteFields?.["location"]).toBe("Remote");
       expect(signals.siteFields).not.toHaveProperty("workplaceType");
+    });
+  });
+
+  /**
+   * The live-Chrome blocker this follow-up exists for.
+   *
+   * PR #30's fixtures passed while real `/jobs/search-results/` still captured
+   * no arrangement for a posting that renders a dedicated `Hybrid` pill. The
+   * compact header the bounded read had established — the one holding the
+   * selected job's link, its labelled employer and its location line — simply
+   * does not contain that pill on the live page; the pill is a sibling block
+   * beside it. Every case below is about the wider region that does contain it,
+   * and about the rail it must still refuse to reach into.
+   */
+  describe("the arrangement stated outside the search-results header", () => {
+    const detailPage = (
+      body: string,
+    ) => `<head></head><body><main>${body}</main></body>`;
+    const searchResults = (jobId: string) =>
+      `https://www.linkedin.com/jobs/search-results/?currentJobId=${jobId}`;
+
+    it("reads Mackenzie's Hybrid pill from beside the compact header", () => {
+      const jobId = "4457570200";
+      document.documentElement.innerHTML = detailPage(
+        searchResultsDetail(
+          jobId,
+          "Winter Intern 2027 - Value Delivery Office",
+          "Mackenzie Investments",
+          "Greater Toronto Area, Canada",
+          ["Hybrid", "Internship"],
+        ),
+      );
+
+      const signals = collectPageSignals(readRulesFor(searchResults(jobId)));
+
+      expect(signals.siteFields).toEqual({
+        title: "Winter Intern 2027 - Value Delivery Office",
+        company: "Mackenzie Investments",
+        location: "Greater Toronto Area, Canada",
+        workplaceType: "Hybrid",
+      });
+    });
+
+    it("reads each of the three words a detail pane states beside its header", () => {
+      for (const [pill, expected] of [
+        ["Hybrid", "Hybrid"],
+        ["Remote", "Remote"],
+        ["On-site", "On-site"],
+      ] as const) {
+        const jobId = "4457570201";
+        document.documentElement.innerHTML = detailPage(
+          searchResultsDetail(
+            jobId,
+            "Winter Intern 2027",
+            "Mackenzie Investments",
+            "Greater Toronto Area, Canada",
+            [pill, "Internship"],
+          ),
+        );
+
+        const signals = collectPageSignals(readRulesFor(searchResults(jobId)));
+
+        expect(signals.siteFields?.["workplaceType"]).toBe(expected);
+        expect(signals.siteFields?.["location"]).toBe(
+          "Greater Toronto Area, Canada",
+        );
+      }
+    });
+
+    it("takes the selected posting's Hybrid over a neighbouring Remote", () => {
+      const jobId = "4457570202";
+      document.documentElement.innerHTML = detailPage(
+        `<div>
+           ${resultsRailCard("4000000000", "Warehouse Coordinator", "Southgate Robotics", "Remote")}
+           ${searchResultsDetail(jobId, "Winter Intern 2027", "Mackenzie Investments", "Greater Toronto Area, Canada", ["Hybrid", "Internship"])}
+         </div>`,
+      );
+
+      const signals = collectPageSignals(readRulesFor(searchResults(jobId)));
+
+      expect(signals.siteFields?.["workplaceType"]).toBe("Hybrid");
+      expect(signals.siteFields?.["company"]).toBe("Mackenzie Investments");
+      expect(JSON.stringify(signals.siteFields)).not.toContain("Southgate");
+    });
+
+    it("states nothing when only the rail states an arrangement", () => {
+      const jobId = "4457570203";
+      document.documentElement.innerHTML = detailPage(
+        `<div>
+           ${resultsRailCard("4000000000", "Warehouse Coordinator", "Southgate Robotics", "Hybrid")}
+           ${searchResultsDetail(jobId, "Winter Intern 2027", "Mackenzie Investments", "Greater Toronto Area, Canada")}
+         </div>`,
+      );
+
+      const signals = collectPageSignals(readRulesFor(searchResults(jobId)));
+
+      expect(signals.siteFields).not.toHaveProperty("workplaceType");
+      expect(signals.siteFields?.["company"]).toBe("Mackenzie Investments");
+      expect(signals.siteFields?.["location"]).toBe(
+        "Greater Toronto Area, Canada",
+      );
+    });
+
+    it("refuses a second detail pane's arrangement on the same page", () => {
+      const jobId = "4457570204";
+      document.documentElement.innerHTML = detailPage(
+        `${searchResultsDetail("4443429701", "Solutions Consultant", "Exacare AI", "Remote — Canada", ["Remote"])}
+         ${searchResultsDetail(jobId, "Winter Intern 2027", "Mackenzie Investments", "Greater Toronto Area, Canada", ["Hybrid"])}`,
+      );
+
+      const signals = collectPageSignals(readRulesFor(searchResults(jobId)));
+
+      expect(signals.siteFields?.["company"]).toBe("Mackenzie Investments");
+      expect(signals.siteFields?.["workplaceType"]).toBe("Hybrid");
+    });
+
+    it("never reads an arrangement word out of the job description", () => {
+      const jobId = "4457570205";
+      document.documentElement.innerHTML = detailPage(
+        searchResultsDetail(
+          jobId,
+          "Winter Intern 2027",
+          "Mackenzie Investments",
+          "Greater Toronto Area, Canada",
+          [],
+          "<ul><li>Remote</li><li>Hybrid</li></ul>",
+        ),
+      );
+
+      const signals = collectPageSignals(readRulesFor(searchResults(jobId)));
+
+      expect(signals.siteFields).not.toHaveProperty("workplaceType");
+      expect(signals.siteFields?.["description"]).toBe(
+        "<ul><li>Remote</li><li>Hybrid</li></ul>",
+      );
+    });
+
+    it("keeps the employment type out of the answer beside a real pill", () => {
+      const jobId = "4457570206";
+      document.documentElement.innerHTML = detailPage(
+        searchResultsDetail(
+          jobId,
+          "Winter Intern 2027",
+          "Mackenzie Investments",
+          "Greater Toronto Area, Canada",
+          ["Internship", "Full-time", "Hybrid", "Contract"],
+        ),
+      );
+
+      expect(
+        collectPageSignals(readRulesFor(searchResults(jobId))).siteFields?.[
+          "workplaceType"
+        ],
+      ).toBe("Hybrid");
     });
   });
 

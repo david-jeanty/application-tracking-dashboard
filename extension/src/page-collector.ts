@@ -677,10 +677,133 @@ export function collectPageSignals(
           siteFields["location"] = clamp(location, MAXIMUM_FIELD_CHARACTERS);
         }
 
-        // The arrangement, inside the same compact header the selected
-        // posting's own link and employer established. The results rail around
-        // it shares no such header, so its pills are out of scope.
-        recordArrangements(statedArrangements(header, locationLine));
+        /**
+         * The selected posting's own detail region, which is where its
+         * dedicated arrangement pill actually is.
+         *
+         * The compact header above establishes the employer, the title and the
+         * location, and it stays exactly as it is for those. It is not,
+         * however, where live `/jobs/search-results/` draws the standalone
+         * `Hybrid` pill. Reproducing this bounded read against a live Mackenzie
+         * posting found the pill nowhere inside that header — the header holds
+         * the selected job's link, its labelled employer and its location line,
+         * and the pill is a sibling block beside all three. Reading the header
+         * alone could never see it, which is why the field came back absent on
+         * a page that plainly stated it.
+         *
+         * The pill and the selected job's own link do share an ancestor. It is
+         * simply one or two steps further out than the header. So the
+         * arrangement, and only the arrangement, is allowed to look further:
+         * the read climbs one ancestor at a time and stops at the *first*
+         * region that states an arrangement, never at the largest one that
+         * happens to contain one.
+         *
+         * Every step is guarded, because the page around this pane is a rail of
+         * other people's postings and several of them say `Remote`:
+         *
+         *   - a region naming any posting other than the selected one is the
+         *     rail, or the pane and the rail together, and the climb ends there
+         *     rather than widening past it;
+         *   - so is a region holding a virtualized results card, by LinkedIn's
+         *     own `data-occludable-job-id`, a block naming another job id, or a
+         *     Similar/More jobs container by id;
+         *   - a page landmark — the body, `main`, a nav, an aside — is the
+         *     whole document rather than one posting, and is never a posting's
+         *     region;
+         *   - the description is prose about the role, so a `Remote` inside it
+         *     is a requirement or an aside and not the posting's stated
+         *     arrangement.
+         *
+         * When no region satisfies all of that, the field stays blank. Nothing
+         * here reads a generated class name, a geometry, or a position in the
+         * document: the region is the selected posting's because the selected
+         * posting's own link is the thing it was derived from.
+         */
+        /** How far past the compact header an arrangement may be stated. */
+        const MAXIMUM_ARRANGEMENT_CLIMB = 4;
+        const MAXIMUM_REGION_CANDIDATES = 200;
+        /** A posting's own region is never one of the page's landmarks. */
+        const LANDMARK_TAGS = [
+          "BODY",
+          "MAIN",
+          "NAV",
+          "ASIDE",
+          "HEADER",
+          "FOOTER",
+          "FORM",
+        ];
+        const LANDMARK_ROLES = [
+          "main",
+          "navigation",
+          "complementary",
+          "banner",
+          "contentinfo",
+          "search",
+          "region",
+        ];
+
+        function isALandmark(node: Element): boolean {
+          if (LANDMARK_TAGS.includes(node.tagName)) return true;
+
+          const role = (node.getAttribute("role") ?? "").trim().toLowerCase();
+          return LANDMARK_ROLES.includes(role);
+        }
+
+        /** Whether a region reaches past the selected posting into the rail. */
+        function namesAnotherPosting(node: Element): boolean {
+          const links = Array.from(
+            node.querySelectorAll('a[href*="/jobs/view/"]'),
+          ).slice(0, MAXIMUM_REGION_CANDIDATES);
+          for (const other of links) {
+            const id = POSTING_LINK_PATTERN.exec(
+              other.getAttribute("href") ?? "",
+            )?.[1];
+            if (id && id !== selected) return true;
+          }
+
+          if (node.querySelector("[data-occludable-job-id]")) return true;
+
+          const blocks = Array.from(
+            node.querySelectorAll("[data-job-id], [id]"),
+          ).slice(0, MAXIMUM_REGION_CANDIDATES);
+          for (const block of blocks) {
+            const id = block.getAttribute("data-job-id");
+            if (id && id !== selected) return true;
+            if (block.id && RAIL_ID_PATTERN.test(block.id)) return true;
+          }
+
+          return false;
+        }
+
+        /** The description is prose about the role, never a stated pill. */
+        function inTheDescription(element: Element): boolean {
+          return Boolean(element.closest(DESCRIPTION_SELECTOR));
+        }
+
+        function selectedArrangements(): string[] {
+          let node: Element | null = header;
+
+          for (
+            let depth = 0;
+            node && depth <= MAXIMUM_ARRANGEMENT_CLIMB;
+            depth += 1
+          ) {
+            if (isALandmark(node) || namesAnotherPosting(node)) return [];
+
+            const stated = statedArrangements(
+              node,
+              locationLine,
+              inTheDescription,
+            );
+            if (stated.length > 0) return stated;
+
+            node = node.parentElement;
+          }
+
+          return [];
+        }
+
+        recordArrangements(selectedArrangements());
 
         const [about] = aboutTheJobHeadings();
         const description = about ? descriptionUnder([about]) : undefined;
