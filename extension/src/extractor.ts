@@ -22,6 +22,10 @@ import {
   readSiteFields,
   siteFor,
 } from "./sites.js";
+import {
+  parseExplicitSalary,
+  type ExplicitSalaryResult,
+} from "./salary.js";
 import { employerDomainFromUrl, sourceForUrl } from "./source.js";
 import type {
   CapturedField,
@@ -679,6 +683,26 @@ function selectedCompanyDomain(
   return absent();
 }
 
+/** Salary stated in an already-established selected posting description. */
+function salaryFromDescription(
+  result: ExplicitSalaryResult,
+  source: ExtractionSource | undefined,
+): CapturedField<string> {
+  if (result.state === "established") {
+    return established(result.value, "exact", source);
+  }
+  if (result.state === "conflict" && source) {
+    return {
+      state: "ambiguous",
+      confidence: "ambiguous",
+      source,
+      reason: "conflicting_evidence",
+    };
+  }
+
+  return absent();
+}
+
 /** Workday structured data is observable but never establishes a field. */
 function workdayField<T>(
   value: T | undefined,
@@ -835,6 +859,14 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
     signals.selectedLinks,
     siteSource,
   );
+  // Metadata is only page-level corroboration, not a selected posting
+  // description. Salary never originates from it.
+  const descriptionSalaryField = salaryFromDescription(
+    descriptionSource && descriptionSource !== "generic_metadata"
+      ? parseExplicitSalary(description.text)
+      : { state: "absent" },
+    descriptionSource === "generic_metadata" ? undefined : descriptionSource,
+  );
   const deadline = posting ? readDeadline(posting) : undefined;
   const salary = posting ? readSalary(posting) : undefined;
 
@@ -901,8 +933,24 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
         : established(deadline, "exact", structuredSource),
     salary:
       site === "workday"
-        ? workdayField(undefined, undefined, structuredSalaryCandidate, structuredSource)
-        : established(salary, "exact", structuredSource),
+        ? descriptionSalaryField.state === "established"
+          ? workdayField(
+              descriptionSalaryField.value,
+              descriptionSalaryField.source,
+              structuredSalaryCandidate,
+              structuredSource,
+            )
+          : descriptionSalaryField.state === "ambiguous"
+            ? descriptionSalaryField
+            : workdayField(
+                undefined,
+                undefined,
+                structuredSalaryCandidate,
+                structuredSource,
+              )
+        : salary
+          ? established(salary, "exact", structuredSource)
+          : descriptionSalaryField,
   };
 
   /**

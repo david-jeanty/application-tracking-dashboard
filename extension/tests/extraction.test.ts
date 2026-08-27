@@ -27,6 +27,10 @@ const JNJ_LINKEDIN_POSTING = `<head></head><body>
   </section></main>
   <section><h2>About the job</h2><div data-testid="expandable-text-box">
     <a href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.jnj.com%2Fmedtech&amp;trk=test">jnj.com</a>
+    <p>The anticipated base pay range for this position is $23/hour to $33/hour.</p>
+    <p>Second-year students: $23/hour</p>
+    <p>Third-year students: $27/hour</p>
+    <p>Fourth-year students: $30/hour</p>
   </div></section>
 </body>`;
 
@@ -656,6 +660,114 @@ describe("dates and pay", () => {
     const html = page(jsonLd(jobPosting({ baseSalary: "$23.50 per hour" })));
 
     expect(extractJob(readPage(html)).salary).toBe("$23.50 per hour");
+  });
+
+  it("captures KPMG's explicit selected LinkedIn annual salary range", () => {
+    const html = `<head></head><body>
+      <main><section>
+        <div aria-label="Company, KPMG Canada.">KPMG Canada</div>
+        <div data-display-contents="true"><p>Consultant, Internship</p></div>
+        <p><span>Ottawa, ON</span></p>
+      </section></main>
+      <section><h2>About the job</h2><div data-testid="expandable-text-box">
+        <p>Annual base salary range: $49,000 to $58,500.</p>
+      </div></section>
+    </body>`;
+
+    const report = extractJobReport(
+      readSitePage(html, "https://www.linkedin.com/jobs/view/4123456789"),
+    );
+
+    expect(toExtractedJob(report).salary).toBe("$49,000–$58,500 per year");
+    expect(report.fields.salary).toMatchObject({
+      state: "established",
+      confidence: "exact",
+      source: "linkedin_selected_posting",
+    });
+  });
+
+  it("keeps J&J's overall selected base-pay range above student-year rates", () => {
+    const report = extractJobReport(
+      readSitePage(JNJ_LINKEDIN_POSTING, "https://www.linkedin.com/jobs/view/123"),
+    );
+
+    expect(toExtractedJob(report).salary).toBe("$23–$33 per hour");
+    expect(report.fields.salary).toMatchObject({
+      state: "established",
+      confidence: "exact",
+      source: "linkedin_selected_posting",
+    });
+  });
+
+  it("never treats generic page metadata as selected-description salary evidence", () => {
+    const html = page(
+      '<meta property="og:description" content="Salary range: $50,000–$60,000" />',
+    );
+
+    expect(extractJob(readPage(html)).salary).toBeUndefined();
+  });
+
+  it("uses a selected Workday salary description while rejecting stale baseSalary", () => {
+    const html = `<head>${jsonLd(
+      jobPosting({
+        baseSalary: {
+          currency: "CAD",
+          value: { minValue: 50_000, maxValue: 60_000, unitText: "YEAR" },
+        },
+      }),
+    )}</head><body>
+      <div data-automation-id="jobPostingPage">
+        <h2 data-automation-id="jobPostingHeader">Consultant, Internship</h2>
+        <div data-automation-id="jobPostingDescription"><p>Salary: $25/hour</p></div>
+      </div>
+    </body>`;
+    const report = extractJobReport(
+      readSitePage(
+        html,
+        "https://kpmg.wd3.myworkdayjobs.com/en-US/External/job/Ottawa/Consultant_12345",
+      ),
+    );
+
+    expect(toExtractedJob(report).salary).toBe("$25 per hour");
+    expect(report.fields.salary).toMatchObject({
+      state: "established",
+      source: "workday_selected_posting",
+      rejected: [
+        {
+          source: "json_ld_job_posting",
+          reason: "workday_structured_data_untrusted",
+        },
+      ],
+    });
+  });
+
+  it("cannot project salary from stale Workday structured data alone", () => {
+    const html = `<head>${jsonLd(
+      jobPosting({
+        baseSalary: {
+          currency: "CAD",
+          value: { minValue: 50_000, maxValue: 60_000, unitText: "YEAR" },
+        },
+      }),
+    )}</head><body>
+      <div data-automation-id="jobPostingPage">
+        <h2 data-automation-id="jobPostingHeader">Consultant, Internship</h2>
+        <div data-automation-id="jobPostingDescription"><p>Join the consulting practice.</p></div>
+      </div>
+    </body>`;
+    const report = extractJobReport(
+      readSitePage(
+        html,
+        "https://kpmg.wd3.myworkdayjobs.com/en-US/External/job/Ottawa/Consultant_12345",
+      ),
+    );
+
+    expect(toExtractedJob(report).salary).toBeUndefined();
+    expect(report.fields.salary).toMatchObject({
+      state: "ambiguous",
+      source: "json_ld_job_posting",
+      reason: "workday_structured_data_untrusted",
+    });
   });
 });
 

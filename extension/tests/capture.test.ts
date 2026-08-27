@@ -78,6 +78,7 @@ describe("the record sent to JobTrack", () => {
     expect(record).not.toHaveProperty("work_arrangement");
     expect(record).not.toHaveProperty("work_term");
     expect(record).not.toHaveProperty("duration");
+    expect(record).not.toHaveProperty("salary");
   });
 
   it("includes an established company domain and omits an absent one", () => {
