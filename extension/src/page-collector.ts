@@ -775,6 +775,12 @@ export function collectPageSignals(
          */
         /** How far past the compact header an arrangement may be stated. */
         const MAXIMUM_ARRANGEMENT_CLIMB = 4;
+        /**
+         * Apply can sit below the selected detail boundary's arrangement area.
+         * Live LinkedIn inspection found that boundary at seven ancestors, so
+         * this admits that shape with one bounded step of tolerance.
+         */
+        const MAXIMUM_APPLY_CLIMB = 8;
         const MAXIMUM_REGION_CANDIDATES = 200;
         /** A posting's own region is never one of the page's landmarks. */
         const LANDMARK_TAGS = [
@@ -857,8 +863,33 @@ export function collectPageSignals(
           return [];
         }
 
+        /**
+         * The first safe selected-detail ancestor offering Apply.
+         *
+         * The compact header remains the sole source for company, title and
+         * location. Apply is allowed to climb farther, under the same rail and
+         * landmark guards that already protect arrangement collection.
+         */
+        function selectedApply(): void {
+          let node: Element | null = header;
+
+          for (
+            let depth = 0;
+            node && depth <= MAXIMUM_APPLY_CLIMB;
+            depth += 1
+          ) {
+            if (isALandmark(node) || namesAnotherPosting(node)) return;
+
+            const before = selectedApplyUrls.size;
+            recordApplyLink(node);
+            if (selectedApplyUrls.size > before) return;
+
+            node = node.parentElement;
+          }
+        }
+
         recordArrangements(selectedArrangements());
-        recordApplyLink(header);
+        selectedApply();
 
         const [about] = aboutTheJobHeadings();
         const description = about ? descriptionUnder([about]) : null;
