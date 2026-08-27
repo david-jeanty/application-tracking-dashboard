@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { collectPageSignals } from "../src/page-collector.js";
 import { readRulesFor } from "../src/sites.js";
+import { isPageSignals } from "../src/types.js";
 
 /**
  * What the injected collector is willing to take off a page.
@@ -110,6 +111,22 @@ function resultsRailCard(
 }
 
 describe("the injected collector", () => {
+  it("keeps selected-link signals plain, bounded, and HTTP-only at the boundary", () => {
+    const signals = {
+      ...read("<head></head><body></body>"),
+      pageUrl: "https://www.linkedin.com/jobs/view/123",
+      selectedLinks: { descriptionUrls: ["https://careers.example.com/jobs/1"] },
+    };
+
+    expect(isPageSignals(signals)).toBe(true);
+    expect(
+      isPageSignals({
+        ...signals,
+        selectedLinks: { descriptionUrls: ["mailto:jobs@example.com"] },
+      }),
+    ).toBe(false);
+  });
+
   it("takes structured data, the canonical link, and standard metadata", () => {
     const signals = read(
       `<head>

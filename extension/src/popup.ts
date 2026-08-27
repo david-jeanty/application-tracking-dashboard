@@ -18,7 +18,12 @@ import {
   type PopupEvent,
   type PopupState,
 } from "./popup-state.js";
-import type { CaptureOutcome, ExtractedJob, PageSignals } from "./types.js";
+import {
+  isPageSignals,
+  type CaptureOutcome,
+  type ExtractedJob,
+  type PageSignals,
+} from "./types.js";
 import type { ConnectResult } from "./auth.js";
 
 /**
@@ -72,7 +77,8 @@ async function collectFrom(
     world: "ISOLATED",
   });
 
-  return results[0]?.result;
+  const signals = results[0]?.result;
+  return isPageSignals(signals) ? signals : undefined;
 }
 
 /**

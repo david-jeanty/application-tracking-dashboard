@@ -51,6 +51,8 @@ export function collectPageSignals(
   const MAXIMUM_FIELD_CHARACTERS = 200_000;
   const MAXIMUM_MICRODATA_PROPERTIES = 60;
   const MAXIMUM_APPLY_CANDIDATES = 400;
+  const MAXIMUM_SELECTED_LINKS = 20;
+  const MAXIMUM_URL_LENGTH = 2_048;
   const MAXIMUM_LABELLED_CANDIDATES = 400;
   const MAXIMUM_HEADING_CANDIDATES = 200;
   /** How far a relational read may climb before it gives up. */
@@ -99,6 +101,53 @@ export function collectPageSignals(
     if (!node.textContent?.trim()) return undefined;
 
     return clamp(node.innerHTML, MAXIMUM_FIELD_CHARACTERS);
+  }
+
+  /** URLs from a region already established as the selected posting only. */
+  const selectedDescriptionUrls = new Set<string>();
+  const selectedApplyUrls = new Set<string>();
+  let descriptionUrlOverflow = false;
+
+  function absoluteHttpUrl(value: string | null): string | undefined {
+    if (!value) return undefined;
+    try {
+      const url = new URL(value, window.location.href);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+      const serialized = url.toString();
+      return serialized.length <= MAXIMUM_URL_LENGTH ? serialized : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  function recordDescriptionLinks(container: Element | null): void {
+    if (!container) return;
+    const links = Array.from(container.querySelectorAll("a[href]"));
+    if (links.length > MAXIMUM_SELECTED_LINKS) {
+      // A partial list could hide a conflicting employer domain. This is an
+      // identity signal, so ambiguity is safer than retaining the first URLs.
+      descriptionUrlOverflow = true;
+      return;
+    }
+    for (const link of links) {
+      const url = absoluteHttpUrl(link.getAttribute("href"));
+      if (url) selectedDescriptionUrls.add(url);
+    }
+  }
+
+  function recordApplyLink(container: Element | null): void {
+    if (!container) return;
+    for (const link of Array.from(container.querySelectorAll("a[href]")).slice(
+      0,
+      MAXIMUM_APPLY_CANDIDATES,
+    )) {
+      const label = (
+        link.getAttribute("aria-label")?.trim() || link.textContent?.trim() || ""
+      ).slice(0, 200);
+      if (!label || !APPLY_PATTERN.test(label)) continue;
+      const url = absoluteHttpUrl(link.getAttribute("href"));
+      if (url) selectedApplyUrls.add(url);
+    }
   }
 
   const jsonLdBlocks: string[] = [];
@@ -193,6 +242,7 @@ export function collectPageSignals(
       const value = markupOf(found);
       if (value) {
         siteFields[rule.key] = value;
+        if (rule.key === "description") recordDescriptionLinks(found);
         break;
       }
     }
@@ -361,7 +411,7 @@ export function collectPageSignals(
    * heading is the only thing that says which box is the posting, so the box
    * must both share a small ancestor with it and follow it in the document.
    */
-  function descriptionUnder(headings: readonly Element[]): string | undefined {
+  function descriptionUnder(headings: readonly Element[]): Element | null {
     for (const heading of headings) {
       let node: Element | null = heading.parentElement;
 
@@ -374,14 +424,13 @@ export function collectPageSignals(
             0,
         );
 
-        const value = markupOf(following ?? null);
-        if (value) return value;
+        if (markupOf(following ?? null)) return following ?? null;
         if (node === document.body) break;
         node = node.parentElement;
       }
     }
 
-    return undefined;
+    return null;
   }
 
   function readLinkedInJobDetail(): void {
@@ -486,13 +535,18 @@ export function collectPageSignals(
       // The arrangement, read only inside the card the employer, the title and
       // the location all came from. Nothing outside that card is consulted.
       recordArrangements(statedArrangements(topCard, locationElement));
+      recordApplyLink(topCard);
     }
 
     // The first "About the job" heading on the page, and only that one: on
     // these routes the page shows one posting, so a second would be furniture.
     const [about] = aboutTheJobHeadings();
-    const description = about ? descriptionUnder([about]) : undefined;
-    if (description) siteFields["description"] = description;
+    const description = about ? descriptionUnder([about]) : null;
+    const descriptionValue = markupOf(description);
+    if (descriptionValue) {
+      siteFields["description"] = descriptionValue;
+      recordDescriptionLinks(description);
+    }
   }
 
   /**
@@ -804,10 +858,15 @@ export function collectPageSignals(
         }
 
         recordArrangements(selectedArrangements());
+        recordApplyLink(header);
 
         const [about] = aboutTheJobHeadings();
-        const description = about ? descriptionUnder([about]) : undefined;
-        if (description) siteFields["description"] = description;
+        const description = about ? descriptionUnder([about]) : null;
+        const descriptionValue = markupOf(description);
+        if (descriptionValue) {
+          siteFields["description"] = descriptionValue;
+          recordDescriptionLinks(description);
+        }
 
         return;
       }
@@ -927,6 +986,7 @@ export function collectPageSignals(
         if (!known) arrangements.push(stated);
       }
       recordArrangements(arrangements);
+      recordApplyLink(root);
 
       const details = document.querySelector("#job-details");
       const about = details
@@ -943,6 +1003,7 @@ export function collectPageSignals(
         const description = markupOf(copy);
         if (description) {
           siteFields["description"] = description;
+          recordDescriptionLinks(details);
         }
       }
 
@@ -1097,6 +1158,7 @@ export function collectPageSignals(
 
       // The arrangement, from the detail pane's own card and never the rail's.
       recordArrangements(statedArrangements(card, locationElement, inTheRail));
+      recordApplyLink(card);
     }
 
     /**
@@ -1120,6 +1182,7 @@ export function collectPageSignals(
       const value = markupOf(box ?? null);
       if (value) {
         siteFields["description"] = value;
+        recordDescriptionLinks(box ?? null);
         break;
       }
     }
@@ -1145,6 +1208,7 @@ export function collectPageSignals(
           const value = markupOf(box ?? null);
           if (value) {
             siteFields["description"] = value;
+            recordDescriptionLinks(box ?? null);
             break;
           }
           if (node === region) break;
@@ -1183,7 +1247,11 @@ export function collectPageSignals(
       '[data-automation-id="jobPostingDescription"]',
     );
     const descriptionValue = markupOf(description);
-    if (descriptionValue) siteFields["description"] = descriptionValue;
+    if (descriptionValue) {
+      siteFields["description"] = descriptionValue;
+      recordDescriptionLinks(description);
+    }
+    recordApplyLink(posting);
 
     // Workday tenancy corroborates branded sidebar copy but never originates an
     // employer: a page with no specific sidebar signal still has no company.
@@ -1282,6 +1350,19 @@ export function collectPageSignals(
       : {}),
     ...(Object.keys(microdata).length > 0 ? { microdata } : {}),
     ...(Object.keys(siteFields).length > 0 ? { siteFields } : {}),
+    ...(selectedApplyUrls.size === 1 ||
+    (!descriptionUrlOverflow && selectedDescriptionUrls.size > 0)
+      ? {
+          selectedLinks: {
+            ...(selectedApplyUrls.size === 1
+              ? { applyUrl: [...selectedApplyUrls][0] }
+              : {}),
+            ...(!descriptionUrlOverflow && selectedDescriptionUrls.size > 0
+              ? { descriptionUrls: [...selectedDescriptionUrls] }
+              : {}),
+          },
+        }
+      : {}),
     evidence: {
       applyAffordance,
       jobPostingMicrodata: Boolean(microdataRoot),

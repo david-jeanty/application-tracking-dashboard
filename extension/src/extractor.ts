@@ -633,6 +633,50 @@ function established<T>(
     : absent();
 }
 
+/**
+ * Employer identity evidence already inside the selected posting.
+ *
+ * This does not inspect the address bar, follow a link, or unwrap a redirect.
+ * An Apply destination is stronger than the description because its role is
+ * explicit. Description links must agree after rejected job-board/ATS hosts
+ * are removed; choosing the first of two employers would be a guess.
+ */
+function selectedCompanyDomain(
+  links: PageSignals["selectedLinks"],
+  siteSource: ExtractionSource | undefined,
+): CapturedField<string> {
+  const apply = links?.applyUrl
+    ? employerDomainFromUrl(links.applyUrl)
+    : undefined;
+  if (apply) {
+    return established(apply, "exact", siteSource ?? "selected_posting_apply");
+  }
+
+  const domains = new Set(
+    (links?.descriptionUrls ?? [])
+      .map(employerDomainFromUrl)
+      .filter((domain): domain is string => Boolean(domain)),
+  );
+  if (domains.size === 1) {
+    return established(
+      [...domains][0],
+      "strong",
+      siteSource ?? "selected_posting_description",
+    );
+  }
+  if (domains.size > 1) {
+    const source = siteSource ?? "selected_posting_description";
+    return {
+      state: "ambiguous",
+      confidence: "ambiguous",
+      source,
+      reason: "conflicting_evidence",
+    };
+  }
+
+  return absent();
+}
+
 /** Workday structured data is observable but never establishes a field. */
 function workdayField<T>(
   value: T | undefined,
@@ -784,7 +828,11 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   const structuredSalaryCandidate = structuredPosting
     ? readSalary(structuredPosting)
     : undefined;
-  const companyDomain = readCompanyDomain(organization);
+  const structuredCompanyDomain = readCompanyDomain(organization);
+  const selectedCompanyDomainField = selectedCompanyDomain(
+    signals.selectedLinks,
+    siteSource,
+  );
   const deadline = posting ? readDeadline(posting) : undefined;
   const salary = posting ? readSalary(posting) : undefined;
 
@@ -812,8 +860,24 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
           ),
     companyDomain:
       site === "workday"
-        ? workdayField(undefined, undefined, structuredCompanyDomainCandidate, structuredSource)
-        : established(companyDomain, "exact", structuredSource),
+        ? selectedCompanyDomainField.state === "established"
+          ? workdayField(
+              selectedCompanyDomainField.value,
+              selectedCompanyDomainField.source,
+              structuredCompanyDomainCandidate,
+              structuredSource,
+            )
+          : selectedCompanyDomainField.state === "ambiguous"
+            ? selectedCompanyDomainField
+            : workdayField(
+                undefined,
+                undefined,
+                structuredCompanyDomainCandidate,
+                structuredSource,
+              )
+        : structuredCompanyDomain
+          ? established(structuredCompanyDomain, "exact", structuredSource)
+          : selectedCompanyDomainField,
     jobDescription:
       site === "workday"
         ? workdayField(

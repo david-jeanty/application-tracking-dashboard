@@ -36,6 +36,9 @@ const APPLICANT_TRACKING_HOSTS = [
   "eightfold.ai",
   "avature.net",
   "brassring.com",
+  // Rippling is also an employer website, so only its ATS surface belongs
+  // here. Do not add the parent `rippling.com`.
+  "ats.rippling.com",
 ];
 
 /**
@@ -65,6 +68,22 @@ const NEVER_EMPLOYER_HOSTS = [
   ...APPLICANT_TRACKING_HOSTS,
   ...JOB_BOARD_SOURCES.map((entry) => entry.suffix),
 ];
+
+/**
+ * Recruitment labels are deployment details, not employer identity.
+ *
+ * This intentionally removes only a small, explicit first label. A generic
+ * subdomain such as `ca.example.com` can be an employer's real canonical web
+ * host and must survive. This is not a Public Suffix List implementation.
+ */
+const RECRUITMENT_SUBDOMAINS = new Set([
+  "careers",
+  "career",
+  "jobs",
+  "job",
+  "recruiting",
+  "recruitment",
+]);
 
 function hostnameOf(value: string): string | undefined {
   try {
@@ -119,6 +138,11 @@ export function employerDomainFromUrl(url: string): string | undefined {
   if (!hostname.includes(".")) return undefined;
   if (NEVER_EMPLOYER_HOSTS.some((suffix) => matchesHost(hostname, suffix))) {
     return undefined;
+  }
+
+  const labels = hostname.split(".");
+  if (labels.length > 2 && RECRUITMENT_SUBDOMAINS.has(labels[0] ?? "")) {
+    return labels.slice(1).join(".");
   }
 
   return hostname;

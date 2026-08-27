@@ -80,6 +80,17 @@ describe("the record sent to JobTrack", () => {
     expect(record).not.toHaveProperty("duration");
   });
 
+  it("includes an established company domain and omits an absent one", () => {
+    expect(buildCaptureRecord(extracted, confirmation).company_domain).toBe("ibm.com");
+
+    const record = buildCaptureRecord(
+      { jobUrl: "https://careers.example.com/jobs/1", warnings: [] },
+      confirmation,
+    );
+
+    expect(record).not.toHaveProperty("company_domain");
+  });
+
   it("invents no Unknown arrangement and no Not specified work term", () => {
     const record = buildCaptureRecord(
       { warnings: [] },
