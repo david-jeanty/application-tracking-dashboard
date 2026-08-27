@@ -280,6 +280,7 @@ describe("the injected collector", () => {
       title: "GE Vernova Controls Product Management Intern - Summer 2027",
       company: "GE Vernova",
       location: "Greenville, SC",
+      workplaceType: "On-site",
       description: "<p>GE description</p>",
     });
     expect(JSON.stringify(signals.siteFields)).not.toContain("verification");
@@ -303,6 +304,7 @@ describe("the injected collector", () => {
       title: "Senior Managing Consultant SAP HANA SD OTC",
       company: "IBM",
       location: "Vancouver, BC",
+      workplaceType: "Hybrid",
     });
     expect(JSON.stringify(signals)).not.toContain("Arbitrary iframe description");
   });
@@ -323,7 +325,12 @@ describe("the injected collector", () => {
       title: "QC - Intern Strategy & Economy - 2027",
       company: "KPMG Canada",
       location: "Montreal, QC",
+      workplaceType: "On-site",
     });
+
+    // The neighbouring card states Hybrid. The read is bounded to the selected
+    // posting, so its arrangement cannot arrive here either.
+    expect(signals.siteFields?.["workplaceType"]).not.toBe("Hybrid");
   });
 
   it("takes Mitsubishi's employer rather than its duplicate title", () => {
@@ -341,6 +348,7 @@ describe("the injected collector", () => {
       title: "Project Management Internship",
       company: "Mitsubishi Power Americas",
       location: "Orlando, FL",
+      workplaceType: "On-site",
     });
   });
 
@@ -349,13 +357,30 @@ describe("the injected collector", () => {
       ${preloadCard("4459045201", "Analyst Intern", "Northwind", "St. John's (NL) (Remote)")}
     </body>`;
 
-    expect(
-      collectPageSignals(
-        readRulesFor(
-          "https://www.linkedin.com/jobs/search/?currentJobId=4459045201",
-        ),
-      ).siteFields?.["location"],
-    ).toBe("St. John's (NL)");
+    const signals = collectPageSignals(
+      readRulesFor(
+        "https://www.linkedin.com/jobs/search/?currentJobId=4459045201",
+      ),
+    );
+
+    expect(signals.siteFields?.["location"]).toBe("St. John's (NL)");
+    // Only the terminal work mode is the arrangement; the province is not.
+    expect(signals.siteFields?.["workplaceType"]).toBe("Remote");
+  });
+
+  it("states no arrangement when the selected posting names none", () => {
+    document.documentElement.innerHTML = `<head></head><body>
+      ${preloadCard("4459045202", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada")}
+    </body>`;
+
+    const signals = collectPageSignals(
+      readRulesFor(
+        "https://www.linkedin.com/jobs/search/?currentJobId=4459045202",
+      ),
+    );
+
+    expect(signals.siteFields?.["location"]).toBe("Toronto, Ontario, Canada");
+    expect(signals.siteFields).not.toHaveProperty("workplaceType");
   });
 
   it("reads the exact Enterprise search-results header, not its rail", () => {

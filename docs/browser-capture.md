@@ -480,7 +480,8 @@ tied to the selected posting — its title, its description, and structured
 network call and no new dependency.
 
 - **Work arrangement** comes from a dedicated posting field (`Work arrangement:
-  Hybrid`, `Work model: Remote`, `Work setting: On-site`), from an arrangement
+  Hybrid`, `Work model: Remote`, `Work setting: On-site`), from the arrangement
+  a recognized site states for the selected posting (below), from an arrangement
   the title states as its own (`Analytics Intern (Hybrid)`, `Analytics Intern —
   Remote`), or from `schema.org`'s one standardized structured signal,
   `jobLocationType` naming telecommuting. Nothing else: a city is not an
@@ -504,6 +505,18 @@ Hybrid against a description saying Remote, a `4-month internship` beside a
 `conflicting_evidence` and projects to a blank. There is no precedence table
 that resolves them, because no general fact about publishing makes either side
 right, and a coin toss is exactly the kind of wrong that survives unnoticed.
+
+**LinkedIn states the arrangement beside the location.** On the card the
+address names, the live markup writes `Toronto, Ontario, Canada (Hybrid)`. The
+collector was already removing that suffix to normalize the location and then
+throwing it away; it is now kept as its own bounded fact, `workplaceType`, read
+from the same element the location comes from and therefore belonging to the
+same selected posting. Only the three explicit suffixes are recognized —
+`(Hybrid)`, `(Remote)`, `(On-site)` — the normalized location output is
+unchanged, and nothing about which posting is selected, which frame is read, or
+how company, title and location are chosen was touched. A location that states
+no suffix establishes no arrangement, and `St. John's (NL)` keeps its
+parentheses because only a terminal work mode is a work mode.
 
 Each established rich field inherits the evidence of the bounded field it was
 read out of, so a work term read from a LinkedIn selected posting records
@@ -543,8 +556,9 @@ asserted without a browser.
 
 Below the status control, a compact read-only **Also found** list names what is
 being saved that the student did not type: whether a job description was saved
-(and whether it was shortened), a deadline, a salary, a source, and that the
-original posting URL was stored. It lists only what will actually be stored, so
+(and whether it was shortened), a deadline, a salary, the work arrangement, the
+work term, the duration, a source, and that the original posting URL was
+stored. It lists only what will actually be stored, so
 a deadline the extractor refused never appears there as a promise, and it
 disappears entirely when there is nothing extra to report.
 
@@ -554,13 +568,14 @@ narrow: important data should not enter a tracker invisibly, and a wrong
 deadline or a bogus salary is exactly the kind that survives unnoticed when
 nobody is shown it.
 
-The three Rich Capture fields are stored without appearing in that list, and the
-popup is unchanged by this work — one click, the same three editable fields, the
-same status control, no new step. Whether work arrangement, work term and
-duration should join the **Also found** list is a live question rather than a
-settled one: the list is a plain `label: value` sequence and extending it is
-three lines, so it is a deliberate product decision and not a technical
-obstacle.
+The three Rich Capture fields appear in that list too — `Work arrangement`,
+`Work term`, `Duration` — for exactly the same reason the deadline and the
+salary do: they are stored without being typed, and the student should not have
+to take the extension's word for what it saved. They are read-only rows built
+from the projected `ExtractedJob`, so an ambiguous candidate has no value to
+list. Nothing else about the popup changed: one click, the same three editable
+fields, the same status control, no confidence badges, no diagnostics, no extra
+screen and no extra step.
 
 Accessibility: every control has a `<label>`, the summary is a labelled region
 with a real heading, one polite live region announces each state change, focus

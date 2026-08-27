@@ -29,7 +29,7 @@ import type { CaptureWorkArrangement } from "./types.js";
  */
 
 /** Which bounded posting field a candidate was read out of. */
-export type RichOrigin = "structured" | "title" | "description";
+export type RichOrigin = "structured" | "site" | "title" | "description";
 
 export type RichConfidence = "exact" | "strong";
 
@@ -163,6 +163,14 @@ function arrangementWord(raw: string): CaptureWorkArrangement | undefined {
  */
 export function extractWorkArrangement(input: {
   jobLocationType?: string;
+  /**
+   * An arrangement a recognized site stated for the selected posting.
+   *
+   * LinkedIn writes it beside the location on the card its address names —
+   * `Toronto, Ontario, Canada (Hybrid)` — which makes it a dedicated statement
+   * about that posting rather than something read out of prose.
+   */
+  siteWorkplaceType?: string;
   title?: string;
   description?: string;
 }): RichResult<CaptureWorkArrangement> {
@@ -178,6 +186,13 @@ export function extractWorkArrangement(input: {
       confidence: "exact",
       origin: "structured",
     });
+  }
+
+  const fromSite = input.siteWorkplaceType
+    ? arrangementWord(input.siteWorkplaceType)
+    : undefined;
+  if (fromSite) {
+    candidates.push({ value: fromSite, confidence: "exact", origin: "site" });
   }
 
   for (const [origin, text] of [

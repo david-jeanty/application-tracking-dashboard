@@ -181,6 +181,113 @@ describe("work arrangement", () => {
   });
 });
 
+/**
+ * LinkedIn states the arrangement beside the location of the card its address
+ * names — `Toronto, Ontario, Canada (Hybrid)`. The collector was already
+ * removing that suffix to normalize the location and discarding it; it is now
+ * kept as its own bounded fact about the selected posting. Nothing about which
+ * posting is selected, or how the location is normalized, changed.
+ */
+describe("the arrangement a LinkedIn selected posting states", () => {
+  /** The selected card as the live `/preload/` document builds one. */
+  const card = (
+    jobId: string,
+    title: string,
+    company: string,
+    location: string,
+  ) => `<article data-job-id="${jobId}">
+      <div>
+        <div><div><div><div>
+          <a href="/jobs/view/${jobId}/" aria-label="${title} with verification">
+            <span>${title}</span><span>${title}</span>
+          </a>
+        </div></div></div></div>
+        <div><span>${company}</span></div>
+        <div><ul><li><span>${location}</span></li></ul></div>
+      </div>
+    </article>`;
+
+  const selectedIn = (jobId: string) =>
+    `https://www.linkedin.com/jobs/search/?currentJobId=${jobId}`;
+
+  it("keeps the normalized location and establishes the arrangement", () => {
+    for (const [stated, expected] of [
+      ["Toronto, Ontario, Canada (Hybrid)", "Hybrid"],
+      ["Toronto, Ontario, Canada (Remote)", "Remote"],
+      ["Toronto, Ontario, Canada (On-site)", "On-site"],
+    ] as const) {
+      const report = extractJobReport(
+        readSitePage(
+          `<head></head><body>${card("4446257399", "Analyst Intern", "Northwind", stated)}</body>`,
+          selectedIn("4446257399"),
+        ),
+      );
+      const job = toExtractedJob(report);
+
+      expect(job.location).toBe("Toronto, Ontario, Canada");
+      expect(job.workArrangement).toBe(expected);
+      expect(report.fields.workArrangement).toMatchObject({
+        state: "established",
+        confidence: "exact",
+        source: "linkedin_selected_posting",
+      });
+      expect(report.fields.location).toMatchObject({
+        state: "established",
+        source: "linkedin_selected_posting",
+      });
+    }
+  });
+
+  it("establishes no arrangement from a location that states none", () => {
+    const report = extractJobReport(
+      readSitePage(
+        `<head></head><body>${card("4446257399", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada")}</body>`,
+        selectedIn("4446257399"),
+      ),
+    );
+
+    expect(toExtractedJob(report).location).toBe("Toronto, Ontario, Canada");
+    expect(toExtractedJob(report).workArrangement).toBeUndefined();
+    expect(report.fields.workArrangement.state).toBe("absent");
+  });
+
+  it("takes the arrangement of the selected posting, not a neighbour's", () => {
+    const html = `<head></head><body>
+       ${card("4446257399", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada (Hybrid)")}
+       ${card("4470000002", "Warehouse Coordinator", "Southgate Robotics", "Mississauga, ON (Remote)")}
+     </body>`;
+
+    const selected = toExtractedJob(
+      extractJobReport(readSitePage(html, selectedIn("4446257399"))),
+    );
+    const theOtherOne = toExtractedJob(
+      extractJobReport(readSitePage(html, selectedIn("4470000002"))),
+    );
+
+    expect(selected.company).toBe("Northwind");
+    expect(selected.workArrangement).toBe("Hybrid");
+    expect(theOtherOne.company).toBe("Southgate Robotics");
+    expect(theOtherOne.workArrangement).toBe("Remote");
+  });
+
+  it("refuses a Similar Jobs reference posting's arrangement", () => {
+    // The address names the selected posting; the document also holds the one
+    // the student came from. Only the selected card may state this fact.
+    const report = extractJobReport(
+      readSitePage(
+        `<head></head><body>
+           ${card("4443429701", "Solutions Consultant", "Exacare AI", "Remote — Canada (Remote)")}
+           ${card("4446257399", "Analyst Intern", "Northwind", "Toronto, Ontario, Canada (Hybrid)")}
+         </body>`,
+        "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4446257399&referenceJobId=4443429701",
+      ),
+    );
+
+    expect(toExtractedJob(report).company).toBe("Northwind");
+    expect(toExtractedJob(report).workArrangement).toBe("Hybrid");
+  });
+});
+
 describe("work term", () => {
   it("reads a term the title names", () => {
     for (const [title, expected] of [

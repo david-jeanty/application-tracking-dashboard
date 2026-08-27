@@ -856,6 +856,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
 
   const richSource = (origin: RichOrigin): ExtractionSource | undefined => {
     if (origin === "structured") return structuredSource;
+    if (origin === "site") return siteSource;
     if (origin === "title") return fieldSource(fields.jobTitle);
 
     return fieldSource(fields.jobDescription);
@@ -937,6 +938,9 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   const workArrangement = extractWorkArrangement({
     ...richInput,
     ...(trustedLocationType ? { jobLocationType: trustedLocationType } : {}),
+    ...(fromSite.workplaceType
+      ? { siteWorkplaceType: fromSite.workplaceType }
+      : {}),
   });
   const workTerm = extractWorkTerm(richInput);
   const duration = extractDuration(richInput);

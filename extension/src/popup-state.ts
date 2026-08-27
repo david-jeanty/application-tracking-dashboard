@@ -304,6 +304,17 @@ export function alsoFound(job: ExtractedJob): FoundFact[] {
   }
 
   if (job.salary) facts.push({ label: "Salary", value: job.salary });
+
+  // The rich facts, from the projected job and nowhere else: an ambiguous
+  // candidate has no projected value, so it cannot be promised here. Only the
+  // value is shown — where it came from and how sure the extractor was are
+  // troubleshooting details, not something to make a student read.
+  if (job.workArrangement) {
+    facts.push({ label: "Work arrangement", value: job.workArrangement });
+  }
+  if (job.workTerm) facts.push({ label: "Work term", value: job.workTerm });
+  if (job.duration) facts.push({ label: "Duration", value: job.duration });
+
   if (job.source) facts.push({ label: "Source", value: job.source });
   if (job.jobUrl) facts.push({ label: "Original posting", value: "Saved" });
 

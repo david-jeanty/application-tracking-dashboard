@@ -52,7 +52,22 @@ export type SiteId = "linkedin" | "indeed" | "workday";
 /** One field the injected collector should try to read, in preference order. */
 export type FieldRule = { key: SiteFieldKey; selectors: string[] };
 
-export type SiteFieldKey = "title" | "company" | "location" | "description";
+export type SiteFieldKey =
+  | "title"
+  | "company"
+  | "location"
+  | "description"
+  /**
+   * The arrangement a selected posting states beside its own location.
+   *
+   * LinkedIn writes it as a parenthesized suffix — `Toronto, Ontario, Canada
+   * (Hybrid)` — on the card the address names. It is read out of the same
+   * bounded element the location comes from, so it is the selected posting's
+   * fact and no other's, and it is returned verbatim: the mapping from that
+   * word to a stored value belongs to `rich-fields.ts`, which owns the one
+   * table of arrangement words.
+   */
+  | "workplaceType";
 
 /**
  * A relational read the collector performs, for a site no selector list fits.
@@ -421,7 +436,10 @@ function tidyIndeedTitle(value: string): string {
 export function readSiteFields(
   site: SiteId,
   fields: Record<string, string> | undefined,
-): Pick<ExtractedJob, "company" | "jobTitle" | "location" | "jobDescription"> {
+): Pick<ExtractedJob, "company" | "jobTitle" | "location" | "jobDescription"> & {
+  /** As the posting wrote it: `Hybrid`, `Remote`, `On-site`. */
+  workplaceType?: string;
+} {
   if (!fields) return {};
 
   const text = (key: SiteFieldKey): string | undefined => {
@@ -442,6 +460,7 @@ export function readSiteFields(
     ...(title ? { jobTitle: title } : {}),
     ...(text("location") ? { location: text("location") } : {}),
     ...(text("description") ? { jobDescription: text("description") } : {}),
+    ...(text("workplaceType") ? { workplaceType: text("workplaceType") } : {}),
   };
 }
 

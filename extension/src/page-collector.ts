@@ -677,6 +677,20 @@ export function collectPageSignals(
         ? trimmedText(locationList.querySelector("li > span"))
         : "";
       if (rawLocation && rawLocation.length <= MAXIMUM_LOCATION_CHARACTERS) {
+        // `Toronto, Ontario, Canada (Hybrid)`. The parenthesized half is the
+        // selected posting's own statement of how the role is worked, and it
+        // was already being computed here only to be discarded. It is kept as
+        // its own bounded fact; the location it is removed from is unchanged.
+        const arrangement = /\s+\((on-site|hybrid|remote)\)\s*$/i.exec(
+          rawLocation,
+        )?.[1];
+        if (arrangement) {
+          siteFields["workplaceType"] = clamp(
+            arrangement,
+            MAXIMUM_FIELD_CHARACTERS,
+          );
+        }
+
         const location = rawLocation
           .replace(/\s+\((?:on-site|hybrid|remote)\)\s*$/i, "")
           .trim();
