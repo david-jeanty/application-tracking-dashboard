@@ -313,9 +313,20 @@ export function extractWorkTerm(input: {
  * Duration
  * ------------------------------------------------------------------ */
 
-/** A field the posting dedicates to length: `Duration: 4 months`. */
+/**
+ * A field the posting dedicates to length: `Duration: 4 months`.
+ *
+ * Two shapes qualify, and what separates them is what the sentence is
+ * measuring. A qualified label names it outright — `Term length`, `Contract
+ * duration` — and only employment nouns qualify. Bare `duration` is read as
+ * the job's only where it opens a statement or a list item, because anywhere
+ * else the noun in front of it is the thing being measured: "Training
+ * duration: 2 weeks", "the warranty duration is 6 months" and "Probation
+ * duration is 3 months" each state a real length of something that is not how
+ * long the role lasts.
+ */
 const DURATION_LABEL_PATTERN =
-  /\b(?:work[\s-]?term duration|term duration|term length|length of (?:the )?(?:work )?term|internship duration|co-?op duration|duration)\s*(?:is\s*)?[:\-–—]?\s*(\d{1,2})[\s-]*(month|week)s?\b/gi;
+  /(?:\b(?:(?:work[\s-]?term|term|internship|co-?op|contract) (?:duration|length)|length of (?:the )?(?:work )?term)|(?:^|\n|[.!?]\s)\s*(?:[-–—•·*]\s*)?duration\b)\s*(?:is\s*)?[:\-–—]?\s*(\d{1,2})[\s-]*(month|week)s?\b/gi;
 
 /**
  * `4-month internship`, `16-week co-op term` — a length attached to the job.
@@ -324,9 +335,15 @@ const DURATION_LABEL_PATTERN =
  * "2-week training", "3-month probation" and "5 years of experience" all state
  * a real length of something that is not how long the role lasts, and none of
  * them reaches this pattern.
+ *
+ * Bare `intern` is deliberately not one of the nouns. It is a modifier as often
+ * as it is the job — "our 2-week intern orientation" measures the orientation —
+ * and `internship` states the same thing without the ambiguity. Missing the
+ * occasional "4-month intern" costs a blank field; taking the orientation costs
+ * a wrong one.
  */
 const DURATION_CONTEXT_PATTERN =
-  /\b(\d{1,2})[\s-]*(month|week)s?[\s-]+(?:long\s+)?(?:internship|intern|co-?op|work term|term|placement|position|role|contract|assignment|program|rotation|student)\b/gi;
+  /\b(\d{1,2})[\s-]*(month|week)s?[\s-]+(?:long\s+)?(?:internship|co-?op|work term|term|placement|position|role|contract|assignment|program|rotation|student)\b/gi;
 
 function duration(count: string | undefined, unit: string | undefined): string | undefined {
   const amount = Number(count);

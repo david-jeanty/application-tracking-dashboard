@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildCaptureRecord } from "../src/capture.js";
 import {
   extractJobReport,
   extractionDiagnostics,
@@ -10,7 +11,14 @@ import {
   extractWorkTerm,
 } from "../src/rich-fields.js";
 import type { ExtractionReport } from "../src/types.js";
-import { jobPosting, jsonLd, page, readPage, readSitePage } from "./fixtures.js";
+import {
+  applyControl,
+  jobPosting,
+  jsonLd,
+  page,
+  readPage,
+  readSitePage,
+} from "./fixtures.js";
 
 /**
  * Rich capture: work arrangement, work term, and duration.
@@ -28,6 +36,7 @@ const LINKEDIN_SEARCH =
   "https://www.linkedin.com/jobs/search/?currentJobId=4123456789&keywords=intern";
 const WORKDAY_JOB =
   "https://kpmg.wd3.myworkdayjobs.com/en-US/External/job/Toronto/Senior-Consultant_12345";
+const WORKDAY_SEARCH = "https://kpmg.wd3.myworkdayjobs.com/en-US/External";
 
 /** A structured posting, varied by the one field each test is about. */
 function structured(overrides: Record<string, unknown>) {
@@ -476,6 +485,64 @@ describe("duration", () => {
     }
   });
 
+  it("refuses a length whose label measures something other than the term", () => {
+    // Each of these states a real duration of a real thing, and none of them is
+    // how long the job lasts. The word `duration` is in every one.
+    for (const description of [
+      "Training duration: 2 weeks.",
+      "Probation duration is 3 months.",
+      "The warranty duration is 6 months.",
+      "Onboarding duration: 1 week.",
+      "Notice period duration: 2 weeks.",
+    ]) {
+      const report = extractJobReport(structured({ description }));
+
+      expect(toExtractedJob(report).duration).toBeUndefined();
+      expect(report.fields.duration.state).toBe("absent");
+    }
+  });
+
+  it("still reads every label that names the term's own length", () => {
+    for (const [description, expected] of [
+      ["Duration: 4 months", "4 months"],
+      ["Duration is 4 months", "4 months"],
+      ["Work term duration: 4 months", "4 months"],
+      ["Term duration: 4 months", "4 months"],
+      ["Term length: 16 weeks", "16 weeks"],
+      ["Length of the work term: 8 months", "8 months"],
+      ["Internship duration: 4 months", "4 months"],
+      ["Co-op duration: 4 months", "4 months"],
+      ["Contract duration: 6 months", "6 months"],
+      ["About the role.\nDuration: 4 months", "4 months"],
+      ["About the role.\n- Duration: 4 months", "4 months"],
+    ] as const) {
+      const report = extractJobReport(structured({ description }));
+
+      expect(toExtractedJob(report).duration).toBe(expected);
+      expect(report.fields.duration).toMatchObject({ confidence: "exact" });
+    }
+  });
+
+  it("refuses a length attached to bare `intern` rather than to the job", () => {
+    const report = extractJobReport(
+      structured({ description: "Our 2-week intern orientation is paid." }),
+    );
+
+    expect(toExtractedJob(report).duration).toBeUndefined();
+    expect(report.fields.duration.state).toBe("absent");
+
+    // The nouns that do name the job keep working.
+    for (const [description, expected] of [
+      ["A 4-month internship on the platform team.", "4 months"],
+      ["An 8-month co-op based in Ottawa.", "8 months"],
+      ["A 16-week internship starting in May.", "16 weeks"],
+    ] as const) {
+      expect(
+        toExtractedJob(extractJobReport(structured({ description }))).duration,
+      ).toBe(expected);
+    }
+  });
+
   it("refuses two lengths that disagree", () => {
     const report = extractJobReport(
       structured({
@@ -619,6 +686,114 @@ describe("the rich fields' evidence", () => {
     expect(serialized).not.toContain("Summer 2027");
     expect(serialized).not.toContain("4 months");
     expect(serialized).not.toContain("recruiting@example.com");
+  });
+
+  it("clamps a rich fact to the evidence of the field it was read out of", () => {
+    // Page metadata describes the page rather than the job, so the description
+    // it yields is only strong. `Work arrangement: Hybrid` is an exact
+    // statement, but a fact derived from a strong field cannot outrank it.
+    const report = extractJobReport(
+      readPage(
+        page(
+          '<meta property="og:description" content="Work arrangement: Hybrid. Duration: 4 months. Work term: Summer 2027." />',
+          `<h1>Analytics Intern</h1>${applyControl()}`,
+        ),
+        "https://careers.example.com/job/analytics-intern-48213",
+      ),
+    );
+
+    expect(report.fields.jobDescription).toMatchObject({
+      state: "established",
+      confidence: "strong",
+      source: "generic_metadata",
+    });
+
+    for (const field of [
+      report.fields.workArrangement,
+      report.fields.workTerm,
+      report.fields.duration,
+    ]) {
+      expect(field).toMatchObject({
+        state: "established",
+        confidence: "strong",
+        source: "generic_metadata",
+      });
+    }
+
+    // The clamp is about evidence, not about capture: the values are unchanged.
+    const job = toExtractedJob(report);
+    expect(job.workArrangement).toBe("Hybrid");
+    expect(job.workTerm).toBe("Summer 2027");
+    expect(job.duration).toBe("4 months");
+  });
+
+  it("projects no rich field from a Workday search page that selected nothing", () => {
+    // PR #28's rule, applied to the three new fields: Workday can retain a
+    // backend posting after the student has navigated back to the results
+    // list, and a search state establishes no selected posting to attach it to.
+    const html = `<head>${jsonLd(
+      jobPosting({
+        title: "Stale Summer 2027 backend title",
+        description: "Work arrangement: Remote\nDuration: 8 months",
+        jobLocationType: "TELECOMMUTE",
+      }),
+    )}</head><body>
+       <section data-automation-id="jobResults">
+         <ul><li><a href="/job/Toronto/Analyst_54321">Analyst, Advisory</a></li></ul>
+       </section>
+     </body>`;
+
+    const report = extractJobReport(readSitePage(html, WORKDAY_SEARCH));
+    const job = toExtractedJob(report);
+
+    expect(job.jobTitle).toBeUndefined();
+    expect(job.workArrangement).toBeUndefined();
+    expect(job.workTerm).toBeUndefined();
+    expect(job.duration).toBeUndefined();
+
+    for (const field of [
+      report.fields.workArrangement,
+      report.fields.workTerm,
+      report.fields.duration,
+    ]) {
+      expect(field).toMatchObject({
+        state: "ambiguous",
+        source: "json_ld_job_posting",
+        reason: "workday_structured_data_untrusted",
+      });
+    }
+  });
+
+  it("carries an established rich fact all the way onto the record", () => {
+    // extractJobReport -> toExtractedJob -> buildCaptureRecord, on the wire
+    // name the record contract uses. The three hops are the whole test.
+    const report = extractJobReport(
+      readSitePage(
+        `<head></head><body><article data-job-id="4446257399">
+           <div>
+             <div><div><div><div>
+               <a href="/jobs/view/4446257399/" aria-label="Analyst Intern with verification">
+                 <span>Analyst Intern</span><span>Analyst Intern</span>
+               </a>
+             </div></div></div></div>
+             <div><span>Northwind</span></div>
+             <div><ul><li><span>Toronto, Ontario, Canada (Hybrid)</span></li></ul></div>
+           </div>
+         </article></body>`,
+        "https://www.linkedin.com/jobs/search/?currentJobId=4446257399",
+      ),
+    );
+
+    const job = toExtractedJob(report);
+    const record = buildCaptureRecord(job, {
+      company: "Northwind",
+      jobTitle: "Analyst Intern",
+      location: "Toronto, Ontario, Canada",
+      status: "Interested",
+    });
+
+    expect(job.workArrangement).toBe("Hybrid");
+    expect(record.work_arrangement).toBe("Hybrid");
   });
 
   it("cannot project a Workday rich fact that only stale structured data states", () => {

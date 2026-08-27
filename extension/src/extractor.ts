@@ -13,6 +13,7 @@ import {
   extractDuration,
   extractWorkArrangement,
   extractWorkTerm,
+  type RichConfidence,
   type RichOrigin,
   type RichResult,
 } from "./rich-fields.js";
@@ -862,15 +863,43 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
     return fieldSource(fields.jobDescription);
   };
 
+  /**
+   * The evidence the field this fact was read out of carries.
+   *
+   * A derived fact cannot be better attested than its source. A `Work
+   * arrangement: Hybrid` line is an exact statement wherever it appears, but
+   * when the line was found in page metadata rather than in a description the
+   * posting published, the page's own claim about the job is only strong — and
+   * so the arrangement read out of it is strong too. `structured` and `site`
+   * facts come from the publisher's own declaration and the site's dedicated
+   * field, both of which the established fields already call exact.
+   */
+  const richOriginConfidence = (origin: RichOrigin): RichConfidence => {
+    const field =
+      origin === "title"
+        ? fields.jobTitle
+        : origin === "description"
+          ? fields.jobDescription
+          : undefined;
+    if (!field || field.state !== "established") return "exact";
+
+    return field.confidence === "strong" ? "strong" : "exact";
+  };
+
   const richField = <T extends string>(result: RichResult<T>): CapturedField<T> => {
     if (result.state === "established") {
       const source = richSource(result.origin);
+      // The weaker of the pattern's own evidence and the origin field's.
+      const confidence: RichConfidence =
+        richOriginConfidence(result.origin) === "strong"
+          ? "strong"
+          : result.confidence;
 
       return source
         ? {
             state: "established",
             value: result.value,
-            confidence: result.confidence,
+            confidence,
             source,
           }
         : absent();
