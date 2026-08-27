@@ -7,6 +7,7 @@ import {
   DESCRIPTION_LIMIT,
 } from "../src/extractor.js";
 import type { ExtractionReport } from "../src/types.js";
+import { unwrapLinkedInSafetyGoDestination } from "../src/source.js";
 import {
   applyControl,
   jobPosting,
@@ -14,7 +15,24 @@ import {
   page,
   rawJsonLd,
   readPage,
+  readSitePage,
 } from "./fixtures.js";
+
+const JNJ_LINKEDIN_POSTING = `<head></head><body>
+  <aside><a href="https://other.example/careers">Neighbouring role</a></aside>
+  <main><section>
+    <div aria-label="Company, Johnson &amp; Johnson MedTech.">Johnson &amp; Johnson MedTech</div>
+    <div data-display-contents="true"><p>Marketing Co-Op</p></div>
+    <p><span>Toronto, ON</span></p>
+  </section></main>
+  <section><h2>About the job</h2><div data-testid="expandable-text-box">
+    <a href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.jnj.com%2Fmedtech&amp;trk=test">jnj.com</a>
+  </div></section>
+</body>`;
+
+const KPMG_SELECTED_APPLY = {
+  applyUrl: "https://kpmg.com/ca/en/home/careers.html",
+} as const;
 
 /**
  * What the extension is willing to claim about a page.
@@ -183,7 +201,7 @@ describe("descriptions", () => {
 });
 
 describe("the employer's domain", () => {
-  it("uses an explicit hiringOrganization URL", () => {
+  it("uses an explicit hiringOrganization URL and canonicalizes www", () => {
     const html = page(
       jsonLd(
         jobPosting({
@@ -197,6 +215,173 @@ describe("the employer's domain", () => {
     );
 
     expect(extractJob(readPage(html)).companyDomain).toBe("ibm.com");
+  });
+
+  it("keeps structured employer identity above selected-link evidence", () => {
+    const html = page(
+      jsonLd(
+        jobPosting({
+          hiringOrganization: {
+            "@type": "Organization",
+            name: "Shopify",
+            url: "https://www.shopify.com/careers",
+          },
+        }),
+      ),
+    );
+
+    const report = extractJobReport({
+      ...readPage(html),
+      selectedLinks: { descriptionUrls: ["https://careers.other.example/jobs/1"] },
+    });
+
+    expect(toExtractedJob(report).companyDomain).toBe("shopify.com");
+    expect(report.fields.companyDomain).toMatchObject({
+      state: "established",
+      confidence: "exact",
+      source: "json_ld_job_posting",
+    });
+  });
+
+  it("keeps hiringOrganization.sameAs as structured employer identity", () => {
+    const html = page(
+      jsonLd(
+        jobPosting({
+          hiringOrganization: {
+            "@type": "Organization",
+            name: "Shopify",
+            sameAs: "https://www.shopify.com/company",
+          },
+        }),
+      ),
+    );
+
+    expect(extractJob(readPage(html)).companyDomain).toBe("shopify.com");
+  });
+
+  it("uses the selected LinkedIn description and never a neighbouring link", () => {
+    const signals = readSitePage(
+      JNJ_LINKEDIN_POSTING,
+      "https://www.linkedin.com/jobs/view/123",
+    );
+    const report = extractJobReport(signals);
+
+    expect(signals.selectedLinks?.descriptionUrls).toEqual([
+      "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.jnj.com%2Fmedtech&trk=test",
+    ]);
+    expect(toExtractedJob(report).companyDomain).toBe("jnj.com");
+    expect(report.fields.companyDomain).toMatchObject({
+      state: "established",
+      confidence: "strong",
+      source: "linkedin_selected_posting",
+    });
+  });
+
+  it.each([
+    ["selected Apply", KPMG_SELECTED_APPLY, "kpmg.com"],
+    ["recruitment subdomain", { descriptionUrls: ["https://careers.microsoft.com/us/en/"] }, "microsoft.com"],
+    ["multi-label suffix", { descriptionUrls: ["https://jobs.example.co.uk/role/123"] }, "example.co.uk"],
+    ["ordinary subdomain", { descriptionUrls: ["https://ca.example.com/"] }, "ca.example.com"],
+    ["employer-owned Rippling", { descriptionUrls: ["https://www.rippling.com/careers"] }, "rippling.com"],
+  ] as const)("canonicalizes %s selected evidence", (_label, selectedLinks, expected) => {
+    expect(
+      extractJob({
+        jsonLdBlocks: [],
+        meta: {},
+        pageUrl: "https://www.linkedin.com/jobs/view/123",
+        selectedLinks,
+      }).companyDomain,
+    ).toBe(expected);
+  });
+
+  it.each([
+    [
+      "LinkedIn safety URL for a recruitment subdomain",
+      "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fcareers.jnj.com%2Fjobs%2F123",
+      "jnj.com",
+    ],
+    [
+      "LinkedIn safety URL for a Greenhouse board",
+      "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fboards.greenhouse.io%2Facme%2Fjobs%2F1",
+      undefined,
+    ],
+    [
+      "LinkedIn safety URL for LinkedIn itself",
+      "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.linkedin.com%2Fjobs%2Fview%2F1",
+      undefined,
+    ],
+  ] as const)("handles %s through the existing employer rejection pipeline", (_label, url, expected) => {
+    expect(
+      extractJob({
+        jsonLdBlocks: [],
+        meta: {},
+        pageUrl: "https://www.linkedin.com/jobs/view/123",
+        selectedLinks: { descriptionUrls: [url] },
+      }).companyDomain,
+    ).toBe(expected);
+  });
+
+  it("uses a LinkedIn safety URL for the selected Apply destination", () => {
+    expect(
+      extractJob({
+        jsonLdBlocks: [],
+        meta: {},
+        pageUrl: "https://www.linkedin.com/jobs/view/123",
+        selectedLinks: {
+          applyUrl:
+            "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fkpmg.com%2Fca%2Fen%2Fhome%2Fcareers.html&trk=test",
+        },
+      }).companyDomain,
+    ).toBe("kpmg.com");
+  });
+
+  it.each([
+    ["a missing destination", "https://www.linkedin.com/safety/go/?trk=test"],
+    ["multiple destinations", "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fjnj.com&url=https%3A%2F%2Fkpmg.com"],
+    ["a non-http destination", "https://www.linkedin.com/safety/go/?url=javascript%3Aalert%281%29"],
+    ["a malformed destination", "https://www.linkedin.com/safety/go/?url=https%3A%2F%2F%25"],
+    ["an unrelated LinkedIn route", "https://www.linkedin.com/jobs/view/123?url=https%3A%2F%2Fjnj.com"],
+    ["an unrelated redirect route", "https://example.com/redirect?url=https%3A%2F%2Fjnj.com"],
+  ])("does not unwrap %s", (_label, url) => {
+    expect(unwrapLinkedInSafetyGoDestination(url)).toBeUndefined();
+  });
+
+  it.each([
+    "https://www.linkedin.com/jobs/view/1",
+    "https://ca.indeed.com/viewjob?jk=1",
+    "https://acme.wd5.myworkdayjobs.com/jobs",
+    "https://boards.greenhouse.io/acme/jobs/1",
+    "https://jobs.lever.co/acme/1",
+    "https://ats.rippling.com/acme/jobs/1",
+  ])("rejects %s as selected employer evidence", (url) => {
+    expect(
+      extractJob({
+        jsonLdBlocks: [],
+        meta: {},
+        pageUrl: "https://www.linkedin.com/jobs/view/123",
+        selectedLinks: { descriptionUrls: [url] },
+      }).companyDomain,
+    ).toBeUndefined();
+  });
+
+  it("leaves conflicting selected-description domains unprojected", () => {
+    const report = extractJobReport({
+      jsonLdBlocks: [],
+      meta: {},
+      pageUrl: "https://www.linkedin.com/jobs/view/123",
+      selectedLinks: {
+        descriptionUrls: [
+          "https://careers.example.com/jobs/1",
+          "https://jobs.other.example/role/1",
+        ],
+      },
+    });
+
+    expect(toExtractedJob(report).companyDomain).toBeUndefined();
+    expect(report.fields.companyDomain).toMatchObject({
+      state: "ambiguous",
+      reason: "conflicting_evidence",
+    });
   });
 
   it("never treats the applicant-tracking host as the employer", () => {

@@ -50,6 +50,16 @@ export type PageSignals = {
     /** The page carries `schema.org` JobPosting microdata. */
     jobPostingMicrodata?: boolean;
   };
+  /**
+   * URLs already scoped to the posting the collector proved was selected.
+   *
+   * They are absolute HTTP(S) URLs only, bounded before they leave the page,
+   * and deliberately contain no surrounding markup or link text.
+   */
+  selectedLinks?: {
+    applyUrl?: string;
+    descriptionUrls?: readonly string[];
+  };
 };
 
 /** Why a field could not be filled, so the popup can say so honestly. */
@@ -77,6 +87,8 @@ export type ExtractionSource =
   | "linkedin_selected_posting"
   | "indeed_site"
   | "workday_selected_posting"
+  | "selected_posting_apply"
+  | "selected_posting_description"
   | "generic_fallback"
   | "generic_metadata"
   | "posting_url"
@@ -192,6 +204,62 @@ export type ExtractionDiagnostics = {
     };
   };
 };
+
+const MAXIMUM_SELECTED_LINKS = 20;
+const MAXIMUM_URL_LENGTH = 2_048;
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.values(value).every((item) => typeof item === "string");
+}
+
+function isHttpUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > MAXIMUM_URL_LENGTH) {
+    return false;
+  }
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/** Validates the plain data returned from the injected, untrusted page. */
+export function isPageSignals(value: unknown): value is PageSignals {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Record<string, unknown>;
+  const meta = candidate.meta;
+  if (
+    !Array.isArray(candidate.jsonLdBlocks) ||
+    candidate.jsonLdBlocks.length > 20 ||
+    !candidate.jsonLdBlocks.every(
+      (block) => typeof block === "string" && block.length <= 400_000,
+    ) ||
+    !isStringRecord(meta) ||
+    !Object.values(meta).every((item) => item.length <= 5_000) ||
+    !isHttpUrl(candidate.pageUrl)
+  ) {
+    return false;
+  }
+
+  const links = candidate.selectedLinks;
+  if (links === undefined) return true;
+  if (!links || typeof links !== "object" || Array.isArray(links)) return false;
+  const selected = links as Record<string, unknown>;
+  if (!Object.keys(selected).every((key) => key === "applyUrl" || key === "descriptionUrls")) {
+    return false;
+  }
+  if (selected.applyUrl !== undefined && !isHttpUrl(selected.applyUrl)) return false;
+  return (
+    selected.descriptionUrls === undefined ||
+    (Array.isArray(selected.descriptionUrls) &&
+      selected.descriptionUrls.length <= MAXIMUM_SELECTED_LINKS &&
+      selected.descriptionUrls.every(isHttpUrl))
+  );
+}
 
 /**
  * What the extension believes about the posting on screen.

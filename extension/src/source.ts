@@ -36,6 +36,9 @@ const APPLICANT_TRACKING_HOSTS = [
   "eightfold.ai",
   "avature.net",
   "brassring.com",
+  // Rippling is also an employer website, so only its ATS surface belongs
+  // here. Do not add the parent `rippling.com`.
+  "ats.rippling.com",
 ];
 
 /**
@@ -65,6 +68,70 @@ const NEVER_EMPLOYER_HOSTS = [
   ...APPLICANT_TRACKING_HOSTS,
   ...JOB_BOARD_SOURCES.map((entry) => entry.suffix),
 ];
+
+/**
+ * Recruitment labels are deployment details, not employer identity.
+ *
+ * This intentionally removes only a small, explicit first label. A generic
+ * subdomain such as `ca.example.com` can be an employer's real canonical web
+ * host and must survive. This is not a Public Suffix List implementation.
+ */
+const RECRUITMENT_SUBDOMAINS = new Set([
+  "careers",
+  "career",
+  "jobs",
+  "job",
+  "recruiting",
+  "recruitment",
+]);
+
+const MAXIMUM_URL_LENGTH = 2_048;
+
+/**
+ * The one external-link wrapper LinkedIn uses in selected posting content.
+ *
+ * This is deliberately not redirect handling in general: only LinkedIn's
+ * exact `/safety/go/` route with one `url` parameter is interpreted, once.
+ * The returned destination still has to earn employer identity through the
+ * usual hostname normalization and ATS/job-board rejection below.
+ */
+export function unwrapLinkedInSafetyGoDestination(
+  value: string,
+): string | undefined {
+  if (value.length > MAXIMUM_URL_LENGTH) return undefined;
+
+  let wrapper: URL;
+  try {
+    wrapper = new URL(value);
+  } catch {
+    return undefined;
+  }
+
+  if (
+    (wrapper.protocol !== "https:" && wrapper.protocol !== "http:") ||
+    wrapper.hostname.toLowerCase().replace(/^www\./, "") !== "linkedin.com" ||
+    wrapper.pathname !== "/safety/go/"
+  ) {
+    return undefined;
+  }
+
+  const destinations = wrapper.searchParams.getAll("url");
+  if (destinations.length !== 1) return undefined;
+
+  const [destination] = destinations;
+  if (!destination || destination.length > MAXIMUM_URL_LENGTH) return undefined;
+
+  try {
+    const parsed = new URL(destination);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return undefined;
+    }
+    const normalized = parsed.toString();
+    return normalized.length <= MAXIMUM_URL_LENGTH ? normalized : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function hostnameOf(value: string): string | undefined {
   try {
@@ -114,11 +181,16 @@ export function isThirdPartyPostingHost(url: string): boolean {
  * Nothing here ever looks at the address bar.
  */
 export function employerDomainFromUrl(url: string): string | undefined {
-  const hostname = hostnameOf(url);
+  const hostname = hostnameOf(unwrapLinkedInSafetyGoDestination(url) ?? url);
   if (!hostname) return undefined;
   if (!hostname.includes(".")) return undefined;
   if (NEVER_EMPLOYER_HOSTS.some((suffix) => matchesHost(hostname, suffix))) {
     return undefined;
+  }
+
+  const labels = hostname.split(".");
+  if (labels.length > 2 && RECRUITMENT_SUBDOMAINS.has(labels[0] ?? "")) {
+    return labels.slice(1).join(".");
   }
 
   return hostname;

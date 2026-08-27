@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { extractJob } from "../src/extractor.js";
 import { collectPageSignals } from "../src/page-collector.js";
 import { readRulesFor } from "../src/sites.js";
+import { isPageSignals } from "../src/types.js";
 
 /**
  * What the injected collector is willing to take off a page.
@@ -70,8 +72,12 @@ function searchResultsDetail(
   location: string,
   pills: readonly string[] = [],
   description = "",
+  applyHrefs: readonly string[] = [],
 ) {
   const stated = pills.map((pill) => `<li><span>${pill}</span></li>`).join("");
+  const apply = applyHrefs
+    .map((href) => `<a aria-label="Apply" href="${href}">Apply</a>`)
+    .join("");
 
   return `<div>
     <div>
@@ -81,6 +87,7 @@ function searchResultsDetail(
         <p>${location} · Reposted 1 week ago · 42 people clicked apply</p>
       </div>
       ${stated ? `<div><div><ul>${stated}</ul></div></div>` : ""}
+      ${apply}
     </div>
     ${description ? `<section><h2>About the job</h2><div data-testid="expandable-text-box">${description}</div></section>` : ""}
   </div>`;
@@ -110,6 +117,22 @@ function resultsRailCard(
 }
 
 describe("the injected collector", () => {
+  it("keeps selected-link signals plain, bounded, and HTTP-only at the boundary", () => {
+    const signals = {
+      ...read("<head></head><body></body>"),
+      pageUrl: "https://www.linkedin.com/jobs/view/123",
+      selectedLinks: { descriptionUrls: ["https://careers.example.com/jobs/1"] },
+    };
+
+    expect(isPageSignals(signals)).toBe(true);
+    expect(
+      isPageSignals({
+        ...signals,
+        selectedLinks: { descriptionUrls: ["mailto:jobs@example.com"] },
+      }),
+    ).toBe(false);
+  });
+
   it("takes structured data, the canonical link, and standard metadata", () => {
     const signals = read(
       `<head>
@@ -891,6 +914,135 @@ describe("the injected collector", () => {
           "workplaceType"
         ],
       ).toBe("Hybrid");
+    });
+  });
+
+  describe("Apply outside the search-results header", () => {
+    const searchResults = (jobId: string) =>
+      `https://www.linkedin.com/jobs/search-results/?currentJobId=${jobId}`;
+    const detailPage = (body: string) => `<head></head><body><main>${body}</main></body>`;
+    const BNP_APPLY =
+      "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.bnpparibas.ca%2Fen%2Fjobs%2Fdata-analyst-intern%2F&urlhash=test&isSdui=true";
+
+    it("collects BNP Paribas's selected Apply link outside the compact header", () => {
+      const jobId = "5550000001";
+      document.documentElement.innerHTML = detailPage(
+        searchResultsDetail(
+          jobId,
+          "Data Analyst Intern",
+          "BNP Paribas",
+          "Montreal, QC",
+          [],
+          "",
+          [BNP_APPLY],
+        ),
+      );
+
+      const signals = collectPageSignals(readRulesFor(searchResults(jobId)));
+
+      expect(signals.selectedLinks?.applyUrl).toBe(BNP_APPLY);
+      expect(extractJob({ ...signals, pageUrl: searchResults(jobId) }).companyDomain).toBe(
+        "bnpparibas.ca",
+      );
+    });
+
+    it("does not take a neighbouring job's Apply link", () => {
+      const jobId = "5550000002";
+      document.documentElement.innerHTML = detailPage(
+        `<div>
+          ${searchResultsDetail(jobId, "Data Analyst Intern", "BNP Paribas", "Montreal, QC")}
+          <div data-occludable-job-id="4000000000">
+            <a href="/jobs/view/4000000000/">Neighbouring role</a>
+            <a aria-label="Apply" href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fneighbor.example%2Fjobs%2F1">Apply</a>
+          </div>
+        </div>`,
+      );
+
+      const signals = collectPageSignals(readRulesFor(searchResults(jobId)));
+
+      expect(signals.selectedLinks?.applyUrl).toBeUndefined();
+      expect(extractJob({ ...signals, pageUrl: searchResults(jobId) }).companyDomain).toBeUndefined();
+    });
+
+    it.each([
+      ["a stale data-job-id", 'data-job-id="4000000001"'],
+      ["a virtualized rail marker", 'data-occludable-job-id="4000000001"'],
+    ])("does not read Apply from an unsafe ancestor itself marked as %s", (_label, marker) => {
+      const jobId = "5550000006";
+      document.documentElement.innerHTML = detailPage(
+        `<div ${marker}>
+          ${searchResultsDetail(jobId, "Data Analyst Intern", "BNP Paribas", "Montreal, QC")}
+          <a aria-label="Apply" href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fneighbor.example%2Fjobs%2F1">Apply</a>
+        </div>`,
+      );
+
+      const signals = collectPageSignals(readRulesFor(searchResults(jobId)));
+
+      expect(signals.selectedLinks?.applyUrl).toBeUndefined();
+      expect(extractJob({ ...signals, pageUrl: searchResults(jobId) }).companyDomain).toBeUndefined();
+    });
+
+    it.each([
+      [
+        "another posting link",
+        `<a href="/jobs/view/4000000001/">Neighbouring role</a>
+         <a aria-label="Apply" href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fneighbor.example%2Fjobs%2F1">Apply</a>`,
+      ],
+      [
+        "a virtualized result rail",
+        `<div data-occludable-job-id="4000000001">
+           <a aria-label="Apply" href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fneighbor.example%2Fjobs%2F1">Apply</a>
+         </div>`,
+      ],
+      [
+        "a Similar Jobs region",
+        `<div id="similarJobs">
+           <a aria-label="Apply" href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fneighbor.example%2Fjobs%2F1">Apply</a>
+         </div>`,
+      ],
+    ])("aborts before reading Apply from %s", (_label, unsafe) => {
+      const jobId = "5550000003";
+      document.documentElement.innerHTML = detailPage(
+        `<div>${searchResultsDetail(jobId, "Data Analyst Intern", "BNP Paribas", "Montreal, QC")}${unsafe}</div>`,
+      );
+
+      expect(
+        collectPageSignals(readRulesFor(searchResults(jobId))).selectedLinks?.applyUrl,
+      ).toBeUndefined();
+    });
+
+    it("does not read Apply from a page landmark", () => {
+      const jobId = "5550000004";
+      document.documentElement.innerHTML = detailPage(
+        `${searchResultsDetail(jobId, "Data Analyst Intern", "BNP Paribas", "Montreal, QC")}
+         <a aria-label="Apply" href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fneighbor.example%2Fjobs%2F1">Apply</a>`,
+      );
+
+      expect(
+        collectPageSignals(readRulesFor(searchResults(jobId))).selectedLinks?.applyUrl,
+      ).toBeUndefined();
+    });
+
+    it("leaves multiple selected Apply destinations ambiguous", () => {
+      const jobId = "5550000005";
+      document.documentElement.innerHTML = detailPage(
+        searchResultsDetail(
+          jobId,
+          "Data Analyst Intern",
+          "BNP Paribas",
+          "Montreal, QC",
+          [],
+          "",
+          [
+            BNP_APPLY,
+            "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.bnpparibas.com%2Fen%2Fjobs%2F1",
+          ],
+        ),
+      );
+
+      expect(
+        collectPageSignals(readRulesFor(searchResults(jobId))).selectedLinks?.applyUrl,
+      ).toBeUndefined();
     });
   });
 
