@@ -965,6 +965,24 @@ describe("the injected collector", () => {
     });
 
     it.each([
+      ["a stale data-job-id", 'data-job-id="4000000001"'],
+      ["a virtualized rail marker", 'data-occludable-job-id="4000000001"'],
+    ])("does not read Apply from an unsafe ancestor itself marked as %s", (_label, marker) => {
+      const jobId = "5550000006";
+      document.documentElement.innerHTML = detailPage(
+        `<div ${marker}>
+          ${searchResultsDetail(jobId, "Data Analyst Intern", "BNP Paribas", "Montreal, QC")}
+          <a aria-label="Apply" href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fneighbor.example%2Fjobs%2F1">Apply</a>
+        </div>`,
+      );
+
+      const signals = collectPageSignals(readRulesFor(searchResults(jobId)));
+
+      expect(signals.selectedLinks?.applyUrl).toBeUndefined();
+      expect(extractJob({ ...signals, pageUrl: searchResults(jobId) }).companyDomain).toBeUndefined();
+    });
+
+    it.each([
       [
         "another posting link",
         `<a href="/jobs/view/4000000001/">Neighbouring role</a>

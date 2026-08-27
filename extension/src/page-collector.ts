@@ -811,6 +811,16 @@ export function collectPageSignals(
 
         /** Whether a region reaches past the selected posting into the rail. */
         function namesAnotherPosting(node: Element): boolean {
+          const ownPostingId = POSTING_LINK_PATTERN.exec(
+            node.getAttribute("href") ?? "",
+          )?.[1];
+          if (ownPostingId && ownPostingId !== selected) return true;
+
+          const ownJobId = node.getAttribute("data-job-id");
+          if (ownJobId && ownJobId !== selected) return true;
+          if (node.hasAttribute("data-occludable-job-id")) return true;
+          if (node.id && RAIL_ID_PATTERN.test(node.id)) return true;
+
           const links = Array.from(
             node.querySelectorAll('a[href*="/jobs/view/"]'),
           ).slice(0, MAXIMUM_REGION_CANDIDATES);
