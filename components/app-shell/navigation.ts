@@ -46,7 +46,7 @@ export const utilityNavigationItems: readonly NavigationItem[] = [
 ];
 
 /**
- * The demo workspace's navigation: the four surfaces that explain JobTrack.
+ * The demo workspace's navigation: the four surfaces that explain Interndex.
  *
  * Archive and Settings are absent rather than disabled. Both are about a
  * workspace somebody owns — filing your own records away, connecting your own

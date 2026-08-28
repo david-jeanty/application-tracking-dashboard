@@ -2,7 +2,7 @@
  * Turns the HTML a posting uses for its description into readable plain text.
  *
  * Job descriptions in `schema.org` markup are routinely HTML fragments, and
- * JobTrack stores a plain-text description. The conversion happens here, on the
+ * Interndex stores a plain-text description. The conversion happens here, on the
  * student's machine, before anything is sent anywhere.
  *
  * It is written as string handling rather than as DOM work on purpose. Nothing
@@ -82,7 +82,7 @@ export function looksLikeHtml(value: string): boolean {
 }
 
 /**
- * Converts posting description markup to the plain text JobTrack stores.
+ * Converts posting description markup to the plain text Interndex stores.
  *
  * Plain text passes through unchanged apart from whitespace tidying, so a
  * posting that already supplies text is not damaged by pretending it is HTML.

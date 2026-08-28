@@ -17,9 +17,9 @@ import { DemoBanner } from "@/components/demo/demo-banner";
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
-  title: { default: "JobTrack demo", template: "%s · JobTrack demo" },
+  title: { default: "Interndex demo", template: "%s · Interndex demo" },
   description:
-    "Explore JobTrack with a sample internship and co-op search. No account required.",
+    "Explore Interndex with a sample internship and co-op search. No account required.",
 };
 
 /**

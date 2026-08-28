@@ -836,7 +836,7 @@ describe("company domain over MCP", () => {
  *
  * These assert the advertised JSON Schema a connected client reads, not our
  * source strings, because the description is the whole mechanism here: nothing
- * in JobTrack derives a domain, so whether a saved application gets a logo
+ * in Interndex derives a domain, so whether a saved application gets a logo
  * depends entirely on what this text asks Claude to do.
  *
  * They are written against the intent rather than the exact prose — that the
@@ -1024,7 +1024,7 @@ describe("import_jobs served by the real server", () => {
     });
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toBe("Imported 2 applications into JobTrack.");
+    expect(result.content[0].text).toBe("Imported 2 applications into Interndex.");
     expect(result.structuredContent).toMatchObject({ imported: 2 });
 
     const summaries = result.structuredContent!.applications as {

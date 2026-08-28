@@ -19,8 +19,8 @@ export const metadata: Metadata = { title: "Settings" };
 
 /** What the student can ask for once connected. Kept to the registered tools. */
 const EXAMPLE_PROMPTS = [
-  "Save this job to JobTrack.",
-  "Import this old tracker into JobTrack.",
+  "Save this job to Interndex.",
+  "Import this old tracker into Interndex.",
   "What RBC jobs am I tracking?",
   "Show me the details for that Business Analyst role.",
   "I applied to it today.",
@@ -31,7 +31,7 @@ const EXAMPLE_PROMPTS = [
  * Written about a connection rather than about an assistant.
  *
  * Two different things can appear in the authorized list now — an AI assistant
- * connected over MCP, and the JobTrack Capture browser extension — and Supabase
+ * connected over MCP, and the Interndex Capture browser extension — and Supabase
  * reports only a client's name and id, not what kind of client it is. Rather
  * than guessing from the name, the copy says the one thing that is true of
  * every entry.
@@ -114,7 +114,7 @@ export default async function SettingsPage({
           Settings
         </h1>
         <p className="mt-2 max-w-2xl text-[15px] text-foreground-secondary">
-          Personalize JobTrack and manage what you have connected to it.
+          Personalize Interndex and manage what you have connected to it.
         </p>
       </div>
 
@@ -131,8 +131,8 @@ export default async function SettingsPage({
             </h2>
           </div>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-foreground-secondary">
-            JobTrack works completely on its own. Two optional things can connect
-            to it: an AI assistant you already use, and the JobTrack Capture
+            Interndex works completely on its own. Two optional things can connect
+            to it: an AI assistant you already use, and the Interndex Capture
             browser extension. Both act on your applications only after you
             authorize them, and you can remove either at any time.
           </p>
@@ -150,14 +150,14 @@ export default async function SettingsPage({
 
         <Subsection title="How this works">
           <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
-            JobTrack does not provide an AI and never charges you for one. You
-            bring an assistant you already have; JobTrack gives it your
+            Interndex does not provide an AI and never charges you for one. You
+            bring an assistant you already have; Interndex gives it your
             application data and the actions below. The reasoning happens in your
             assistant, and the record stays here.
           </p>
 
           <h4 className="mt-5 text-sm font-medium text-foreground">
-            Your JobTrack connection address
+            Your Interndex connection address
           </h4>
           <p className="mt-1 text-sm leading-6 text-foreground-secondary">
             Your assistant will ask for this. Copy it exactly.
@@ -198,7 +198,7 @@ export default async function SettingsPage({
             {/*
               The prompts, and nothing beside them. Each line used to carry an
               accent sparkle, which decorated a sentence that is already a
-              quotation and made this the only place in JobTrack that dresses
+              quotation and made this the only place in Interndex that dresses
               its content up.
             */}
             <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground-secondary">
@@ -208,14 +208,14 @@ export default async function SettingsPage({
             </ul>
             {/*
               One sentence, beside the prompts it belongs with. The spreadsheet
-              never comes to JobTrack — it goes to the assistant, which reads it
+              never comes to Interndex — it goes to the assistant, which reads it
               and sends back finished applications — so there is no upload
               control here to add.
             */}
             <p className="mt-4 text-sm leading-6 text-foreground-secondary">
               Already have a tracker? Export it as a CSV, upload that to your
               connected assistant, and ask it to import the tracker into
-              JobTrack. It will check the columns and dates with you first.
+              Interndex. It will check the columns and dates with you first.
             </p>
           </Subsection>
 
@@ -241,7 +241,7 @@ export default async function SettingsPage({
 
         <Subsection title="Browser extension">
           <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
-            JobTrack Capture saves the job posting you are looking at into your
+            Interndex Capture saves the job posting you are looking at into your
             tracker. You open it yourself on a posting you want to keep; it reads
             that page then, and no other. It provides no AI of its own — it fills
             in what the posting states, you confirm it, and the record is saved

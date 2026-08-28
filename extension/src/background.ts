@@ -12,7 +12,7 @@ import { chromeCredentialStore } from "./tokens.js";
 import type { CaptureOutcome, ConnectionState } from "./types.js";
 
 /**
- * The only context in JobTrack Capture that holds a credential.
+ * The only context in Interndex Capture that holds a credential.
  *
  * The popup asks for outcomes, never for tokens; the injected collector is
  * never given a way to ask at all. Keeping the whole authenticated surface in

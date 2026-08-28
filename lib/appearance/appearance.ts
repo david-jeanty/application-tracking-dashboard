@@ -35,7 +35,7 @@ export const MODE_LABELS: Record<Mode, string> = {
 };
 
 export const ACCENT_LABELS: Record<Accent, string> = {
-  blue: "JobTrack Blue",
+  blue: "Interndex Blue",
   rose: "Rose",
   violet: "Violet",
   emerald: "Emerald",

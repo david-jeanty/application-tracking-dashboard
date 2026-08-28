@@ -27,7 +27,7 @@ function renderDemoShell(at = "/demo/applications") {
 }
 
 describe("the demo navigation", () => {
-  it("offers exactly the four surfaces that explain JobTrack", () => {
+  it("offers exactly the four surfaces that explain Interndex", () => {
     renderDemoShell();
     const nav = screen.getByRole("navigation", { name: "Primary navigation" });
 
@@ -70,7 +70,7 @@ describe("the demo navigation", () => {
   it("keeps the wordmark, pointing at the demo's own home", () => {
     renderDemoShell();
 
-    expect(screen.getAllByRole("link", { name: "JobTrack" })[0]).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: "Interndex" })[0]).toHaveAttribute(
       "href",
       "/demo",
     );
@@ -119,7 +119,7 @@ describe("the sample-data banner", () => {
 
     expect(screen.getByText("Demo workspace")).toBeInTheDocument();
     expect(
-      screen.getByText(/exploring JobTrack with sample data/),
+      screen.getByText(/exploring Interndex with sample data/),
     ).toBeInTheDocument();
   });
 
@@ -144,7 +144,7 @@ describe("the sample-data banner", () => {
       screen.getByRole("link", { name: "Create your own workspace" }),
     ).toHaveAttribute("href", "/signup");
     expect(
-      screen.getByRole("link", { name: "Back to JobTrack" }),
+      screen.getByRole("link", { name: "Back to Interndex" }),
     ).toHaveAttribute("href", "/");
   });
 });

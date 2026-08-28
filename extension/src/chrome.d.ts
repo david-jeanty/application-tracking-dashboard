@@ -1,5 +1,5 @@
 /**
- * The Chrome extension surface JobTrack Capture actually uses.
+ * The Chrome extension surface Interndex Capture actually uses.
  *
  * Hand-written rather than pulled from `@types/chrome` on purpose: this file is
  * short enough to read in one sitting, so a reviewer can see the complete list

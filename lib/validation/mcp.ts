@@ -373,7 +373,7 @@ export const IMPORT_JOBS_MAXIMUM_BATCH = 25;
  * There is no file, no CSV, no delimiter, and no column mapping here, and that
  * is the whole design: the assistant reads the student's spreadsheet, resolves
  * what its headers, statuses and dates meant with them, and sends canonical
- * records. JobTrack validates and stores. Anything this schema cannot express
+ * records. Interndex validates and stores. Anything this schema cannot express
  * is an interpretation the assistant still owes the student.
  *
  * Deliberately absent: `user_id`. Ownership comes from the access token.
@@ -384,7 +384,7 @@ export const importJobsInputSchema = z.object({
     .min(1)
     .max(IMPORT_JOBS_MAXIMUM_BATCH)
     .describe(
-      `The applications to import, already normalized to JobTrack's own values. Between 1 and ${IMPORT_JOBS_MAXIMUM_BATCH} per call; split a larger tracker into several calls and keep the mapping you agreed with the student identical across all of them.`,
+      `The applications to import, already normalized to Interndex's own values. Between 1 and ${IMPORT_JOBS_MAXIMUM_BATCH} per call; split a larger tracker into several calls and keep the mapping you agreed with the student identical across all of them.`,
     ),
 });
 

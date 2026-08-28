@@ -28,7 +28,7 @@ export const COMPANY_DOMAIN_GUIDANCE =
  * This is the single caller-neutral record contract used by MCP saves/imports
  * and browser capture. Its field names and descriptions are unchanged from the
  * original MCP contract so existing tool wire schemas remain stable. It only
- * describes values JobTrack already stores and deliberately has no `user_id`:
+ * describes values Interndex already stores and deliberately has no `user_id`:
  * ownership always comes from the authenticated bearer token.
  *
  * This boundary is intentionally followed by `applicationCreationSchema`, the

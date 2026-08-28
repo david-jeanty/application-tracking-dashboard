@@ -182,7 +182,7 @@ LinkedIn, Indeed) and carries worked examples: Shopify → `shopify.com`, KPMG �
 Microsoft → `microsoft.com`.
 
 That expectation lives entirely in the tool description, which is the whole
-mechanism. **JobTrack still infers nothing**: no employer-to-domain table
+mechanism. **Interndex still infers nothing**: no employer-to-domain table
 exists in the application, no model is called from the server, and the Logo.dev
 Search and Brand APIs are not used. The knowledge is Claude's, and it arrives
 over the wire like any other argument.
@@ -209,30 +209,30 @@ For migrating a tracker the student already keeps somewhere else.
 | `applications` | yes | 1–25 records, each exactly a `save_job` record |
 
 Returns `{ imported, applications: [{ application_id, company, job_title }] }`
-and the sentence `Imported 23 applications into JobTrack.`
+and the sentence `Imported 23 applications into Interndex.`
 
-**The CSV never reaches JobTrack.** The student uploads their export to their
+**The CSV never reaches Interndex.** The student uploads their export to their
 assistant; the assistant reads it, works out what the columns meant, resolves
-the ambiguities with them, and sends canonical records. JobTrack validates and
+the ambiguities with them, and sends canonical records. Interndex validates and
 stores. That division is the whole design, and it is why there is no upload
 control on the website, no CSV parser in this repository, and no spreadsheet
 dependency in `package.json`.
 
 What must already be resolved before the call:
 
-- **Statuses** are JobTrack's own ten. `OA`, `Interviewing`, `Ghosted`,
+- **Statuses** are Interndex's own ten. `OA`, `Interviewing`, `Ghosted`,
   `Submitted` and `Phone screen` are rejected by the schema, because deciding
   that `Ghosted` means `Rejected` is a claim about an employer that only the
   student can make.
 - **Dates** are `YYYY-MM-DD`. `03/04/2026` is March 4th or April 3rd depending
-  on whose spreadsheet it is, and JobTrack must never be the one guessing.
+  on whose spreadsheet it is, and Interndex must never be the one guessing.
 - **Duplicates** have been reviewed. The assistant is told to check with
   `list_jobs` — narrowing by company where that helps — and to ask the student
   whether a row that looks present already should be skipped or imported again.
-  JobTrack does no fuzzy matching, no silent merge, and no silent skip: a
+  Interndex does no fuzzy matching, no silent merge, and no silent skip: a
   deduplication guess made inside a database write is one nobody can see.
 - **Unmapped columns** are the assistant's to place. A recruiter name or a
-  resume version has no JobTrack column and is not getting one; the assistant
+  resume version has no Interndex column and is not getting one; the assistant
   may fold what is useful into that record's `notes`, having told the student
   it is doing so.
 
@@ -259,8 +259,8 @@ succeed — no loop, and no `Promise.all` of single inserts.
 
 **No history is fabricated.** An application imported at `Interview` is stored
 at `Interview`, with whatever `date_applied` the student recorded. The database
-trigger writes the one creation event saying it entered JobTrack at that
-status, which is true. The stages it passed through before JobTrack existed are
+trigger writes the one creation event saying it entered Interndex at that
+status, which is true. The stages it passed through before Interndex existed are
 not ours to invent, `created_at` is import time and is never backdated, and no
 application code writes to `application_status_history` at all.
 
@@ -469,10 +469,10 @@ around `revokeGrantAction` and by the manual test below.
 This is the only way to verify the real fresh-user experience, and it must
 actually be performed before claiming it works:
 
-1. Open JobTrack as a normal user.
+1. Open Interndex as a normal user.
 2. Find the AI connection settings **without** reading this repository.
 3. Copy the connection address from Settings.
-4. Add JobTrack to a real MCP client.
+4. Add Interndex to a real MCP client.
 5. Sign in and approve access on the consent screen.
 6. Ask the client to list your applications.
 7. Ask it to save a new application.

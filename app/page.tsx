@@ -5,7 +5,7 @@ import { hasSupabaseEnvironment } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
-  title: "JobTrack — Internship and co-op application tracker",
+  title: "Interndex — Internship and co-op application tracker",
   description:
     "Track internship and co-op applications, deadlines, statuses and next actions, and connect the AI assistant you already use. Try the demo without an account.",
 };
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
  * dashboard, not a page explaining the product to them.
  *
  * Signed out, it is the public homepage. It used to redirect to `/login`, which
- * meant the only way to find out what JobTrack was involved deciding to join it
+ * meant the only way to find out what Interndex was involved deciding to join it
  * first.
  *
  * With no Supabase configuration there is no session to look for, so the

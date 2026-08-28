@@ -100,7 +100,7 @@ test("the demo offers the ways out of it", async ({ page }) => {
     banner.getByRole("link", { name: "Create your own workspace" }),
   ).toHaveAttribute("href", "/signup");
   await expect(
-    banner.getByRole("link", { name: "Back to JobTrack" }),
+    banner.getByRole("link", { name: "Back to Interndex" }),
   ).toHaveAttribute("href", "/");
 });
 

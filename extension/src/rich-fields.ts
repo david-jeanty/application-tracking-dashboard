@@ -6,7 +6,7 @@ import type { CaptureWorkArrangement } from "./types.js";
  * Work arrangement, work term and duration are facts a student cares about and
  * a posting usually says out loud — "Summer 2027 Co-op", "Duration: 4 months",
  * "Work arrangement: Hybrid". They are also three of the easiest fields in
- * JobTrack to get plausibly, invisibly wrong, because every one of them has a
+ * Interndex to get plausibly, invisibly wrong, because every one of them has a
  * neighbouring sentence that looks like an answer and is not:
  *
  * - a Toronto address does not make a role On-site, and "flexible working

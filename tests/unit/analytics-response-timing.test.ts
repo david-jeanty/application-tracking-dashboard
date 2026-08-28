@@ -16,14 +16,14 @@ import { listStatusHistory } from "@/lib/applications/repository";
  *
  * `application_status_history.changed_at` is declared `timestamptz not null
  * default now()` and written by the `record_application_status_change()`
- * trigger. It records when **JobTrack** was told about a transition, not when an
+ * trigger. It records when **Interndex** was told about a transition, not when an
  * **employer** acted. A student who backfills last term's search, saves an
  * application directly at `Interview`, or updates a rejection a fortnight after
  * reading the email produces a `changed_at` gap with no relationship to how fast
  * anybody replied.
  *
  * So "median employer response time", "time to interview", "usually responds
- * within X days" and a response-time histogram are all deferred until JobTrack
+ * within X days" and a response-time histogram are all deferred until Interndex
  * records trustworthy event-occurrence dates. Mixing `changed_at` with the
  * date-only `date_applied` is worse still: a timestamp the database generated
  * and a calendar day a student typed are not two ends of one interval.

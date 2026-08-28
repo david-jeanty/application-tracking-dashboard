@@ -10,7 +10,7 @@ import { requiredHostPermissions } from "../src/config.js";
  * student cannot inspect and a reviewer cannot infer from behaviour. Each
  * assertion below is a promise the product makes: no permission to watch
  * browsing, no permission to read a page before being invoked, no ability to
- * reach any origin other than the student's own JobTrack and the Supabase
+ * reach any origin other than the student's own Interndex and the Supabase
  * project that signs them in.
  *
  * Adding a permission should require deleting an assertion here, deliberately.
@@ -62,7 +62,7 @@ describe("the extension's permissions", () => {
     expect(manifest.permissions).not.toContain(permission);
   });
 
-  it("reaches only JobTrack and the Supabase project that signs the student in", () => {
+  it("reaches only Interndex and the Supabase project that signs the student in", () => {
     expect(manifest.host_permissions).toEqual(requiredHostPermissions());
   });
 

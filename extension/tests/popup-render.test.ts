@@ -115,7 +115,7 @@ describe("what the popup shows", () => {
 
     expect(visiblePanels()).toEqual(["saved"]);
     expect(document.querySelector("#saved-headline")?.textContent).toBe(
-      "✓ Tracked in JobTrack",
+      "✓ Tracked in Interndex",
     );
     expect(document.querySelector<HTMLAnchorElement>("#open-application")?.href).toBe(
       application.url,
@@ -126,10 +126,10 @@ describe("what the popup shows", () => {
     render(document, { view: "saved", duplicate: true, application });
 
     expect(document.querySelector("#saved-headline")?.textContent).toBe(
-      "Already in JobTrack",
+      "Already in Interndex",
     );
     expect(document.querySelector("#announcement")?.textContent).toBe(
-      "Already in JobTrack.",
+      "Already in Interndex.",
     );
   });
 
@@ -150,7 +150,7 @@ describe("what the popup announces", () => {
     expect(announcement?.getAttribute("aria-live")).toBe("polite");
 
     render(document, reduce(ready(), { type: "save_started" }));
-    expect(announcement?.textContent).toBe("Saving to JobTrack.");
+    expect(announcement?.textContent).toBe("Saving to Interndex.");
   });
 });
 

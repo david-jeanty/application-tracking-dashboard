@@ -1,9 +1,9 @@
 /**
- * Public configuration for the JobTrack Capture extension.
+ * Public configuration for the Interndex Capture extension.
  *
  * Everything here is public by definition: an unpacked extension ships its own
  * source, so no value that must stay secret can live in this package. A
- * Supabase project URL, a JobTrack origin, and a public OAuth client id are
+ * Supabase project URL, an Interndex origin, and a public OAuth client id are
  * configuration, not credentials — the extension uses Authorization Code with
  * PKCE precisely so that no client secret is needed.
  *
@@ -15,7 +15,7 @@
  * and the matching `host_permissions` entries, then reload the extension.
  */
 export const EXTENSION_CONFIG = {
-  /** The JobTrack deployment whose capture endpoint receives the record. */
+  /** The Interndex deployment whose capture endpoint receives the record. */
   jobtrackOrigin: "https://jobtrack.example.com",
 
   /** The Supabase project that issues and refreshes access tokens. */
@@ -36,7 +36,7 @@ export function captureEndpoint(): string {
   return `${EXTENSION_CONFIG.jobtrackOrigin.replace(/\/$/, "")}/api/browser-capture`;
 }
 
-/** The JobTrack page for one saved application, built from a relative href. */
+/** The Interndex page for one saved application, built from a relative href. */
 export function jobtrackUrl(path: string): string {
   return new URL(path, `${EXTENSION_CONFIG.jobtrackOrigin.replace(/\/$/, "")}/`)
     .toString();

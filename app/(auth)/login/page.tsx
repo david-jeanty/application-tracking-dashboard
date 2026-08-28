@@ -21,7 +21,7 @@ export default async function LoginPage({
       footer={
         <>
           <p>
-            New to JobTrack?{" "}
+            New to Interndex?{" "}
             <Link className={authLinkClassName} href="/signup">
               Create an account
             </Link>

@@ -138,7 +138,7 @@ be done by hand; `docs/browser-capture.md` has the loading instructions.
    assistant.
 3. On a public job posting, open the popup and confirm the company, title, and
    location it offers match the page — or are empty rather than wrong.
-4. Save, and confirm the record appears in JobTrack with the same values.
+4. Save, and confirm the record appears in Interndex with the same values.
 5. Press the toolbar button again on the same posting and confirm it reports the
    job as already tracked and links to the existing record.
 6. Sign out, and confirm the popup returns to its disconnected state.

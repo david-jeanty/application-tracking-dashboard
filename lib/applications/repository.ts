@@ -165,7 +165,7 @@ export type CreatedApplication = {
  * No status history is written here, and none could be: the creation trigger
  * fires per inserted row and records the status each application arrived at,
  * which is the truth. Nothing invents the transitions an application went
- * through before JobTrack existed.
+ * through before Interndex existed.
  */
 export async function createApplications(
   supabase: SupabaseClient,

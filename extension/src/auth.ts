@@ -8,11 +8,11 @@ import {
 } from "./tokens.js";
 
 /**
- * Connecting the extension to the student's own JobTrack account.
+ * Connecting the extension to the student's own Interndex account.
  *
  * Authorization Code with PKCE against the same Supabase authorization server
  * the web app and MCP already use, through a dedicated public client so that
- * "JobTrack Capture" and a connected AI assistant are separate grants a student
+ * "Interndex Capture" and a connected AI assistant are separate grants a student
  * can allow and revoke independently.
  *
  * Everything the flow needs from the outside world arrives as a dependency:
@@ -282,7 +282,7 @@ export async function isConnected(
  * Signs out by discarding what the extension holds.
  *
  * This does not revoke the grant, and the extension does not pretend it does:
- * revocation belongs to JobTrack Settings, where Supabase is the source of
+ * revocation belongs to Interndex Settings, where Supabase is the source of
  * truth about who still has access. Clearing here removes this browser's
  * ability to act; the student is told where to revoke the connection itself.
  */

@@ -1,11 +1,11 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>JobTrack Capture</title>
+<title>Interndex Capture</title>
 <link rel="stylesheet" href="popup.css" />
 
 <div class="shell">
   <header class="shell__header">
-    <h1 class="wordmark">JobTrack</h1>
+    <h1 class="wordmark">Interndex</h1>
     <button class="link-button" id="disconnect" hidden type="button">
       Sign out
     </button>
@@ -14,18 +14,18 @@
   <!--
     One live region for the whole popup. Every state writes its own sentence
     here, so a screen reader hears "Reading this page", "Saving", or "Tracked in
-    JobTrack" as it happens rather than only when focus lands somewhere new.
+    Interndex" as it happens rather than only when focus lands somewhere new.
   -->
   <p class="announcement" id="announcement" role="status" aria-live="polite"></p>
 
   <main id="main">
     <section class="panel" data-panel="loading">
-      <p class="muted">Checking your JobTrack connection…</p>
+      <p class="muted">Checking your Interndex connection…</p>
     </section>
 
     <section class="panel" data-panel="disconnected" hidden>
-      <p>Connect JobTrack to save the job you are viewing.</p>
-      <button class="button" id="connect" type="button">Connect JobTrack</button>
+      <p>Connect Interndex to save the job you are viewing.</p>
+      <button class="button" id="connect" type="button">Connect Interndex</button>
     </section>
 
     <section class="panel" data-panel="connecting" hidden>
@@ -98,7 +98,7 @@
         <!--
           What is being saved that the student did not type. Read-only and
           secondary: it exists so nothing important enters their tracker
-          invisibly, not to become a second copy of the JobTrack form.
+          invisibly, not to become a second copy of the Interndex form.
         -->
         <section aria-labelledby="also-found-heading" class="also-found" id="also-found" hidden>
           <h2 class="also-found__heading" id="also-found-heading">Also found</h2>
@@ -113,14 +113,14 @@
     </section>
 
     <section class="panel" data-panel="saving" hidden>
-      <p class="muted">Saving to JobTrack…</p>
+      <p class="muted">Saving to Interndex…</p>
     </section>
 
     <section class="panel" data-panel="unauthorized" hidden>
       <p class="problem">
-        Your JobTrack connection has expired. Connect again to keep saving jobs.
+        Your Interndex connection has expired. Connect again to keep saving jobs.
       </p>
-      <button class="button" id="reconnect" type="button">Connect JobTrack</button>
+      <button class="button" id="reconnect" type="button">Connect Interndex</button>
     </section>
 
     <section class="panel" data-panel="saved" hidden>

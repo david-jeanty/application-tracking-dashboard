@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { InterndexLogo } from "@/components/branding/interndex-logo";
 
 /**
  * The quiet accent link every signed-out footer uses.
@@ -23,7 +24,7 @@ type AuthShellProps = {
  * One narrow column on the ordinary page ground, and nothing else. What used to
  * be here was a split screen with an accent-filled marketing panel down the
  * left, a briefcase in a rounded box, and the form inside a card — a shape from
- * before the product had a public homepage, and one that explained JobTrack to
+ * before the product had a public homepage, and one that explained Interndex to
  * somebody who had already decided to sign in.
  *
  * The homepage does the explaining now. This page has one job: take four fields
@@ -45,11 +46,12 @@ export function AuthShell({
       <header className="border-b border-border">
         <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <Link
-            className="font-wordmark rounded-sm text-[24px] leading-none text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+            aria-label="Interndex"
+            className="inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
             data-testid="brand"
             href="/"
           >
-            JobTrack
+            <InterndexLogo className="h-7" />
           </Link>
           <Link
             className="rounded-sm text-[14px] text-foreground-secondary transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"

@@ -21,7 +21,7 @@ import type { PageSignals } from "../src/types.js";
 import { jsonLd, readSitePage } from "./fixtures.js";
 
 /**
- * The three surfaces JobTrack Capture reads by name.
+ * The three surfaces Interndex Capture reads by name.
  *
  * The markup below is synthetic and minimal: the container, the attribute and
  * the nesting each read path depends on, and invented words inside them. No

@@ -1,5 +1,5 @@
 /**
- * Where the extension keeps the student's JobTrack credentials, and how it
+ * Where the extension keeps the student's Interndex credentials, and how it
  * reads a token response it is not obliged to believe.
  *
  * Only the background service worker ever calls into this file. Nothing here is
@@ -33,7 +33,7 @@ const REFRESH_KEY = "jobtrack.refresh";
  * memory and discards when the browser closes. A short-lived credential has no
  * business surviving on disk.
  *
- * The refresh token has to outlive the browser session, or "Connect JobTrack"
+ * The refresh token has to outlive the browser session, or "Connect Interndex"
  * becomes a daily chore and the extension trains students to click through an
  * OAuth screen without reading it. That means `chrome.storage.local`, which is
  * on disk and not encrypted by Chrome. The exposure this accepts is real and
@@ -42,7 +42,7 @@ const REFRESH_KEY = "jobtrack.refresh";
  * belongs to. It is not readable by web pages, by other extensions, or across
  * profiles, and `chrome.storage.session` is additionally unreachable from
  * content scripts by default. Signing out clears both areas, and revoking the
- * connection in JobTrack Settings invalidates the token regardless of what is
+ * connection in Interndex Settings invalidates the token regardless of what is
  * still stored here. `docs/browser-capture.md` records this trade-off.
  */
 export function chromeCredentialStore(): CredentialStore {

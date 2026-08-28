@@ -1,16 +1,16 @@
 # Browser-capture architecture
 
-Status: server-side foundation implemented (2026-08-25); JobTrack Capture
+Status: server-side foundation implemented (2026-08-25); Interndex Capture
 Chrome extension implemented as a locally loadable unpacked MV3 extension
 (2026-08-26). Not submitted to or approved by the Chrome Web Store.
 
 ## Product boundary
 
 The extension has one job: after an explicit user action, send the known
-facts from the job posting currently being viewed to that student's JobTrack
+facts from the job posting currently being viewed to that student's Interndex
 account. It is a capture layer, not an AI product.
 
-**AI does the reasoning. JobTrack stores the truth.**
+**AI does the reasoning. Interndex stores the truth.**
 
 The capture path does not classify jobs, match resumes, recommend roles, fill
 forms, apply, detect submissions, discover postings, inspect email/calendar
@@ -23,11 +23,11 @@ The server exposes `POST /api/browser-capture`. A request carries:
 
 - `Authorization: Bearer <Supabase-issued access token>`; and
 - JSON in the same external job-record shape used by MCP `save_job`, with
-  `company` and `job_title` required and only fields JobTrack already stores.
+  `company` and `job_title` required and only fields Interndex already stores.
 
 Successful creation returns HTTP 201 with `status: "created"` and a bounded
 application summary containing the record id, company, title, status, and
-relative JobTrack detail link. An exact stored-URL match returns HTTP 409 with
+relative Interndex detail link. An exact stored-URL match returns HTTP 409 with
 `status: "already_tracked"`, names the matching record, and supplies its link.
 Invalid input is HTTP 400; missing, malformed, expired, revoked, or otherwise
 invalid bearer authentication is HTTP 401; repository failures are HTTP 500
@@ -144,9 +144,9 @@ The public `/privacy` page now describes implemented behavior rather than an
 intention. Page data is read only after the student opens the popup on a page;
 only the posting's own published details and a short allowlist of standard
 metadata are read; browsing is not monitored; credentials are used only to reach
-the student's own JobTrack account and are never given to the page. Captured
+the student's own Interndex account and are never given to the page. Captured
 records remain editable and deletable through the web app, are used only to
-provide JobTrack functionality, and are not sold or used for personalized
+provide Interndex functionality, and are not sold or used for personalized
 advertising.
 
 Each of those is now enforced by something rather than promised. There is no
@@ -210,7 +210,7 @@ output is generated, not committed: `extension/dist` is ignored.
 
 ### Loading it locally
 
-1. Set `EXTENSION_CONFIG` in `extension/src/config.ts` to the JobTrack origin,
+1. Set `EXTENSION_CONFIG` in `extension/src/config.ts` to the Interndex origin,
    the Supabase project URL, and the public OAuth client id registered for the
    extension.
 2. Update `host_permissions` in `extension/manifest.json` to the same two
@@ -232,7 +232,7 @@ output is generated, not committed: `extension/dist` is ignored.
 | `storage` | Hold the student's credentials in the extension. |
 | `identity` | `launchWebAuthFlow` and `getRedirectURL` for the OAuth flow. |
 
-Host permissions are the JobTrack origin and the Supabase project origin, and
+Host permissions are the Interndex origin and the Supabase project origin, and
 nothing else. Not requested, and asserted absent by test: `<all_urls>` or any
 wildcard host, `tabs`, `cookies`, `history`, `webNavigation`, `webRequest`,
 `notifications`, `downloads`, `bookmarks`, `background`, `alarms`. No content
@@ -275,7 +275,7 @@ tokens or cookies. The popup, browser-capture API and payload remain on the
 same `ExtractedJob` contract, which now also carries the three Rich Capture
 fields below.
 
-Nothing below the first level knows that JobTrack, Supabase, OAuth,
+Nothing below the first level knows that Interndex, Supabase, OAuth,
 `applicationCreationSchema` or MCP exist; site rules extract facts from a page
 and stop there.
 
@@ -414,7 +414,7 @@ Specific rules worth stating:
   rejected even when the posting names one there.
 - **Descriptions** are converted from HTML to plain text by string handling
   with no `innerHTML`, no `DOMParser`, and no element built from posting
-  content. A description over JobTrack's 50,000-character limit is shortened
+  content. A description over Interndex's 50,000-character limit is shortened
   and says so, in the text and in the popup, rather than being cut silently.
 - **The stored URL** prefers a recognized site's per-posting address, then a
   canonical link, and only ever one on the same host as the page being viewed.
@@ -549,7 +549,7 @@ timing.
 
 States: loading, disconnected, connecting, connect-failed, extracting,
 extraction-failed, ready, saving, unauthorized, and saved (as either created or
-already tracked). A rejected save, an unreachable server, and a JobTrack error
+already tracked). A rejected save, an unreachable server, and an Interndex error
 all return to the form with the reason beside it and everything the student
 typed intact. `popup-state.ts` holds this as pure data so each state can be
 asserted without a browser.
@@ -562,7 +562,7 @@ stored. It lists only what will actually be stored, so
 a deadline the extractor refused never appears there as a promise, and it
 disappears entirely when there is nothing extra to report.
 
-It is not a second copy of the JobTrack form. Category, every other stored
+It is not a second copy of the Interndex form. Category, every other stored
 field, and any notion of extraction confidence stay out of it. The point is
 narrow: important data should not enter a tracker invisibly, and a wrong
 deadline or a bogus salary is exactly the kind that survives unnoticed when
@@ -586,16 +586,16 @@ wrap rather than overflow.
 
 Authorization Code with PKCE (`S256` only) against the same Supabase
 authorization server the web app and MCP use, through a **dedicated public
-OAuth client** so JobTrack Capture and a connected assistant are separate grants
+OAuth client** so Interndex Capture and a connected assistant are separate grants
 a student can allow and revoke independently. No client secret exists, and an
 unpacked extension could not keep one.
 
 ```text
-Connect JobTrack
+Connect Interndex
   → 32 random bytes of state, 32 random bytes of code verifier
   → S256 challenge
   → chrome.identity.launchWebAuthFlow(authorize URL)
-  → student signs in and approves on JobTrack's consent screen
+  → student signs in and approves on Interndex's consent screen
   → https://<extension-id>.chromiumapp.org/ callback
   → state compared before anything else in the callback is read
   → POST /auth/v1/oauth/token with the code and the verifier
@@ -613,11 +613,11 @@ and discards when the browser closes. The refresh token lives in
 
 That trade-off is deliberate and worth stating plainly rather than burying: a
 refresh token that did not survive a browser restart would make "Connect
-JobTrack" a daily chore and train students to click through an OAuth screen
+Interndex" a daily chore and train students to click through an OAuth screen
 without reading it. `storage.local` is readable by this extension's own contexts
 and by anyone holding the profile directory and the local account it belongs to.
 It is not readable by web pages, by other extensions, or across profiles.
-Signing out clears both areas, and revoking the connection in JobTrack Settings
+Signing out clears both areas, and revoking the connection in Interndex Settings
 invalidates the token regardless of what is still stored locally.
 
 Before a capture the worker uses a valid access token, refreshing first if the
@@ -628,14 +628,14 @@ no loop and no third attempt. A refresh refused by the server clears the
 credentials; a refresh that merely could not reach the server leaves them alone.
 
 Signing out clears what this browser holds. It does not revoke the grant, and
-the extension does not claim to: revocation belongs to JobTrack Settings, where
+the extension does not claim to: revocation belongs to Interndex Settings, where
 Supabase is the source of truth about who still has access.
 
 ### Trust boundaries between contexts
 
 | Context | May | May not |
 | --- | --- | --- |
-| Injected collector | Read the invoked page's JSON-LD, allowlisted metadata, canonical link, `h1` and title | Hold a token, call Supabase or JobTrack, modify the page, run remote script |
+| Injected collector | Read the invoked page's JSON-LD, allowlisted metadata, canonical link, `h1` and title | Hold a token, call Supabase or Interndex, modify the page, run remote script |
 | Popup | Present, take the student's confirmation, render outcomes | Hold a token |
 | Service worker | OAuth, PKCE, tokens, refresh, the capture request | Hand a credential to anything else |
 
@@ -737,7 +737,7 @@ never a wrong one.
 
 **Still required, in real Chrome, locally**
 
-1. Load the unpacked extension and connect it to a real JobTrack account.
+1. Load the unpacked extension and connect it to a real Interndex account.
 2. Open a public posting on each of LinkedIn (`/jobs/view/`, a job selected
    inside `/jobs/search-results/`, and a job selected from Similar Jobs),
    Indeed, a Workday tenant, and the KPMG, IBM and L3Harris careers pages.

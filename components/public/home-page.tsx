@@ -18,7 +18,7 @@ import { demoToday } from "@/lib/demo/today";
  */
 const PREVIEW_STATUSES = ["Offer", "Interview", "Applied", "Interested"] as const;
 
-/** One of the three things JobTrack is for. A heading, a rule, and prose. */
+/** One of the three things Interndex is for. A heading, a rule, and prose. */
 function Explanation({
   body,
   title,
@@ -42,7 +42,7 @@ function Explanation({
 /**
  * The public front door.
  *
- * Its job is to let somebody understand JobTrack and then look at it, in that
+ * Its job is to let somebody understand Interndex and then look at it, in that
  * order, without an account. So the demo is the loudest thing on the page —
  * the header button, the hero's primary action, the preview in the middle and
  * the one call to action at the foot — and creating an account is the quieter
@@ -77,11 +77,11 @@ export function HomePage() {
       <main id="main-content">
         {/* ------------------------------------------------------------ hero */}
         {/*
-          Two panels: what JobTrack is for on the accent ground, and what to do
+          Two panels: what Interndex is for on the accent ground, and what to do
           about it on the page's own cream. The split is the shape the product
           has always introduced itself with — it began life on the sign-in
           screen — but the right-hand side is no longer a form. Somebody who has
-          just arrived is being asked to look at JobTrack, not to join it.
+          just arrived is being asked to look at Interndex, not to join it.
 
           It stacks below `lg`, accent first, so a phone gets the same order and
           Try the demo is still near the top of the page.
@@ -113,7 +113,7 @@ export function HomePage() {
 
           <div className="flex flex-col justify-center bg-background px-5 py-10 sm:px-8 sm:py-14 lg:py-16 lg:pl-14 lg:pr-[max(3.5rem,calc((100vw-1120px)/2+2rem))]">
             <h2 className="text-[26px] font-medium leading-tight tracking-tight text-foreground sm:text-[30px]">
-              See JobTrack in action
+              See Interndex in action
             </h2>
             <p className="mt-4 max-w-md text-[15px] leading-7 text-foreground-secondary">
               Explore a complete sample internship search — dozens of
@@ -159,7 +159,7 @@ export function HomePage() {
               level the moment the preview rendered.
             */}
             <h2 className="text-[13px] font-normal text-foreground-muted" id="preview-heading">
-              Your applications, as JobTrack keeps them
+              Your applications, as Interndex keeps them
             </h2>
             {/*
               The production list component, given four records out of the demo
@@ -176,7 +176,7 @@ export function HomePage() {
             <p className="mt-5 text-[13px] leading-6 text-foreground-muted">
               Sample applications from the demo workspace. They are fictional and
               shown for demonstration only; the employers named have no
-              connection to JobTrack.
+              connection to Interndex.
             </p>
           </div>
         </section>
@@ -188,7 +188,7 @@ export function HomePage() {
               <p>
                 Every application in one place, with the status it is at, the
                 date it closes, and the one thing you said you would do next.
-                JobTrack keeps the history too, so you can see how far each one
+                Interndex keeps the history too, so you can see how far each one
                 actually got.
               </p>
             }
@@ -212,7 +212,7 @@ export function HomePage() {
                 file to your connected assistant. It reads the columns, works out
                 what your statuses and dates meant, and checks the parts it is
                 unsure about with you. Once you confirm, it sends finished
-                applications to JobTrack — the spreadsheet itself never comes
+                applications to Interndex — the spreadsheet itself never comes
                 here.
               </p>
             }
@@ -224,10 +224,10 @@ export function HomePage() {
         <section className="border-y border-brand-strong bg-brand-strong text-brand-strong-foreground">
           <div className="mx-auto max-w-[1120px] px-5 py-14 sm:px-8 sm:py-20">
             <h2 className="max-w-2xl text-[26px] font-medium leading-tight tracking-tight sm:text-[30px]">
-              AI does the reasoning. JobTrack stores the truth.
+              AI does the reasoning. Interndex stores the truth.
             </h2>
             <p className="mt-4 max-w-2xl text-[15px] leading-7 text-brand-strong-foreground/85">
-              JobTrack does not provide an AI and does not charge you for one.
+              Interndex does not provide an AI and does not charge you for one.
               You bring an assistant you already have, and the two do different
               jobs.
             </p>
@@ -245,7 +245,7 @@ export function HomePage() {
               </div>
               <div>
                 <h3 className="border-b border-brand-strong-foreground/30 pb-2 text-[15px] font-medium">
-                  JobTrack
+                  Interndex
                 </h3>
                 <ul className="mt-4 space-y-2 text-[15px] leading-7 text-brand-strong-foreground/85">
                   <li>Stores your applications as structured records</li>
@@ -259,8 +259,8 @@ export function HomePage() {
             </div>
 
             <p className="mt-10 max-w-2xl text-[15px] leading-7 text-brand-strong-foreground/85">
-              You talk to your assistant. Your assistant works with JobTrack.
-              JobTrack keeps the record.
+              You talk to your assistant. Your assistant works with Interndex.
+              Interndex keeps the record.
             </p>
           </div>
         </section>

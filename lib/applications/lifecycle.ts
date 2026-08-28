@@ -2,7 +2,7 @@ import type { ApplicationStatus } from "@/lib/applications/constants";
 import type { ApplicationStatusEvent } from "@/lib/applications/types";
 
 /**
- * The coarse lifecycle JobTrack draws as a rail.
+ * The coarse lifecycle Interndex draws as a rail.
  *
  * This is a visual summary layered over the ten exact statuses, not a second
  * status model. Nothing is stored against it, no column or enum backs it, and

@@ -2,7 +2,7 @@
  * Where the student found the opportunity, and who the employer is not.
  *
  * These two questions look alike and are not. `application_source` is a fact
- * about the student's search — it feeds JobTrack's source analytics, so writing
+ * about the student's search — it feeds Interndex's source analytics, so writing
  * "Browser extension" into it would answer a question nobody asked and quietly
  * corrupt a chart. Company domain is a fact about the employer, and the host a
  * posting happens to be served from says nothing about it.
@@ -150,7 +150,7 @@ function matchesHost(hostname: string, suffix: string): boolean {
 /**
  * A job board name only when the host settles it, otherwise nothing.
  *
- * An unset source is stored by JobTrack as "Not specified", which is true. A
+ * An unset source is stored by Interndex as "Not specified", which is true. A
  * wrong source is not, and it is the kind of wrong a student never notices
  * because it looks plausible on a chart months later.
  */

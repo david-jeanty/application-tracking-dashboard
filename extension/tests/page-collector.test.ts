@@ -7,7 +7,7 @@ import { isPageSignals } from "../src/types.js";
 /**
  * What the injected collector is willing to take off a page.
  *
- * The headline property is what it leaves behind. JobTrack never receives the
+ * The headline property is what it leaves behind. Interndex never receives the
  * page's DOM, its body text, its scripts, or the assorted tracking metadata a
  * job board puts in its head — only the structured data, a short allowlist of
  * standard metadata, and two headings.

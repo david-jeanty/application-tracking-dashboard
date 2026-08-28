@@ -3,7 +3,7 @@ import type { UnresolvedFallback } from "./linkedin-frames.js";
 import type { ExtractedJob, PageSignals } from "./types.js";
 
 /**
- * The three job surfaces JobTrack Capture recognizes by name, and nothing else.
+ * The three job surfaces Interndex Capture recognizes by name, and nothing else.
  *
  * Site knowledge was deliberately absent from the first version, on the theory
  * that a selector guess is worse than a blank field. Manual testing in real
@@ -16,7 +16,7 @@ import type { ExtractedJob, PageSignals } from "./types.js";
  * nothing yields blanks, never the page's first heading.
  *
  * What is in this file is a table of selectors and named relational strategies,
- * and a little URL arithmetic. It does not know that JobTrack exists. It
+ * and a little URL arithmetic. It does not know that Interndex exists. It
  * performs no network request, executes nothing from the page, and calls no
  * site API. Every value it produces is read out of the DOM the student is
  * already looking at, and every value it cannot read is absent.
@@ -376,7 +376,7 @@ export const RECOGNIZED_SITES: readonly SiteId[] = SITE_RULES.map(
  * LinkedIn and Indeed both show a selected posting inside a search page whose
  * own URL — and whose own `<link rel="canonical">` — describes the search, not
  * the job. Filing the record under that address would make every posting a
- * student opened from one search list look like the same job to JobTrack's
+ * student opened from one search list look like the same job to Interndex's
  * exact-URL duplicate check. The selected posting's id is in the query string,
  * so the stable per-job address can be rebuilt from it.
  *

@@ -51,7 +51,7 @@ describe("the shape of the page", () => {
     expect(headings).toHaveLength(1);
     expect(headings[0]).toHaveTextContent("Settings");
     expect(
-      screen.getByText("Personalize JobTrack and manage what you have connected to it."),
+      screen.getByText("Personalize Interndex and manage what you have connected to it."),
     ).toBeInTheDocument();
   });
 
@@ -127,7 +127,7 @@ describe("the setup guidance", () => {
       screen.getByText(/Export it as a CSV, upload that to your/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("“Import this old tracker into JobTrack.”"),
+      screen.getByText("“Import this old tracker into Interndex.”"),
     ).toBeInTheDocument();
   });
 });
@@ -137,7 +137,7 @@ describe("the example prompts", () => {
     render(await renderPage());
 
     for (const prompt of [
-      "Save this job to JobTrack.",
+      "Save this job to Interndex.",
       "What RBC jobs am I tracking?",
       "I applied to it today.",
       "Set my next action to follow up next Friday.",
@@ -149,7 +149,7 @@ describe("the example prompts", () => {
   it("does not decorate them", async () => {
     render(await renderPage());
 
-    const prompt = screen.getByText("“Save this job to JobTrack.”");
+    const prompt = screen.getByText("“Save this job to Interndex.”");
     expect(prompt.querySelector("svg")).toBeNull();
 
     // No sparkle anywhere in the section, and nothing put in its place: the
@@ -221,7 +221,7 @@ describe("the connected assistants", () => {
       .getByRole("heading", { level: 3, name: "Browser extension" })
       .closest("div");
 
-    expect(extension).toHaveTextContent("JobTrack Capture");
+    expect(extension).toHaveTextContent("Interndex Capture");
     expect(extension).toHaveTextContent("provides no AI of its own");
   });
 
@@ -236,7 +236,7 @@ describe("the connected assistants", () => {
           {
             client: {
               id: "22222222-2222-4222-8222-222222222222",
-              name: "JobTrack Capture",
+              name: "Interndex Capture",
             },
             granted_at: "2026-08-26T09:00:00.000Z",
           },
@@ -248,7 +248,7 @@ describe("the connected assistants", () => {
       screen.getByRole("button", { name: "Disconnect Claude" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Disconnect JobTrack Capture" }),
+      screen.getByRole("button", { name: "Disconnect Interndex Capture" }),
     ).toBeInTheDocument();
   });
 });

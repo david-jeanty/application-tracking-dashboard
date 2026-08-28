@@ -8,7 +8,7 @@ import { normalizeCompanyDomain } from "@/lib/branding/domain";
  * built from stored data, and it should be built in exactly one reviewable
  * place rather than assembled inline wherever a company name is rendered.
  *
- * JobTrack calls no Logo.dev API from the server. The Logo API is a plain
+ * Interndex calls no Logo.dev API from the server. The Logo API is a plain
  * image endpoint, so the browser fetches the image directly and this module
  * only ever produces a string.
  */

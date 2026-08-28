@@ -40,7 +40,7 @@ describe("the controls that are offered", () => {
       within(accents)
         .getAllByRole("radio")
         .map((radio) => radio.getAttribute("aria-label")),
-    ).toEqual(["JobTrack Blue", "Rose", "Violet", "Emerald"]);
+    ).toEqual(["Interndex Blue", "Rose", "Violet", "Emerald"]);
   });
 });
 
@@ -65,7 +65,7 @@ describe("reporting the current preference", () => {
     expect(await screen.findByRole("radio", { name: "System", checked: true }))
       .toBeInTheDocument();
     expect(
-      await screen.findByRole("radio", { name: "JobTrack Blue", checked: true }),
+      await screen.findByRole("radio", { name: "Interndex Blue", checked: true }),
     ).toBeInTheDocument();
   });
 });

@@ -93,7 +93,7 @@ test("the privacy page is public and linked from the homepage footer", async ({
   ).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: "The JobTrack Capture browser extension",
+      name: "The Interndex Capture browser extension",
     }),
   ).toBeVisible();
   await expect(
@@ -125,7 +125,7 @@ test("a visitor can reach the demo from the homepage and the auth pages", async 
 
 test("the demo offers the way back to the homepage", async ({ page }) => {
   await page.goto("/demo");
-  await page.getByRole("main").getByRole("link", { name: "Back to JobTrack" }).click();
+  await page.getByRole("main").getByRole("link", { name: "Back to Interndex" }).click();
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(

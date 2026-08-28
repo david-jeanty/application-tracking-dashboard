@@ -78,7 +78,7 @@ describe("the import batch contract", () => {
     expect(Object.keys(newJobRecordSchema.shape)).not.toContain("user_id");
   });
 
-  it("accepts JobTrack's own statuses, including a terminal one", () => {
+  it("accepts Interndex's own statuses, including a terminal one", () => {
     for (const status of ["Applied", "Assessment", "Interview", "Offer", "Rejected"]) {
       expect(newJobRecordSchema.safeParse(record({ status: status as never })).success).toBe(
         true,
@@ -102,7 +102,7 @@ describe("the import batch contract", () => {
       true,
     );
     // 03/04/2026 is March 4th or April 3rd depending on whose spreadsheet it
-    // is. JobTrack must never be the one guessing.
+    // is. Interndex must never be the one guessing.
     for (const ambiguous of ["03/04/2026", "12/08/2026", "Aug 12 2026", "2026/08/12"]) {
       expect(
         newJobRecordSchema.safeParse(record({ date_applied: ambiguous })).success,
@@ -244,7 +244,7 @@ describe("imported history is what the student actually recorded", () => {
     const [written] = createApplications.mock.calls[0][0];
     const insert = toApplicationInsert(written);
 
-    // An application may begin its life in JobTrack at Interview. What it is
+    // An application may begin its life in Interndex at Interview. What it is
     // not given is a manufactured Applied → Screening → Assessment trail.
     expect(insert.current_status).toBe("Interview");
     expect(insert.date_applied).toBe("2026-08-03");
@@ -287,7 +287,7 @@ describe("imported history is what the student actually recorded", () => {
 
   it("contains no status-history write anywhere in the import path", () => {
     // History is the database's job. The trigger records that the application
-    // entered JobTrack at the status it arrived at, and nothing in this path
+    // entered Interndex at the status it arrived at, and nothing in this path
     // may add to that. The repository does read that table elsewhere — for the
     // lifecycle rail — so what is asserted is that nothing writes to it.
     for (const path of [
