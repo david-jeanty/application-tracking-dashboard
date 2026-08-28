@@ -5,7 +5,7 @@ import { PublicHeader } from "@/components/public/public-header";
 export const metadata: Metadata = {
   title: "Privacy",
   description:
-    "How JobTrack handles account, application, and planned browser-capture data.",
+    "How Interndex handles account, application, and browser-capture data.",
 };
 
 export default function PrivacyPage() {
@@ -29,9 +29,9 @@ export default function PrivacyPage() {
             Your application records stay yours.
           </h1>
           <p className="mt-5 text-[15px] leading-7 text-foreground-secondary">
-            This page describes the current JobTrack web app and the intended
-            privacy boundary for a planned browser extension. The extension is
-            not publicly released.
+            This page describes the Interndex web app and the locally testable
+            Interndex Capture browser extension. The extension is not currently
+            distributed through the Chrome Web Store.
           </p>
           <p className="mt-3 text-[13px] text-foreground-muted">
             Last updated August 25, 2026.
@@ -46,18 +46,18 @@ export default function PrivacyPage() {
                 The web app today
               </h2>
               <p className="mt-4">
-                JobTrack stores the account information needed to sign you in
+                Interndex stores the account information needed to sign you in
                 and the application records you choose to save. A connected AI
                 assistant can work with those records only after you authorize
                 its connection to your account. You can review and revoke
                 connected clients in Settings.
               </p>
               <p className="mt-3">
-                Your records are used to provide JobTrack&apos;s tracker,
+                Your records are used to provide Interndex&apos;s tracker,
                 pipeline, dashboard, analytics, and connected-assistant
-                features. JobTrack does not sell your application records or
+                features. Interndex does not sell your application records or
                 use them for personalized advertising. You can edit, archive,
-                and delete tracked records through JobTrack.
+                and delete tracked records through Interndex.
               </p>
             </section>
 
@@ -66,36 +66,36 @@ export default function PrivacyPage() {
                 className="border-b border-border pb-2 text-[20px] font-medium text-foreground"
                 id="extension-privacy"
               >
-                The planned browser extension
+                The browser extension
               </h2>
               <p className="mt-4">
-                The planned extension is a manual capture tool, not an AI,
-                discovery, or background-monitoring product. Its intended
-                behavior is limited to the posting the user explicitly asks it
-                to save.
+                Interndex Capture is a manual capture tool, not an AI, discovery,
+                or background-monitoring product. It handles only the posting
+                the user explicitly asks it to save.
               </p>
               <ul className="mt-4 list-disc space-y-2 pl-5 marker:text-accent">
                 <li>
-                  Page data will be accessed only after explicit user
-                  invocation.
+                  The current page is accessed only after the user explicitly
+                  invokes Interndex Capture.
                 </li>
                 <li>
-                  Extracted posting information will be transmitted to the
-                  user&apos;s own JobTrack account.
+                  Extracted posting information is transmitted to the
+                  user&apos;s own Interndex account.
                 </li>
-                <li>JobTrack will not continuously monitor browsing.</li>
+                <li>The extension does not continuously monitor browsing.</li>
                 <li>
-                  Authentication information will be used only to connect the
-                  user&apos;s account.
+                  Access and refresh tokens are used only to authenticate the
+                  user&apos;s Interndex connection.
                 </li>
                 <li>
-                  Captured data will be used only to provide JobTrack
+                  Page and job data is used only to provide Interndex
                   functionality, not sold or used for personalized advertising.
                 </li>
                 <li>
-                  Users will be able to edit or delete captured records through
-                  JobTrack, just like records saved another way.
+                  Users can edit, archive, or delete captured records through
+                  Interndex, just like records saved another way.
                 </li>
+                <li>The extension does not use built-in AI.</li>
               </ul>
             </section>
 
@@ -107,11 +107,11 @@ export default function PrivacyPage() {
                 Deliberate limits
               </h2>
               <p className="mt-4">
-                JobTrack does not need to infer personal facts, continuously
+                Interndex does not need to infer personal facts, continuously
                 scrape job sites, detect submissions, or inspect unrelated
                 browsing to store a posting. Unknown information remains
-                unknown. The extension&apos;s permissions and data handling will
-                receive a separate review before any public release.
+                unknown. Chrome Web Store packaging, submission, and its broader
+                compliance review remain separate future work.
               </p>
             </section>
           </div>

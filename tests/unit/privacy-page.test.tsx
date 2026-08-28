@@ -6,28 +6,29 @@ import { HomePage } from "@/components/public/home-page";
 afterEach(cleanup);
 
 describe("the public privacy route", () => {
-  it("distinguishes the current web app from the unreleased extension", () => {
+  it("distinguishes the web app from the locally testable extension", () => {
     render(<PrivacyPage />);
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Your application records stay yours." }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/extension is not publicly released/i)).toBeInTheDocument();
+    expect(screen.getByText(/not currently distributed through the Chrome Web Store/i)).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "The web app today" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "The planned browser extension" }),
+      screen.getByRole("heading", { name: "The browser extension" }),
     ).toBeInTheDocument();
   });
 
-  it("states the planned extension's narrow privacy boundary", () => {
+  it("states the extension's narrow privacy boundary", () => {
     render(<PrivacyPage />);
 
-    expect(screen.getByText(/only after explicit user invocation/i)).toBeInTheDocument();
-    expect(screen.getByText(/will not continuously monitor browsing/i)).toBeInTheDocument();
+    expect(screen.getByText(/only after the user explicitly invokes/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not continuously monitor browsing/i)).toBeInTheDocument();
     expect(screen.getByText(/not sold or used for personalized advertising/i)).toBeInTheDocument();
-    expect(screen.getByText(/edit or delete captured records/i)).toBeInTheDocument();
+    expect(screen.getByText(/edit, archive, or delete captured records/i)).toBeInTheDocument();
+    expect(screen.getByText(/does not use built-in AI/i)).toBeInTheDocument();
   });
 
   it("keeps the public page accessible and linked home", () => {
@@ -38,7 +39,7 @@ describe("the public privacy route", () => {
       "href",
       "#main-content",
     );
-    expect(screen.getByRole("link", { name: "JobTrack" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Interndex home" })).toHaveAttribute("href", "/");
   });
 });
 

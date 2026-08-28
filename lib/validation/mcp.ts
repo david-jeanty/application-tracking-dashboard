@@ -384,7 +384,7 @@ export const importJobsInputSchema = z.object({
     .min(1)
     .max(IMPORT_JOBS_MAXIMUM_BATCH)
     .describe(
-      `The applications to import, already normalized to JobTrack's own values. Between 1 and ${IMPORT_JOBS_MAXIMUM_BATCH} per call; split a larger tracker into several calls and keep the mapping you agreed with the student identical across all of them.`,
+      `The applications to import, already normalized to Interndex's own values. Between 1 and ${IMPORT_JOBS_MAXIMUM_BATCH} per call; split a larger tracker into several calls and keep the mapping you agreed with the student identical across all of them.`,
     ),
 });
 

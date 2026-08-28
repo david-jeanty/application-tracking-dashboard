@@ -10,7 +10,7 @@ export type ConsentDecisionState = { status: "idle" | "error"; message?: string 
 const FAILED = {
   status: "error",
   message:
-    "That authorization request could not be completed. Return to Claude and start the connection again.",
+    "That authorization request could not be completed. Return to the application you are connecting and try again.",
 } as const satisfies ConsentDecisionState;
 
 /**
@@ -64,7 +64,7 @@ const SETTINGS_PATH = "/settings";
 export type DisconnectOutcome = "done" | "error" | "invalid";
 
 /**
- * Revokes one AI client's access to the signed-in student's tracker.
+ * Revokes one OAuth client's access to the signed-in student's tracker.
  *
  * Supabase owns revocation: `revokeGrant` marks the consent revoked, drops that
  * client's sessions, and invalidates its refresh tokens. Nothing here stores or
@@ -73,7 +73,7 @@ export type DisconnectOutcome = "done" | "error" | "invalid";
  *
  * Like `decideConsentAction` this is a Server Action, so Next.js applies its
  * origin checks and a cross-site form post cannot disconnect somebody's
- * assistant. It re-establishes the user rather than trusting the page that
+ * client. It re-establishes the user rather than trusting the page that
  * rendered the form, takes only the client id Supabase needs, and always
  * returns to a fixed internal path — no redirect destination is accepted from
  * the caller.

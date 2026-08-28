@@ -51,18 +51,18 @@ describe("the shape of the page", () => {
     expect(headings).toHaveLength(1);
     expect(headings[0]).toHaveTextContent("Settings");
     expect(
-      screen.getByText("Personalize JobTrack and manage connected assistants."),
+      screen.getByText("Personalize Interndex and manage authorized connections."),
     ).toBeInTheDocument();
   });
 
-  it("keeps Appearance and the connected-assistant section", async () => {
+  it("keeps Appearance and a truthful Connections section", async () => {
     render(await renderPage());
 
     expect(
       screen.getByRole("heading", { level: 2, name: "Appearance" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { level: 2, name: "Connected assistant" }),
+      screen.getByRole("heading", { level: 2, name: "Connections" }),
     ).toBeInTheDocument();
   });
 
@@ -70,11 +70,12 @@ describe("the shape of the page", () => {
     render(await renderPage());
 
     for (const title of [
-      "How this works",
+      "AI assistant",
       "Setting it up in Claude",
       "Try saying",
       "What a connected assistant can do",
-      "Assistants you have connected",
+      "Browser extension",
+      "Authorized connections",
     ]) {
       expect(
         screen.getByRole("heading", { level: 3, name: title }),
@@ -125,7 +126,7 @@ describe("the setup guidance", () => {
       screen.getByText(/Export it as a CSV, upload that to your/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("“Import this old tracker into JobTrack.”"),
+      screen.getByText("“Import this old tracker into Interndex.”"),
     ).toBeInTheDocument();
   });
 });
@@ -135,7 +136,7 @@ describe("the example prompts", () => {
     render(await renderPage());
 
     for (const prompt of [
-      "Save this job to JobTrack.",
+      "Save this job to Interndex.",
       "What RBC jobs am I tracking?",
       "I applied to it today.",
       "Set my next action to follow up next Friday.",
@@ -147,7 +148,7 @@ describe("the example prompts", () => {
   it("does not decorate them", async () => {
     render(await renderPage());
 
-    const prompt = screen.getByText("“Save this job to JobTrack.”");
+    const prompt = screen.getByText("“Save this job to Interndex.”");
     expect(prompt.querySelector("svg")).toBeNull();
 
     // No sparkle anywhere in the section, and nothing put in its place: the
@@ -181,7 +182,7 @@ describe("the connected assistants", () => {
   it("explains an empty list instead of showing nothing", async () => {
     render(await renderPage());
 
-    expect(screen.getByText("No assistants connected yet")).toBeInTheDocument();
+    expect(screen.getByText("No authorized connections yet")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Disconnect/ }),
     ).not.toBeInTheDocument();
@@ -191,10 +192,10 @@ describe("the connected assistants", () => {
     render(await renderPage({ fails: true }));
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Your connected assistants could not be loaded.",
+      "Your authorized connections could not be loaded.",
     );
     expect(
-      screen.queryByText("No assistants connected yet"),
+      screen.queryByText("No authorized connections yet"),
     ).not.toBeInTheDocument();
   });
 
@@ -202,7 +203,17 @@ describe("the connected assistants", () => {
     render(await renderPage({ disconnect: "done" }));
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "That assistant has been disconnected.",
+      "That connection has been disconnected.",
     );
+  });
+
+  it("describes Interndex Capture without calling it an AI assistant", async () => {
+    render(await renderPage());
+
+    const extension = screen
+      .getByRole("heading", { level: 3, name: "Browser extension" })
+      .closest("div");
+    expect(extension).toHaveTextContent("Interndex Capture is a manual browser tool");
+    expect(extension).toHaveTextContent("does not include AI");
   });
 });

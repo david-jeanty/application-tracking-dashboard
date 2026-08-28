@@ -8,10 +8,11 @@
  * the browser paints, so a reload never flashes the wrong theme.
  */
 
+// Kept stable so existing browser preferences do not become unreadable.
 export const APPEARANCE_STORAGE_KEY = "jobtrack.appearance";
 
 export const MODES = ["system", "light", "dark"] as const;
-export const ACCENTS = ["blue", "rose", "violet", "emerald"] as const;
+export const ACCENTS = ["blue"] as const;
 
 export type Mode = (typeof MODES)[number];
 export type Accent = (typeof ACCENTS)[number];
@@ -35,10 +36,7 @@ export const MODE_LABELS: Record<Mode, string> = {
 };
 
 export const ACCENT_LABELS: Record<Accent, string> = {
-  blue: "JobTrack Blue",
-  rose: "Rose",
-  violet: "Violet",
-  emerald: "Emerald",
+  blue: "Interndex Blue",
 };
 
 export const DARK_MEDIA_QUERY = "(prefers-color-scheme: dark)";

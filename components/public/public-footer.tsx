@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { InterndexLogo } from "@/components/branding/interndex-logo";
 
 /**
  * The foot of the public site.
  *
- * One line about what JobTrack is for, the three links the header already
+ * One line about what Interndex is for, the three links the header already
  * offers, and the public privacy explanation for somebody who read to the
  * bottom. Terms, Contact and Careers stay absent because those pages do not
  * exist.
@@ -13,9 +14,7 @@ export function PublicFooter() {
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-[1120px] flex-col gap-4 px-5 py-8 sm:flex-row sm:items-baseline sm:justify-between sm:px-8">
         <div>
-          <p className="font-wordmark text-[18px] leading-none text-foreground">
-            JobTrack
-          </p>
+          <InterndexLogo className="h-5" />
           <p className="mt-2 text-[13px] text-foreground-muted">
             Built for students managing internship and co-op searches.
           </p>

@@ -1,11 +1,9 @@
 /**
  * What a connected AI assistant can and cannot do with a student's tracker.
  *
- * The consent screen and the settings page both describe this, and they must
- * never disagree: one is the promise made while granting access, the other is
- * what the student reads afterwards to decide whether to keep it. Keeping the
- * wording in one place is why this file exists — it is a list of strings, not
- * an abstraction over them.
+ * The AI-assistant part of Settings describes this. OAuth consent is
+ * deliberately client-neutral because JobTrack now has more than one kind of
+ * client and Supabase's grant metadata does not expose a reliable client type.
  *
  * These describe the tools actually registered in `lib/mcp/tools.ts`. If a tool
  * is ever added or removed, this list changes with it.

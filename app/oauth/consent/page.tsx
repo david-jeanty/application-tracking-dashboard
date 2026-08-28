@@ -2,11 +2,6 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 import { ConsentForm } from "@/components/oauth/consent-form";
-import {
-  ASSISTANT_CAN,
-  ASSISTANT_CANNOT,
-  ASSISTANT_OWNERSHIP_NOTE,
-} from "@/lib/mcp/capabilities";
 import { Card } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/server";
 
@@ -67,7 +62,7 @@ export default async function ConsentPage({
         </span>
 
         <h1 className="mt-5 text-xl font-semibold text-foreground">
-          Allow {data.client.name} to use your tracker?
+          Allow {data.client.name} to connect to Interndex?
         </h1>
         <p className="mt-2 text-sm leading-6 text-foreground-secondary">
           Signed in as <span className="font-medium">{data.user.email}</span>.
@@ -75,24 +70,21 @@ export default async function ConsentPage({
 
         <div className="mt-6 rounded-record border border-border bg-surface-muted p-4">
           <h2 className="text-sm font-semibold text-foreground">
-            {data.client.name} will be able to
+            What this connection means
           </h2>
           <ul className="mt-2 space-y-1 text-sm leading-6 text-foreground-secondary">
-            {ASSISTANT_CAN.map((capability) => (
-              <li key={capability}>{capability}</li>
-            ))}
-          </ul>
-          <h2 className="mt-4 text-sm font-semibold text-foreground">
-            It will not be able to
-          </h2>
-          <ul className="mt-2 space-y-1 text-sm leading-6 text-foreground-secondary">
-            {ASSISTANT_CANNOT.map((limit) => (
-              <li key={limit}>{limit}</li>
-            ))}
+            <li>The client will receive a connection authenticated as you.</li>
+            <li>
+              It can reach only data allowed to your signed-in Interndex account.
+            </li>
+            <li>
+              The actions available depend on the client you are connecting.
+            </li>
           </ul>
           <p className="mt-3 text-xs leading-5 text-foreground-muted">
-            {ASSISTANT_OWNERSHIP_NOTE} You can disconnect it at any time from
-            JobTrack settings.
+            Only approve a client you recognize. It can never reach another
+            student&apos;s tracker, and you can disconnect it at any time from
+            Interndex Settings.
           </p>
         </div>
 

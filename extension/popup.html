@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Interndex Capture</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header class="brand-bar">
+      <img alt="" aria-hidden="true" class="brand-mark" src="icons/icon-32.png" />
+      <span class="brand-name">Interndex</span>
+      <span class="brand-product">Capture</span>
+    </header>
+
+    <main>
+      <p class="sr-only" id="live-status" aria-live="polite"></p>
+
+      <section id="loading-view" aria-labelledby="loading-title">
+        <h1 id="loading-title">Opening Interndex…</h1>
+        <p class="supporting">Checking your connection.</p>
+      </section>
+
+      <section id="disconnected-view" hidden aria-labelledby="disconnected-title">
+        <p class="eyebrow">Save this posting</p>
+        <h1 id="disconnected-title">Connect Interndex</h1>
+        <p class="supporting">
+          Connect once, then save the job posting you are viewing to your own tracker.
+        </p>
+        <p class="notice error" id="connection-error" role="alert" hidden></p>
+        <div class="setup-note" id="setup-note" hidden>
+          <p>This local build needs a dedicated public OAuth client.</p>
+          <p class="setup-label">Allowed redirect URL</p>
+          <code id="redirect-url"></code>
+        </div>
+        <button class="button primary" id="connect-button" type="button">
+          Connect Interndex
+        </button>
+      </section>
+
+      <section id="working-view" hidden aria-labelledby="working-title">
+        <h1 id="working-title">Reading this posting…</h1>
+        <p class="supporting" id="working-copy">
+          Looking for structured job information on the current page.
+        </p>
+      </section>
+
+      <section id="extraction-error-view" hidden aria-labelledby="extraction-error-title">
+        <p class="eyebrow">This page could not be read</p>
+        <h1 id="extraction-error-title">Try another job page</h1>
+        <p class="notice error" id="extraction-error" role="alert"></p>
+        <button class="button secondary" id="retry-extraction-button" type="button">
+          Try again
+        </button>
+      </section>
+
+      <section id="editor-view" hidden aria-labelledby="editor-title">
+        <p class="eyebrow" id="editor-eyebrow">Confirm this posting</p>
+        <h1 id="editor-title">Track this job</h1>
+        <p class="notice warning" id="extraction-warning" role="status" hidden></p>
+        <p class="notice error" id="save-error" role="alert" hidden></p>
+
+        <form id="capture-form" novalidate>
+          <div class="field">
+            <label for="company">Company</label>
+            <input id="company" name="company" required maxlength="160" autocomplete="organization" />
+          </div>
+          <div class="field">
+            <label for="job-title">Job title</label>
+            <input id="job-title" name="job_title" required maxlength="200" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="location">Location <span>(optional)</span></label>
+            <input id="location" name="location" maxlength="200" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+              <option value="Interested" selected>Interested</option>
+              <option value="Applied">Applied</option>
+            </select>
+          </div>
+
+          <p class="description-state" id="description-state"></p>
+          <button class="button primary" id="track-button" type="submit">
+            Track job
+          </button>
+        </form>
+      </section>
+
+      <section id="result-view" hidden aria-labelledby="result-title">
+        <p class="result-check" aria-hidden="true">✓</p>
+        <h1 id="result-title">Tracked in Interndex</h1>
+        <p class="result-company" id="result-company"></p>
+        <p class="result-title" id="result-job-title"></p>
+        <p class="notice warning" id="result-warning" role="status" hidden>
+          Saved without the full description because it exceeded Interndex’s limit.
+        </p>
+        <button class="button primary" id="open-application-button" type="button">
+          Open application
+        </button>
+      </section>
+    </main>
+
+    <footer id="connected-footer" hidden>
+      <button class="link-button" id="disconnect-button" type="button">Disconnect</button>
+    </footer>
+
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>

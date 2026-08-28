@@ -103,7 +103,7 @@ describe("system mode, after the page has already loaded", () => {
     switchOperatingSystemTo("dark");
 
     expect(document.documentElement.dataset.mode).toBe("system");
-    expect(document.documentElement.dataset.accent).toBe("rose");
+    expect(document.documentElement.dataset.accent).toBe("blue");
     stop();
   });
 });

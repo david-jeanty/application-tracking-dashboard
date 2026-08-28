@@ -124,7 +124,7 @@ describe("the homepage's front door", () => {
       screen.getByText("Internship and co-op applications"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "See JobTrack in action" }),
+      screen.getByRole("heading", { name: "See Interndex in action" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Built for students, one careful step at a time/),
@@ -136,7 +136,7 @@ describe("the homepage's front door", () => {
 
     // Scoped to the hero: the same words close the page, which is the point.
     const hero = screen
-      .getByRole("heading", { name: "See JobTrack in action" })
+      .getByRole("heading", { name: "See Interndex in action" })
       .closest("div") as HTMLElement;
 
     expect(
@@ -193,11 +193,11 @@ describe("what the homepage claims", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "AI does the reasoning. JobTrack stores the truth.",
+        name: "AI does the reasoning. Interndex stores the truth.",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/JobTrack does not provide an AI/),
+      screen.getByText(/Interndex does not provide an AI/),
     ).toBeInTheDocument();
   });
 
@@ -209,7 +209,7 @@ describe("what the homepage claims", () => {
       /JobTrack'?s? own AI|\bbuilt-in AI\b|\bAI-powered\b|\bAI assistant built in\b/i,
     );
     // And it says the opposite, in as many words.
-    expect(text).toMatch(/JobTrack does not provide an AI/);
+    expect(text).toMatch(/Interndex does not provide an AI/);
   });
 
   it("promises only the compatibility that has been tested", () => {
@@ -300,7 +300,7 @@ describe("the product preview", () => {
       screen.getByText(/fictional and\s+shown for demonstration only/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/no\s+connection to JobTrack/i),
+      screen.getByText(/no\s+connection to Interndex/i),
     ).toBeInTheDocument();
   });
 });

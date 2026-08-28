@@ -147,6 +147,8 @@ describe("recording a consent decision", () => {
     );
 
     expect(state.status).toBe("error");
+    expect(state.message).toContain("application you are connecting");
+    expect(state.message).not.toContain("Claude");
   });
 });
 

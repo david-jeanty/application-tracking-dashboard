@@ -19,8 +19,8 @@ export const metadata: Metadata = { title: "Settings" };
 
 /** What the student can ask for once connected. Kept to the registered tools. */
 const EXAMPLE_PROMPTS = [
-  "Save this job to JobTrack.",
-  "Import this old tracker into JobTrack.",
+  "Save this job to Interndex.",
+  "Import this old tracker into Interndex.",
   "What RBC jobs am I tracking?",
   "Show me the details for that Business Analyst role.",
   "I applied to it today.",
@@ -30,11 +30,11 @@ const EXAMPLE_PROMPTS = [
 const DISCONNECT_MESSAGES = {
   done: {
     tone: "success",
-    text: "That assistant has been disconnected. It will need your approval again before it can reach your applications.",
+    text: "That connection has been disconnected. It will need your approval again before it can reach your applications.",
   },
   error: {
     tone: "error",
-    text: "That assistant could not be disconnected. Try again in a moment.",
+    text: "That connection could not be disconnected. Try again in a moment.",
   },
   invalid: {
     tone: "error",
@@ -105,41 +105,41 @@ export default async function SettingsPage({
           Settings
         </h1>
         <p className="mt-2 max-w-2xl text-[15px] text-foreground-secondary">
-          Personalize JobTrack and manage connected assistants.
+          Personalize Interndex and manage authorized connections.
         </p>
       </div>
 
       <AppearanceSettings />
 
-      <section aria-labelledby="assistants-heading" className="space-y-8">
+      <section aria-labelledby="connections-heading" className="space-y-8">
         <div>
           <div className="border-b border-border pb-2">
             <h2
               className="text-[17px] font-medium text-foreground"
-              id="assistants-heading"
+              id="connections-heading"
             >
-              Connected assistant
+              Connections
             </h2>
           </div>
           <p className="mt-4 max-w-2xl text-sm leading-6 text-foreground-secondary">
-            JobTrack works completely on its own. If you already use an AI
-            assistant, you can also let it read and update your applications, so
-            you stop retyping what you just discussed with it.
+            Interndex works completely on its own. You can authorize an AI
+            assistant to work with your tracker or connect Interndex Capture to
+            save the posting currently open in your browser.
           </p>
         </div>
 
         {notice ? <Notice tone={notice.tone}>{notice.text}</Notice> : null}
 
-        <Subsection title="How this works">
+        <Subsection title="AI assistant">
           <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
-            JobTrack does not provide an AI and never charges you for one. You
-            bring an assistant you already have; JobTrack gives it your
+            Interndex does not provide an AI and never charges you for one. You
+            bring an assistant you already have; Interndex gives it your
             application data and the actions below. The reasoning happens in your
             assistant, and the record stays here.
           </p>
 
           <h4 className="mt-5 text-sm font-medium text-foreground">
-            Your JobTrack connection address
+            Your Interndex connection address
           </h4>
           <p className="mt-1 text-sm leading-6 text-foreground-secondary">
             Your assistant will ask for this. Copy it exactly.
@@ -180,7 +180,7 @@ export default async function SettingsPage({
             {/*
               The prompts, and nothing beside them. Each line used to carry an
               accent sparkle, which decorated a sentence that is already a
-              quotation and made this the only place in JobTrack that dresses
+              quotation and made this the only place in Interndex that dresses
               its content up.
             */}
             <ul className="mt-3 space-y-2 text-sm leading-6 text-foreground-secondary">
@@ -190,14 +190,14 @@ export default async function SettingsPage({
             </ul>
             {/*
               One sentence, beside the prompts it belongs with. The spreadsheet
-              never comes to JobTrack — it goes to the assistant, which reads it
+              never comes to Interndex — it goes to the assistant, which reads it
               and sends back finished applications — so there is no upload
               control here to add.
             */}
             <p className="mt-4 text-sm leading-6 text-foreground-secondary">
               Already have a tracker? Export it as a CSV, upload that to your
               connected assistant, and ask it to import the tracker into
-              JobTrack. It will check the columns and dates with you first.
+              Interndex. It will check the columns and dates with you first.
             </p>
           </Subsection>
 
@@ -221,16 +221,26 @@ export default async function SettingsPage({
           </Subsection>
         </div>
 
-        <Subsection title="Assistants you have connected">
+        <Subsection title="Browser extension">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
+            Interndex Capture is a manual browser tool. Open its popup on a job
+            posting, check the extracted company, title, and location, then save
+            the record to Interndex. It reads the current page only after you
+            invoke it and does not include AI or monitor browsing in the
+            background.
+          </p>
+        </Subsection>
+
+        <Subsection title="Authorized connections">
           <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
             Disconnecting takes access away immediately. Your applications are
-            not affected — only the assistant&apos;s permission to reach them.
+            not affected — only that client&apos;s permission to reach them.
           </p>
 
           <div className="mt-4">
             {grantsError ? (
               <Notice tone="error">
-                Your connected assistants could not be loaded. Refresh the page
+                Your authorized connections could not be loaded. Refresh the page
                 to try again.
               </Notice>
             ) : (

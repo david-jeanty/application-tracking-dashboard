@@ -110,7 +110,7 @@ function Progress({
   );
 }
 
-/** What the student has told JobTrack comes next, if anything. */
+/** What the student has told Interndex comes next, if anything. */
 function Next({ date }: { date: ContextDate }) {
   if (!date) {
     return <span className="text-[13px] text-foreground-muted">—</span>;

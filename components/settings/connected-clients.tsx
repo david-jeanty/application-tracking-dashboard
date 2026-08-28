@@ -20,7 +20,7 @@ function describeGrantedAt(value: string): string | null {
 }
 
 /**
- * The AI assistants a student has authorized, with a way to disconnect each.
+ * The OAuth clients a student has authorized, with a way to disconnect each.
  *
  * The list comes from Supabase on every request rather than from anything
  * stored here, so what it shows is the live state of consent. The disconnect
@@ -33,10 +33,10 @@ export function ConnectedClients({ clients }: { clients: ConnectedClient[] }) {
       // A rule and two lines. The dashed box with an icon inside it was the
       // loudest thing in Settings, and it was announcing an absence.
       <div className="border-t border-border pt-5">
-        <p className="text-sm text-foreground">No assistants connected yet</p>
+        <p className="text-sm text-foreground">No authorized connections yet</p>
         <p className="mt-1 max-w-md text-sm leading-6 text-foreground-secondary">
-          Once you connect one using the steps above, it will appear here and
-          you can disconnect it at any time.
+          An AI assistant or Interndex Capture will appear here after you approve
+          its connection. You can disconnect it at any time.
         </p>
       </div>
     );

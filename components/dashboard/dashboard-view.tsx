@@ -69,7 +69,7 @@ export function DashboardView({
           </div>
           <p className="pt-6 text-[16px] text-foreground">No applications yet.</p>
           <p className="mt-1.5 max-w-md text-[14px] leading-6 text-foreground-secondary">
-            Save your first application and JobTrack will show your search
+            Save your first application and Interndex will show your search
             overview, pipeline, recent activity, and upcoming dates here.
           </p>
           <div className="mt-5">

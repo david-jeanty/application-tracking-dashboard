@@ -234,7 +234,7 @@ function authFor(userId: string): AuthInfo {
  * leaks another student's row fails here rather than on a live connector.
  */
 async function connectServer(repositoryFactory = fakeRepositoryFactory()) {
-  const server = new McpServer({ name: "jobtrack", version: "0.1.0" });
+  const server = new McpServer({ name: "interndex", version: "0.1.0" });
   registerJobTrackTools(server, repositoryFactory);
 
   const [clientTransport, serverTransport] =
@@ -1024,7 +1024,7 @@ describe("import_jobs served by the real server", () => {
     });
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toBe("Imported 2 applications into JobTrack.");
+    expect(result.content[0].text).toBe("Imported 2 applications into Interndex.");
     expect(result.structuredContent).toMatchObject({ imported: 2 });
 
     const summaries = result.structuredContent!.applications as {

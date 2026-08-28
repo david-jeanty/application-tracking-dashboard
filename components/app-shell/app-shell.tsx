@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
+import { InterndexLogo } from "@/components/branding/interndex-logo";
 import {
   SidebarContent,
   type WorkspaceIdentity,
@@ -90,9 +91,7 @@ export function AppShell({ children, identity }: AppShellProps) {
           >
             <Menu aria-hidden="true" className="size-5" />
           </button>
-          <span className="font-wordmark text-[20px] leading-none text-foreground">
-            JobTrack
-          </span>
+          <InterndexLogo className="h-5" />
         </header>
 
         <main

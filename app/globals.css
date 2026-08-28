@@ -1,71 +1,16 @@
 @import "tailwindcss";
 
 /*
-  JobTrack design foundations
+  Interndex design foundations
   ---------------------------
   Two independent axes:
 
-    data-theme  light | dark      neutral palette + accent brightness
-    data-accent blue | rose | violet | emerald
-
-  Each accent declares a `-light` and a `-dark` value. The theme block picks
-  one set, so a new accent is four extra declarations rather than eight rules.
+    data-theme  light | dark      neutral palette + brand brightness
 
   Semantic status colours (success / warning / danger) are deliberately NOT
   derived from the accent: an application's outcome must read the same whatever
   the student chose for their interface.
 */
-
-/* ---------------------------------------------------------------- accents */
-
-:root,
-:root[data-accent="blue"] {
-  --accent-light: #315f96;
-  --accent-hover-light: #274d7b;
-  --accent-soft-light: #e7edf6;
-  --accent-on-light: #ffffff;
-
-  --accent-dark: #88ace0;
-  --accent-hover-dark: #9dbce8;
-  --accent-soft-dark: #1d2735;
-  --accent-on-dark: #0f1620;
-}
-
-:root[data-accent="rose"] {
-  --accent-light: #9d4059;
-  --accent-hover-light: #813348;
-  --accent-soft-light: #f6e9ec;
-  --accent-on-light: #ffffff;
-
-  --accent-dark: #dd94a6;
-  --accent-hover-dark: #e7a8b8;
-  --accent-soft-dark: #2f2026;
-  --accent-on-dark: #211016;
-}
-
-:root[data-accent="violet"] {
-  --accent-light: #614a94;
-  --accent-hover-light: #4f3c79;
-  --accent-soft-light: #eeeaf6;
-  --accent-on-light: #ffffff;
-
-  --accent-dark: #a99ada;
-  --accent-hover-dark: #bbafe3;
-  --accent-soft-dark: #262234;
-  --accent-on-dark: #161125;
-}
-
-:root[data-accent="emerald"] {
-  --accent-light: #2c6a56;
-  --accent-hover-light: #235444;
-  --accent-soft-light: #e6efeb;
-  --accent-on-light: #ffffff;
-
-  --accent-dark: #7bb8a0;
-  --accent-hover-dark: #92c7b2;
-  --accent-soft-dark: #1a2a25;
-  --accent-on-dark: #0a1a15;
-}
 
 /* ------------------------------------------------------------ light theme */
 
@@ -75,7 +20,17 @@
     control surface are three close, warm neutrals; what separates them is a
     shade and a hairline, not a shadow or a rounded card.
   */
-  --background: #f8f6f1;
+  --brand-primary: #2f4e9e;
+  --brand-primary-hover: #243f84;
+  --brand-primary-active: #1d326c;
+  --brand-primary-soft: #e7ecf8;
+  --brand-background: #f7f6f2;
+  --brand-ink: #0f1a2b;
+  --brand-border: #d8d9df;
+  --brand-dark-surface: #0f1a2b;
+  --brand-focus-ring: #2f4e9e;
+
+  --background: var(--brand-background);
   --surface: #fcfbf8;
   --surface-muted: #f3f0ea;
   --surface-raised: #fdfcfa;
@@ -112,11 +67,11 @@
   */
   --chart-neutral: #c6bfb2;
 
-  --accent: var(--accent-light);
-  --accent-hover: var(--accent-hover-light);
-  --accent-soft: var(--accent-soft-light);
-  --accent-foreground: var(--accent-on-light);
-  --focus: var(--accent-light);
+  --accent: var(--brand-primary);
+  --accent-hover: var(--brand-primary-hover);
+  --accent-soft: var(--brand-primary-soft);
+  --accent-foreground: #ffffff;
+  --focus: var(--brand-focus-ring);
 
   /*
     Full-bleed brand surfaces keep the deeper accent value in both themes.
@@ -125,8 +80,8 @@
     contrast. The soft surface mixes the selected tint toward the current
     neutral so small muted product labels keep AA contrast.
   */
-  --brand-strong: var(--accent-light);
-  --brand-strong-foreground: var(--accent-on-light);
+  --brand-strong: var(--brand-primary);
+  --brand-strong-foreground: #ffffff;
   --brand-soft: color-mix(in srgb, var(--accent-soft) 60%, var(--surface));
 
   --success: #2f6b4f;
@@ -155,12 +110,6 @@
   --shadow-menu: 0 10px 30px -12px rgb(21 24 31 / 0.28);
 
   /* Fixed previews for the accent picker, independent of the current choice. */
-  --swatch-blue: #315f96;
-  --swatch-rose: #9d4059;
-  --swatch-violet: #614a94;
-  --swatch-emerald: #2c6a56;
-  --swatch-on: #ffffff;
-
   color-scheme: light;
 }
 
@@ -171,7 +120,17 @@
   no-JavaScript `prefers-color-scheme` fallback below.
 */
 :root[data-theme="dark"] {
-  --background: #14161a;
+  --brand-primary: #2f4e9e;
+  --brand-primary-hover: #5473b8;
+  --brand-primary-active: #6d89ca;
+  --brand-primary-soft: #1b2a4a;
+  --brand-background: #0f131b;
+  --brand-ink: #f7f6f2;
+  --brand-border: #334155;
+  --brand-dark-surface: #0f1a2b;
+  --brand-focus-ring: #7894d1;
+
+  --background: var(--brand-background);
   --surface: #1a1d22;
   --surface-muted: #202429;
   --surface-raised: #252a30;
@@ -188,11 +147,11 @@
   --chart-neutral: #5c636d;
 
 
-  --accent: var(--accent-dark);
-  --accent-hover: var(--accent-hover-dark);
-  --accent-soft: var(--accent-soft-dark);
-  --accent-foreground: var(--accent-on-dark);
-  --focus: var(--accent-dark);
+  --accent: #7894d1;
+  --accent-hover: var(--brand-primary-hover);
+  --accent-soft: var(--brand-primary-soft);
+  --accent-foreground: #0f1a2b;
+  --focus: var(--brand-focus-ring);
 
   --success: #5cb98a;
   --success-soft: #16261f;
@@ -215,12 +174,6 @@
   --overlay: rgb(4 5 8 / 0.62);
   --shadow-menu: 0 10px 30px -12px rgb(0 0 0 / 0.7);
 
-  --swatch-blue: #88ace0;
-  --swatch-rose: #dd94a6;
-  --swatch-violet: #a99ada;
-  --swatch-emerald: #7bb8a0;
-  --swatch-on: #10131a;
-
   color-scheme: dark;
 }
 
@@ -231,7 +184,17 @@
 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #14161a;
+    --brand-primary: #2f4e9e;
+    --brand-primary-hover: #5473b8;
+    --brand-primary-active: #6d89ca;
+    --brand-primary-soft: #1b2a4a;
+    --brand-background: #0f131b;
+    --brand-ink: #f7f6f2;
+    --brand-border: #334155;
+    --brand-dark-surface: #0f1a2b;
+    --brand-focus-ring: #7894d1;
+
+    --background: var(--brand-background);
     --surface: #1a1d22;
     --surface-muted: #202429;
     --surface-raised: #252a30;
@@ -248,11 +211,11 @@
     --chart-neutral: #5c636d;
 
 
-    --accent: var(--accent-dark);
-    --accent-hover: var(--accent-hover-dark);
-    --accent-soft: var(--accent-soft-dark);
-    --accent-foreground: var(--accent-on-dark);
-    --focus: var(--accent-dark);
+    --accent: #7894d1;
+    --accent-hover: var(--brand-primary-hover);
+    --accent-soft: var(--brand-primary-soft);
+    --accent-foreground: #0f1a2b;
+    --focus: var(--brand-focus-ring);
 
     --success: #5cb98a;
     --success-soft: #16261f;
@@ -275,12 +238,6 @@
     --overlay: rgb(4 5 8 / 0.62);
     --shadow-menu: 0 10px 30px -12px rgb(0 0 0 / 0.7);
 
-    --swatch-blue: #88ace0;
-    --swatch-rose: #dd94a6;
-    --swatch-violet: #a99ada;
-    --swatch-emerald: #7bb8a0;
-    --swatch-on: #10131a;
-
     color-scheme: dark;
   }
 }
@@ -293,7 +250,6 @@
 */
 @theme inline {
   --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-plex-serif), ui-serif, Georgia, serif;
 
   --color-background: var(--background);
   --color-surface: var(--surface);
@@ -373,12 +329,22 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/*
-  The wordmark, and nothing else. The serif is identity rather than interface:
-  giving it a class rather than an element keeps it from creeping into headings.
-*/
-.font-wordmark {
-  font-family: var(--font-plex-serif), ui-serif, Georgia, serif;
+:root[data-theme="dark"] .interndex-logo-light {
+  display: none;
+}
+
+:root[data-theme="dark"] .interndex-logo-dark {
+  display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .interndex-logo-light {
+    display: none;
+  }
+
+  :root:not([data-theme="light"]) .interndex-logo-dark {
+    display: block;
+  }
 }
 
 button,
@@ -432,39 +398,6 @@ a {
   font-weight: 600;
 }
 
-[data-appearance-accent="blue"] .appearance-accent-dot {
-  background: var(--swatch-blue);
-}
-[data-appearance-accent="rose"] .appearance-accent-dot {
-  background: var(--swatch-rose);
-}
-[data-appearance-accent="violet"] .appearance-accent-dot {
-  background: var(--swatch-violet);
-}
-[data-appearance-accent="emerald"] .appearance-accent-dot {
-  background: var(--swatch-emerald);
-}
-
-[data-appearance-accent] .appearance-accent-check {
-  visibility: hidden;
-  color: var(--swatch-on);
-}
-
-:root[data-accent="blue"] [data-appearance-accent="blue"] .appearance-accent-check,
-:root[data-accent="rose"] [data-appearance-accent="rose"] .appearance-accent-check,
-:root[data-accent="violet"] [data-appearance-accent="violet"] .appearance-accent-check,
-:root[data-accent="emerald"] [data-appearance-accent="emerald"] .appearance-accent-check {
-  visibility: visible;
-}
-
-:root[data-accent="blue"] [data-appearance-accent="blue"] .appearance-accent-dot,
-:root[data-accent="rose"] [data-appearance-accent="rose"] .appearance-accent-dot,
-:root[data-accent="violet"] [data-appearance-accent="violet"] .appearance-accent-dot,
-:root[data-accent="emerald"] [data-appearance-accent="emerald"] .appearance-accent-dot {
-  box-shadow:
-    0 0 0 2px var(--surface),
-    0 0 0 4px var(--accent);
-}
 
 @media (prefers-reduced-motion: reduce) {
   *,

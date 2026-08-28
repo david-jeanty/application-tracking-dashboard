@@ -32,16 +32,6 @@ describe("the controls that are offered", () => {
     ).toEqual(["System", "Light", "Dark"]);
   });
 
-  it("names every accent, so the choice is not made by colour alone", () => {
-    render(<AppearanceSettings />);
-    const accents = screen.getByRole("radiogroup", { name: "Accent" });
-
-    expect(
-      within(accents)
-        .getAllByRole("radio")
-        .map((radio) => radio.getAttribute("aria-label")),
-    ).toEqual(["JobTrack Blue", "Rose", "Violet", "Emerald"]);
-  });
 });
 
 describe("reporting the current preference", () => {
@@ -55,8 +45,6 @@ describe("reporting the current preference", () => {
 
     expect(await screen.findByRole("radio", { name: "Dark", checked: true }))
       .toBeInTheDocument();
-    expect(await screen.findByRole("radio", { name: "Violet", checked: true }))
-      .toBeInTheDocument();
   });
 
   it("reports the defaults when nothing has been stored", async () => {
@@ -64,9 +52,6 @@ describe("reporting the current preference", () => {
 
     expect(await screen.findByRole("radio", { name: "System", checked: true }))
       .toBeInTheDocument();
-    expect(
-      await screen.findByRole("radio", { name: "JobTrack Blue", checked: true }),
-    ).toBeInTheDocument();
   });
 });
 
@@ -78,26 +63,6 @@ describe("changing the preference", () => {
 
     expect(stored()).toEqual({ mode: "dark", accent: "blue" });
     expect(document.documentElement.dataset.theme).toBe("dark");
-  });
-
-  it("remembers a chosen accent", () => {
-    render(<AppearanceSettings />);
-
-    fireEvent.click(screen.getByRole("radio", { name: "Rose" }));
-
-    expect(stored()).toEqual({ mode: "system", accent: "rose" });
-    expect(document.documentElement.dataset.accent).toBe("rose");
-  });
-
-  it("keeps mode and accent independent of one another", () => {
-    render(<AppearanceSettings />);
-
-    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
-    fireEvent.click(screen.getByRole("radio", { name: "Emerald" }));
-
-    expect(stored()).toEqual({ mode: "dark", accent: "emerald" });
-    expect(document.documentElement.dataset.theme).toBe("dark");
-    expect(document.documentElement.dataset.accent).toBe("emerald");
   });
 
   it("stores only the preference, not internal bookkeeping", () => {

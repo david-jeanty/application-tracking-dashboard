@@ -13,17 +13,17 @@ describe("reading a stored preference", () => {
     expect(parseAppearance(null)).toEqual(DEFAULT_APPEARANCE);
   });
 
-  it("returns a stored mode and accent", () => {
+  it("returns a stored mode and normalizes a retired accent to brand blue", () => {
     expect(parseAppearance('{"mode":"dark","accent":"violet"}')).toEqual({
       mode: "dark",
-      accent: "violet",
+      accent: "blue",
     });
   });
 
   it("falls back per field, so one bad value does not discard the other", () => {
     expect(parseAppearance('{"mode":"neon","accent":"rose"}')).toEqual({
       mode: DEFAULT_APPEARANCE.mode,
-      accent: "rose",
+      accent: "blue",
     });
   });
 
@@ -38,7 +38,7 @@ describe("reading a stored preference", () => {
   });
 
   it("round-trips what it writes", () => {
-    const appearance = { mode: "light", accent: "emerald" } as const;
+    const appearance = { mode: "light", accent: "blue" } as const;
 
     expect(parseAppearance(serializeAppearance(appearance))).toEqual(appearance);
   });
@@ -66,13 +66,13 @@ describe("applying a preference to the document", () => {
   it("stamps the resolved theme, the raw choice and the accent", () => {
     const root = document.createElement("html");
 
-    applyAppearance(root, { mode: "system", accent: "rose" }, true);
+    applyAppearance(root, { mode: "system", accent: "blue" }, true);
 
     // `data-theme` drives the palette; `data-mode` is what the Settings
     // controls key their selected state off.
     expect(root.dataset.theme).toBe("dark");
     expect(root.dataset.mode).toBe("system");
-    expect(root.dataset.accent).toBe("rose");
+    expect(root.dataset.accent).toBe("blue");
     expect(root.style.colorScheme).toBe("dark");
   });
 

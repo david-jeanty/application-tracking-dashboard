@@ -30,7 +30,7 @@ describe("with nothing connected", () => {
     render(<ConnectedClients clients={[]} />);
 
     expect(
-      screen.getByText(/no assistants connected yet/i),
+      screen.getByText(/no authorized connections yet/i),
     ).toBeInTheDocument();
   });
 

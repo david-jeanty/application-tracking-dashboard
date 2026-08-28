@@ -41,7 +41,7 @@ describe("the pre-paint appearance script", () => {
 
     expect(root.dataset.theme).toBe("dark");
     expect(root.dataset.mode).toBe("dark");
-    expect(root.dataset.accent).toBe("violet");
+    expect(root.dataset.accent).toBe("blue");
     expect(root.style.colorScheme).toBe("dark");
   });
 

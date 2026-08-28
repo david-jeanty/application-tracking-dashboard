@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Sans, IBM_Plex_Serif } from "next/font/google";
+import { IBM_Plex_Sans } from "next/font/google";
 import { AppearanceSync } from "@/components/appearance/appearance-sync";
 import { appearanceInlineScript } from "@/lib/appearance/inline-script";
 import "./globals.css";
 
 /**
- * IBM Plex Sans carries the whole interface; IBM Plex Serif carries only the
- * JobTrack wordmark.
+ * IBM Plex Sans carries the complete Interndex interface and wordmark.
  *
  * Two weights of the sans, deliberately: the design leans on size and colour
  * for hierarchy rather than on weight, so regular and medium are all it needs.
@@ -20,19 +19,25 @@ const plexSans = IBM_Plex_Sans({
   variable: "--font-plex-sans",
 });
 
-const plexSerif = IBM_Plex_Serif({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  display: "swap",
-  variable: "--font-plex-serif",
-});
-
 export const metadata: Metadata = {
   title: {
-    default: "JobTrack",
-    template: "%s · JobTrack",
+    default: "Interndex",
+    template: "%s · Interndex",
   },
-  description: "A focused internship and co-op application tracker.",
+  description: "Save the posting. Track the process.",
+  applicationName: "Interndex",
+  openGraph: {
+    title: "Interndex",
+    description: "Save the posting. Track the process.",
+    siteName: "Interndex",
+  },
+  icons: {
+    icon: [
+      { url: "/brand/favicon/favicon.ico" },
+      { url: "/brand/favicon/favicon-32.png", type: "image/png", sizes: "32x32" },
+    ],
+    apple: [{ url: "/brand/favicon/apple-touch-icon.png", sizes: "180x180" }],
+  },
 };
 
 export default function RootLayout({
@@ -45,7 +50,7 @@ export default function RootLayout({
     // onto this element before hydration, which React would otherwise report
     // as a server/client mismatch.
     <html
-      className={`${plexSans.variable} ${plexSerif.variable}`}
+      className={plexSans.variable}
       lang="en"
       suppressHydrationWarning
     >

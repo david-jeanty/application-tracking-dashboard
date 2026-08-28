@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 100" fill="none" shape-rendering="crispEdges">
+  <path fill="#0F1A2B" d="M25 8h54v4h7v8h4v25h-4v5h7v8h4v30h-4v6H7v-6H3V58h4v-8h7v-5h-4V20h4v-8h11Zm-7 10v27h8v7h-8v6h64v26H18V58h-8v-6h8v-7h-4V18Zm8 4v24h48V22Zm-2 42v6h-6v10h6v6h10v-6h6V70h-6v-6Zm40 4v14h12V68Zm16 0v14h10V68Z"/>
+  <path fill="#F7F6F2" d="M30 26h40v16H30Zm18 3h5v4h-5Zm-2 7h9v4h-2v4h-5v-4h-2ZM67 71h6v8h-6Zm16 0h4v8h-4Z"/>
+  <path stroke="#0F1A2B" stroke-width="2" d="M110 18v64"/>
+  <text x="132" y="62" fill="#0F1A2B" font-family="ui-monospace, Menlo, Consolas, monospace" font-size="52" font-weight="800" letter-spacing="-5">interndex</text>
+</svg>
