@@ -7,8 +7,10 @@ import {
   ThisWeek,
   Upcoming,
 } from "@/components/dashboard/dashboard-sections";
+import { DashboardView } from "@/components/dashboard/dashboard-view";
 import type { AttentionItem } from "@/lib/dashboard/attention";
 import type { ActivityEntry, PipelineStage } from "@/lib/dashboard/calculate";
+import type { DashboardSummary } from "@/lib/dashboard/summary";
 
 // This suite does not run with Vitest globals, so Testing Library's automatic
 // cleanup is never registered and renders would otherwise accumulate.
@@ -43,6 +45,101 @@ function activityEntry(overrides: Partial<ActivityEntry> = {}): ActivityEntry {
     ...overrides,
   };
 }
+
+function readyDashboard(
+  attention: AttentionItem[] = [attentionItem()],
+): Extract<DashboardSummary, { kind: "ready" }> {
+  return {
+    kind: "ready",
+    search: {
+      applications: 142,
+      submitted: 118,
+      active: 30,
+      interviews: 9,
+      offers: 2,
+    },
+    attention,
+    pipeline: [
+      { status: "Applied", count: 23 },
+      { status: "Screening", count: 4 },
+      { status: "Assessment", count: 0 },
+      { status: "Interview", count: 2 },
+      { status: "Offer", count: 1 },
+    ],
+    activity: [activityEntry()],
+    week: {
+      weekStart: "2026-08-24",
+      submitted: 6,
+      statusChanges: 3,
+      interviews: 1,
+    },
+  };
+}
+
+describe("dashboard composition", () => {
+  it("places meaningful Upcoming above the working grid and This week", () => {
+    const { container } = render(
+      <DashboardView dashboard={readyDashboard()} today="2026-08-26" />,
+    );
+
+    const headings = [...container.querySelectorAll("h2")].map((heading) =>
+      heading.textContent?.trim(),
+    );
+    expect(headings).toEqual([
+      "Your search",
+      "Upcoming",
+      "Pipeline",
+      "Recent activity",
+      "This week",
+    ]);
+  });
+
+  it("removes Upcoming and lets the working grid follow the summary", () => {
+    const { container } = render(
+      <DashboardView dashboard={readyDashboard([])} today="2026-08-26" />,
+    );
+
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "Upcoming" }),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        'section[aria-labelledby="dashboard-summary"] + [data-dashboard-secondary-grid]',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the four calculated values without substituting active", () => {
+    render(<DashboardView dashboard={readyDashboard()} today="2026-08-26" />);
+
+    const summary = within(
+      screen.getByRole("heading", { level: 2, name: "Your search" })
+        .closest("section") as HTMLElement,
+    );
+    expect(summary.getByText("142")).toBeInTheDocument();
+    expect(summary.getByText("118")).toBeInTheDocument();
+    expect(summary.getByText("9")).toBeInTheDocument();
+    expect(summary.getByText("2")).toBeInTheDocument();
+    expect(summary.queryByText("30")).toBeNull();
+  });
+
+  it("keeps every working action as a keyboard-reachable link", () => {
+    render(<DashboardView dashboard={readyDashboard()} today="2026-08-26" />);
+
+    expect(screen.getByRole("link", { name: "KPMG Canada" })).toHaveAttribute(
+      "href",
+      "/applications/11111111-1111-4111-8111-111111111111",
+    );
+    expect(screen.getByRole("link", { name: /Applied/ })).toHaveAttribute(
+      "href",
+      "/applications?status=Applied",
+    );
+    expect(screen.getByRole("link", { name: /View analytics/ })).toHaveAttribute(
+      "href",
+      "/analytics",
+    );
+  });
+});
 
 describe("your search", () => {
   const metrics = [

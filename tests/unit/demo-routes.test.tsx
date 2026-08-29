@@ -117,7 +117,7 @@ describe("the demo needs no account and no database", () => {
 
 describe("the demo dashboard", () => {
   it("shows every section a real dashboard has", async () => {
-    render(await DemoDashboardPage());
+    const { container } = render(await DemoDashboardPage());
 
     for (const heading of [
       "Your search",
@@ -130,6 +130,27 @@ describe("the demo dashboard", () => {
         screen.getByRole("heading", { level: 2, name: heading }),
       ).toBeInTheDocument();
     }
+
+    expect(
+      [...container.querySelectorAll("h2")].map((heading) =>
+        heading.textContent?.trim(),
+      ),
+    ).toEqual([
+      "Your search",
+      "Upcoming",
+      "Pipeline",
+      "Recent activity",
+      "This week",
+    ]);
+  });
+
+  it("reuses the shared DashboardView rather than a demo-only composition", () => {
+    const source = readFileSync("app/demo/page.tsx", "utf8");
+
+    expect(source).toContain(
+      'import { DashboardView } from "@/components/dashboard/dashboard-view"',
+    );
+    expect(source).toContain("<DashboardView");
   });
 
   it("counts the whole search, archived applications included", async () => {

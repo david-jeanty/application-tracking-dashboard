@@ -79,20 +79,30 @@ export function SearchSummaryMetrics({
 }: {
   metrics: { label: string; value: number }[];
 }) {
+  const dividers = [
+    "border-b border-r sm:border-b-0",
+    "border-b sm:border-b-0 sm:border-r",
+    "border-r",
+    "",
+  ];
+
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-6 pt-5 sm:flex sm:flex-wrap sm:gap-x-16">
-      {metrics.map((metric) => (
+    <dl className="grid grid-cols-2 sm:grid-cols-4">
+      {metrics.map((metric, index) => (
         /*
           The term precedes its description in the DOM, which is what a
           description list means and what a screen reader reads. The visual
           order — number first, label under it — is produced by reversing the
           column, so the markup and the design can each be right.
         */
-        <div className="flex flex-col-reverse gap-2" key={metric.label}>
-          <dt className="text-[13px] text-foreground-secondary">
+        <div
+          className={`flex min-h-20 flex-col-reverse justify-center gap-1.5 border-border px-4 py-3.5 sm:min-h-24 sm:px-5 ${dividers[index] ?? ""}`}
+          key={metric.label}
+        >
+          <dt className="text-[12px] font-medium text-foreground-secondary sm:text-[13px]">
             {metric.label}
           </dt>
-          <dd className="text-[30px] font-medium leading-none tabular-nums tracking-tight text-foreground">
+          <dd className="text-[25px] font-medium leading-none tabular-nums tracking-tight text-foreground sm:text-[28px]">
             {metric.value}
           </dd>
         </div>
@@ -123,20 +133,26 @@ export function PipelineSnapshot({
   const total = stages.reduce((sum, stage) => sum + stage.count, 0);
 
   return (
-    <section aria-labelledby="dashboard-pipeline">
+    <section
+      aria-labelledby="dashboard-pipeline"
+      className="rounded-surface border border-border bg-surface p-5 sm:p-6"
+    >
       <SectionHeading id="dashboard-pipeline">Pipeline</SectionHeading>
 
-      <ul className="grid grid-cols-5 gap-x-2 pt-5 sm:gap-x-6">
+      <ul className="divide-y divide-border pt-2 sm:grid sm:grid-cols-5 sm:divide-y-0">
         {stages.map((stage) => (
-          <li key={stage.status}>
+          <li
+            className="sm:border-r sm:border-border sm:px-3 sm:first:pl-0 sm:last:border-r-0 sm:last:pr-0"
+            key={stage.status}
+          >
             <Link
-              className="group block rounded-control focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+              className="group flex items-center justify-between rounded-control py-2.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:block sm:py-3"
               href={`${applicationsPath(basePath)}?${STATUS_PARAM}=${encodeURIComponent(stage.status)}`}
             >
-              <span className="block text-[11px] leading-tight text-foreground-secondary group-hover:text-accent sm:text-[13px]">
+              <span className="block text-[13px] leading-tight text-foreground-secondary group-hover:text-accent">
                 {stage.status}
               </span>
-              <span className="mt-1.5 block text-[22px] font-medium tabular-nums leading-none text-foreground sm:text-[26px]">
+              <span className="block text-[22px] font-medium tabular-nums leading-none text-foreground sm:mt-1.5 sm:text-[25px]">
                 {stage.count}
                 <span className="sr-only">
                   {" "}
@@ -165,7 +181,7 @@ export function PipelineSnapshot({
         A student with nothing active divides by nothing, so the track is drawn
         empty rather than guarded against after the fact.
       */}
-      <div aria-hidden="true" className="mt-5 flex h-1.5 gap-0.5">
+      <div aria-hidden="true" className="mt-3 flex h-1.5 gap-0.5 sm:mt-5">
         {total === 0 ? (
           <span className="h-full w-full bg-border" />
         ) : (
@@ -206,7 +222,10 @@ export function RecentActivity({
   today: string;
 }) {
   return (
-    <section aria-labelledby="dashboard-activity">
+    <section
+      aria-labelledby="dashboard-activity"
+      className="rounded-surface border border-border bg-surface p-5 sm:p-6"
+    >
       <SectionHeading id="dashboard-activity">Recent activity</SectionHeading>
 
       {entries.length === 0 ? (
@@ -215,16 +234,16 @@ export function RecentActivity({
           will show up here.
         </p>
       ) : (
-        <div className="pt-5">
+        <div className="pt-3">
           {groupActivityByDay(entries).map((group) => (
-            <section className="mb-5 last:mb-0" key={group.day}>
+            <section className="mb-3 last:mb-0" key={group.day}>
               <h3 className="text-[12px] text-foreground-muted">
                 {activityDayLabel(group.day, today, formatDateOnly)}
               </h3>
-              <ul className="mt-2.5">
+              <ul className="mt-1 divide-y divide-border/70">
                 {group.entries.map((entry) => (
                   <li
-                    className="relative flex items-start gap-3 py-2.5"
+                    className="relative flex items-start gap-3 py-2.5 first:pt-2"
                     key={`${entry.applicationId}-${entry.changedAt}`}
                   >
                     {/*
@@ -299,7 +318,10 @@ export function ThisWeek({
   ];
 
   return (
-    <section aria-labelledby="dashboard-week">
+    <section
+      aria-labelledby="dashboard-week"
+      className="rounded-surface border border-border bg-surface-muted/45 px-5 py-4 sm:px-6 sm:py-5"
+    >
       <SectionHeading
         action={
           <SectionLink href={analyticsPath(basePath)}>View analytics</SectionLink>
@@ -309,7 +331,7 @@ export function ThisWeek({
         This week
       </SectionHeading>
 
-      <dl className="flex flex-wrap gap-x-8 gap-y-3 pt-5">
+      <dl className="flex flex-wrap gap-x-8 gap-y-3 pt-4">
         {metrics.map((metric) => (
           <div className="flex items-baseline gap-1.5" key={metric.label}>
             <dd className="text-[20px] font-medium tabular-nums leading-none text-foreground">
@@ -322,7 +344,7 @@ export function ThisWeek({
         ))}
       </dl>
 
-      <p className="mt-3 text-[12px] text-foreground-muted">
+      <p className="mt-2.5 text-[12px] text-foreground-muted">
         Since {weekStartLabel}
       </p>
     </section>
@@ -361,16 +383,26 @@ export function Upcoming({
   items: AttentionItem[];
 }) {
   return (
-    <section aria-labelledby="dashboard-upcoming">
-      <SectionHeading id="dashboard-upcoming">Upcoming</SectionHeading>
+    <section
+      aria-labelledby="dashboard-upcoming"
+      className="overflow-hidden rounded-surface border border-border bg-surface"
+    >
+      <div className="border-l-4 border-accent bg-accent-soft/65 px-4 py-3 sm:px-5">
+        <h2 className="text-[17px] font-medium text-foreground" id="dashboard-upcoming">
+          Upcoming
+        </h2>
+        <p className="mt-0.5 text-[12px] text-foreground-secondary">
+          Follow-ups, interviews, and deadlines that need attention
+        </p>
+      </div>
 
-      <ul className="pt-2">
+      <ul className="grid px-4 sm:px-5 md:grid-cols-2 md:px-0 md:[&>li:nth-child(odd)]:border-r md:[&>li:nth-last-child(-n+2)]:border-b-0">
         {items.map((item) => {
           const urgent = URGENT_REASONS.includes(item.reason);
 
           return (
             <li
-              className="relative flex items-start gap-3 border-b border-border py-4 last:border-b-0"
+              className={`relative flex items-start gap-3 border-b border-border py-3.5 last:border-b-0 md:px-5 ${urgent ? "bg-danger-soft/25" : ""}`}
               key={item.applicationId}
             >
               <CompanyLogo
@@ -378,12 +410,11 @@ export function Upcoming({
                 domain={item.companyDomain}
               />
               {/*
-                No wrapping. The date column is the one fixed landmark in this
-                list, so it stays at the top right of every row at every width
-                — a row whose date drops underneath because its text happened
-                to be shorter makes the column impossible to scan.
+                At comfortable widths, the date stays at the top right of every
+                row as a fixed scanning landmark. On a phone it moves below the
+                text instead of squeezing or hiding the action itself.
               */}
-              <div className="flex min-w-0 flex-1 items-start justify-between gap-x-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-y-2 sm:flex-row sm:items-start sm:justify-between sm:gap-x-4">
                 <div className="min-w-0">
                   <p className="text-[14px] font-medium leading-snug text-foreground">
                     <Link
@@ -396,7 +427,7 @@ export function Upcoming({
                   <p className="mt-0.5 truncate text-[13px] text-foreground-secondary">
                     {item.jobTitle}
                   </p>
-                  <p className="mt-0.5 truncate text-[13px] text-foreground">
+                  <p className="mt-0.5 text-[13px] leading-5 text-foreground">
                     {item.detail}
                   </p>
                   {/*
@@ -405,7 +436,7 @@ export function Upcoming({
                     it has not been submitted. Stated, never advised.
                   */}
                   {item.note ? (
-                    <p className="mt-0.5 truncate text-[12px] text-foreground-muted">
+                    <p className="mt-0.5 text-[12px] leading-4 text-foreground-muted">
                       {item.note}
                     </p>
                   ) : null}
@@ -416,7 +447,7 @@ export function Upcoming({
                   within a day, and it carries the urgency in words — the
                   colour repeats it rather than being the only signal.
                 */}
-                <div className="shrink-0 text-right">
+                <div className="shrink-0 text-left sm:text-right">
                   <p className="text-[13px] tabular-nums text-foreground">
                     {item.date ? formatDateOnly(item.date) : null}
                   </p>
