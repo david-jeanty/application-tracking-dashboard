@@ -1,6 +1,6 @@
 import {
-  PipelineSnapshot,
   RecentActivity,
+  SavedOpportunities,
   SearchSummaryMetrics,
   ThisWeek,
   Upcoming,
@@ -75,7 +75,8 @@ export function DashboardView({
           <p className="pt-6 text-[16px] text-foreground">No applications yet.</p>
           <p className="mt-1.5 max-w-md text-[14px] leading-6 text-foreground-secondary">
             Save your first application and Interndex will show your search
-            overview, pipeline, recent activity, and upcoming dates here.
+            overview, saved opportunities, recent activity, and upcoming dates
+            here.
           </p>
           <div className="mt-5">
             <ButtonLink href={applicationsPath(basePath)}>
@@ -115,10 +116,19 @@ export function DashboardView({
       ) : null}
 
       <div
-        className="grid gap-8 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:gap-10"
+        className={`grid items-start gap-8 ${
+          dashboard.savedOpportunities.length > 0
+            ? "xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:gap-10"
+            : "grid-cols-1"
+        }`}
         data-dashboard-secondary-grid
       >
-        <PipelineSnapshot basePath={basePath} stages={dashboard.pipeline} />
+        {dashboard.savedOpportunities.length > 0 ? (
+          <SavedOpportunities
+            basePath={basePath}
+            opportunities={dashboard.savedOpportunities}
+          />
+        ) : null}
 
         <RecentActivity
           basePath={basePath}

@@ -175,18 +175,23 @@ describe("the search summary uses the shared analytics definitions", () => {
 });
 
 describe("the working sections use the active population", () => {
-  it("keeps an archived application out of attention and the pipeline", () => {
+  it("keeps an archived application out of attention and saved opportunities", () => {
     const built = buildDashboard(
       ok([
         application({
           id: "archived",
-          current_status: "Applied",
+          current_status: "Interested",
           archived_at: "2026-08-01T10:00:00.000Z",
           next_action: "Follow up",
           next_action_due_date: "2026-08-01",
         }),
       ]),
-      ok([timelineEvent({ application_id: "archived" })]),
+      ok([
+        timelineEvent({
+          application_id: "archived",
+          new_status: "Interested",
+        }),
+      ]),
       TODAY,
       ZONE,
     );
@@ -195,7 +200,7 @@ describe("the working sections use the active population", () => {
     if (built.kind !== "ready") return;
 
     expect(built.attention).toEqual([]);
-    expect(built.pipeline.every((stage) => stage.count === 0)).toBe(true);
+    expect(built.savedOpportunities).toEqual([]);
   });
 
   it("keeps that same archived application in the historical sections", () => {
@@ -232,6 +237,23 @@ describe("timestamps are converted to calendar days once, in the given zone", ()
 
     if (built.kind !== "ready") throw new Error("expected a ready dashboard");
     expect(built.activity[0].day).toBe("2026-08-24");
+  });
+
+  it("uses the created timestamp's local day as the truthful saved date", () => {
+    const built = buildDashboard(
+      ok([
+        application({
+          current_status: "Interested",
+          created_at: "2026-08-25T02:30:00.000Z",
+        }),
+      ]),
+      ok([timelineEvent({ new_status: "Interested" })]),
+      TODAY,
+      ZONE,
+    );
+
+    if (built.kind !== "ready") throw new Error("expected a ready dashboard");
+    expect(built.savedOpportunities[0]?.savedOn).toBe("2026-08-24");
   });
 });
 
@@ -286,10 +308,12 @@ describe("the whole dashboard comes together", () => {
     expect(deadline?.note).toBe("Saved 6 days ago · Still Interested");
   });
 
-  it("reports the pipeline, the week, and recent activity together", () => {
+  it("reports saved opportunities, the week, and recent activity together", () => {
     if (built.kind !== "ready") throw new Error("expected a ready dashboard");
 
-    expect(built.pipeline.find((stage) => stage.status === "Applied")?.count).toBe(1);
+    expect(
+      built.savedOpportunities.map((opportunity) => opportunity.applicationId),
+    ).toEqual(["closing"]);
     expect(built.week.weekStart).toBe("2026-08-24");
     expect(built.week.submitted).toBe(1);
     expect(built.activity).toHaveLength(3);
@@ -340,8 +364,7 @@ describe("the dashboard page contract", () => {
     expect(sections).toContain("View analytics");
   });
 
-  it("does not send the student to the unfinished pipeline page", () => {
-    // `/pipeline` is still a Phase 4 placeholder, so nothing here offers it.
+  it("does not retain a pipeline link after replacing that module", () => {
     expect(page).not.toContain('href="/pipeline"');
     expect(sections).not.toContain('href="/pipeline"');
   });

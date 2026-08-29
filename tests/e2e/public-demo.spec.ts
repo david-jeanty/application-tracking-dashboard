@@ -49,6 +49,12 @@ test("the dashboard composition expands on desktop and stacks cleanly below it",
   page,
 }) => {
   const grid = page.locator("[data-dashboard-secondary-grid]");
+  const savedOpportunities = page.locator(
+    'section[aria-labelledby="dashboard-saved-opportunities"]',
+  );
+  const activity = page.locator(
+    'section[aria-labelledby="dashboard-activity"]',
+  );
   const upcoming = page.locator(
     'section[aria-labelledby="dashboard-upcoming"] > ul',
   );
@@ -65,6 +71,13 @@ test("the dashboard composition expands on desktop and stacks cleanly below it",
       upcoming.evaluate((node) => getComputedStyle(node).gridTemplateColumns),
     )
     .toMatch(/\S+\s+\S+/);
+  expect(
+    await savedOpportunities.evaluate(
+      (node) => node.getBoundingClientRect().height,
+    ),
+  ).toBeLessThan(
+    await activity.evaluate((node) => node.getBoundingClientRect().height),
+  );
 
   await page.setViewportSize({ width: 900, height: 1000 });
   await expect
@@ -84,6 +97,16 @@ test("the dashboard composition expands on desktop and stacks cleanly below it",
       upcoming.evaluate((node) => getComputedStyle(node).gridTemplateColumns),
     )
     .not.toMatch(/\S+\s+\S+/);
+  await expect(
+    savedOpportunities.getByRole("link", {
+      name: "View saved applications",
+    }),
+  ).toHaveAttribute("href", "/demo/applications?status=summary%3Asaved");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
   await expect(page.getByRole("link", { name: /View analytics/ })).toBeVisible();
 });
 

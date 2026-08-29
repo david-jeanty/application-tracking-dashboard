@@ -2,15 +2,17 @@ import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { CompanyLogo } from "@/components/branding/company-logo";
-import { STATUS_PARAM } from "@/lib/applications/search-params";
+import { APPLICATION_STATUS_SUMMARIES } from "@/lib/applications/constants";
+import { displayOptionalText } from "@/lib/applications/mapper";
+import { toApplicationStatusSummaryUrl } from "@/lib/applications/search-params";
 import type { AttentionItem, AttentionReason } from "@/lib/dashboard/attention";
 import {
   activityDayLabel,
   groupActivityByDay,
   type ActivityEntry,
-  type PipelineStage,
   type WeekSummary,
 } from "@/lib/dashboard/calculate";
+import type { SavedOpportunity } from "@/lib/dashboard/saved-opportunities";
 import { formatDateOnly } from "@/lib/dates/date-only";
 import {
   analyticsPath,
@@ -111,95 +113,90 @@ export function SearchSummaryMetrics({
   );
 }
 
-/**
- * Where active applications sit right now.
- *
- * An aggregate distribution, deliberately not a journey. The stages are laid
- * out as equal columns with no arrows and no connectors between them, because
- * connected nodes would read as one application moving along a path — which is
- * what the lifecycle rail on a record means, and this is a different claim
- * about a different population.
- *
- * Each stage stays a link, because filtering the applications list by status
- * is genuinely useful and the URL parameter already exists.
- */
-export function PipelineSnapshot({
+/** Jobs that were saved but still have not been submitted. */
+export function SavedOpportunities({
   basePath = "",
-  stages,
+  opportunities,
 }: {
   basePath?: WorkspaceBasePath;
-  stages: PipelineStage[];
+  opportunities: SavedOpportunity[];
 }) {
-  const total = stages.reduce((sum, stage) => sum + stage.count, 0);
+  const savedStatusSummary = APPLICATION_STATUS_SUMMARIES.find(
+    (summary) => summary.key === "saved",
+  );
 
   return (
     <section
-      aria-labelledby="dashboard-pipeline"
+      aria-labelledby="dashboard-saved-opportunities"
       className="rounded-surface border border-border bg-surface p-5 sm:p-6"
     >
-      <SectionHeading id="dashboard-pipeline">Pipeline</SectionHeading>
-
-      <ul className="divide-y divide-border pt-2 sm:grid sm:grid-cols-5 sm:divide-y-0">
-        {stages.map((stage) => (
-          <li
-            className="sm:border-r sm:border-border sm:px-3 sm:first:pl-0 sm:last:border-r-0 sm:last:pr-0"
-            key={stage.status}
+      <SectionHeading
+        action={
+          <SectionLink
+            href={toApplicationStatusSummaryUrl(
+              applicationsPath(basePath),
+              {},
+              savedStatusSummary,
+            )}
           >
-            <Link
-              className="group flex items-center justify-between rounded-control py-2.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus sm:block sm:py-3"
-              href={`${applicationsPath(basePath)}?${STATUS_PARAM}=${encodeURIComponent(stage.status)}`}
+            View saved applications
+          </SectionLink>
+        }
+        id="dashboard-saved-opportunities"
+      >
+        Saved opportunities
+      </SectionHeading>
+
+      <p className="pt-3 text-[13px] leading-5 text-foreground-secondary">
+        Jobs you saved but have not submitted.
+      </p>
+
+      <ul className="mt-2 divide-y divide-border/70">
+        {opportunities.map((opportunity) => {
+          const context = [
+            displayOptionalText(opportunity.workTerm),
+            displayOptionalText(opportunity.location),
+          ]
+            .filter(Boolean)
+            .join(" · ");
+
+          return (
+            <li
+              className="relative flex items-start gap-3 py-3 first:pt-2.5 last:pb-0"
+              key={opportunity.applicationId}
             >
-              <span className="block text-[13px] leading-tight text-foreground-secondary group-hover:text-accent">
-                {stage.status}
-              </span>
-              <span className="block text-[22px] font-medium tabular-nums leading-none text-foreground sm:mt-1.5 sm:text-[25px]">
-                {stage.count}
-                <span className="sr-only">
-                  {" "}
-                  {stage.count === 1 ? "application" : "applications"}
-                </span>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-
-      {/*
-        The same counts again as relative width. Every number above is already
-        readable text, so this adds impression rather than information and is
-        hidden from assistive technology — and it is one element, so it adds no
-        tab stop. The opacity step follows pipeline order, which is what lets a
-        segment be matched to the stage above it.
-
-        Segments divide the track by ratio — `flexGrow` on a zero basis —
-        rather than each claiming a percentage of it. A percentage width would
-        be a share of the *whole* track, so the gaps between segments would push
-        the row past 100% and the last stage would be squeezed or clipped. Grow
-        factors are shares of whatever space is left after the gaps, which is
-        the quantity actually being divided.
-
-        A student with nothing active divides by nothing, so the track is drawn
-        empty rather than guarded against after the fact.
-      */}
-      <div aria-hidden="true" className="mt-3 flex h-1.5 gap-0.5 sm:mt-5">
-        {total === 0 ? (
-          <span className="h-full w-full bg-border" />
-        ) : (
-          stages.map((stage, index) =>
-            stage.count === 0 ? null : (
-              <span
-                className="h-full bg-accent"
-                key={stage.status}
-                style={{
-                  flexBasis: 0,
-                  flexGrow: stage.count,
-                  opacity: 1 - index * 0.15,
-                }}
+              <CompanyLogo
+                companyName={opportunity.companyName}
+                domain={opportunity.companyDomain}
               />
-            ),
-          )
-        )}
-      </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-medium leading-snug text-foreground">
+                  <Link
+                    aria-label={`${opportunity.jobTitle} at ${opportunity.companyName}`}
+                    className="after:absolute after:inset-0 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    href={applicationPath(opportunity.applicationId, basePath)}
+                  >
+                    {opportunity.jobTitle}
+                  </Link>
+                </p>
+                <p className="mt-0.5 truncate text-[13px] text-foreground-secondary">
+                  {opportunity.companyName}
+                </p>
+                {context ? (
+                  <p className="mt-1 truncate text-[12px] text-foreground-muted">
+                    {context}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-[12px] font-medium text-foreground-secondary">
+                  {opportunity.deadline
+                    ? `Apply by ${formatDateOnly(opportunity.deadline)}`
+                    : `Saved ${formatDateOnly(opportunity.savedOn)}`}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }

@@ -121,7 +121,7 @@ describe("the demo dashboard", () => {
 
     for (const heading of [
       "Your search",
-      "Pipeline",
+      "Saved opportunities",
       "Recent activity",
       "This week",
       "Upcoming",
@@ -138,7 +138,7 @@ describe("the demo dashboard", () => {
     ).toEqual([
       "Your search",
       "Upcoming",
-      "Pipeline",
+      "Saved opportunities",
       "Recent activity",
       "This week",
     ]);
@@ -170,21 +170,44 @@ describe("the demo dashboard", () => {
     );
   });
 
-  it("counts only live applications in the pipeline snapshot", async () => {
+  it("shows only live saved applications whose deadlines have not passed", async () => {
     render(await DemoDashboardPage());
 
     const snapshot = within(
-      screen.getByRole("heading", { level: 2, name: "Pipeline" })
+      screen.getByRole("heading", { level: 2, name: "Saved opportunities" })
         .closest("section") as HTMLElement,
     );
-    for (const status of ["Applied", "Screening", "Interview", "Offer"]) {
-      const expected = dataset.activeApplications.filter(
-        (a) => a.current_status === status,
-      ).length;
-      expect(
-        snapshot.getByRole("link", { name: new RegExp(`^${status}`) }),
-      ).toHaveTextContent(String(expected));
+
+    const eligibleIds = new Set(
+      dataset.activeApplications
+        .filter(
+          (application) =>
+            ["Interested", "Preparing"].includes(application.current_status) &&
+            (!application.application_deadline ||
+              application.application_deadline >= demoToday()),
+        )
+        .map((application) => application.id),
+    );
+    const opportunityLinks = snapshot
+      .getAllByRole("link")
+      .filter(
+        (link) =>
+          link.getAttribute("href") !==
+          "/demo/applications?status=summary%3Asaved",
+      );
+
+    expect(opportunityLinks).toHaveLength(4);
+    for (const link of opportunityLinks) {
+      expect(eligibleIds.has(link.getAttribute("href")?.split("/").at(-1) ?? ""))
+        .toBe(true);
     }
+    expect(
+      snapshot.getByRole("link", { name: "View saved applications" }),
+    ).toHaveAttribute(
+      "href",
+      "/demo/applications?status=summary%3Asaved",
+    );
+    expect(snapshot.queryByRole("button")).toBeNull();
   });
 
   it("keeps every link inside the demo", async () => {

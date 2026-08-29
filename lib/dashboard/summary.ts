@@ -7,14 +7,17 @@ import {
   type AttentionItem,
 } from "@/lib/dashboard/attention";
 import {
-  pipelineSnapshot,
   recentActivity,
   summarizeWeek,
   type ActivityEntry,
   type DashboardEvent,
-  type PipelineStage,
   type WeekSummary,
 } from "@/lib/dashboard/calculate";
+import {
+  savedOpportunities,
+  type SavedOpportunity,
+  type SavedOpportunityApplication,
+} from "@/lib/dashboard/saved-opportunities";
 import { dateOnlyFromTimestamp } from "@/lib/dates/date-only";
 
 /** The shape a repository read arrives in, narrowed to what this needs. */
@@ -46,7 +49,7 @@ export type DashboardSummary =
       kind: "ready";
       search: SearchSummary;
       attention: AttentionItem[];
-      pipeline: PipelineStage[];
+      savedOpportunities: SavedOpportunity[];
       week: WeekSummary;
       activity: ActivityEntry[];
     };
@@ -77,9 +80,9 @@ function reached(
  * means by them. The **search summary** uses the analytics definitions over
  * every application, archived included, because a rejected role a student
  * tidied away is still part of what happened to them. The **working set** —
- * attention, pipeline — is active applications only, because those sections
- * answer "what do I do now" and a filed-away application is not on that list.
- * Neither semantic is changed here; both are borrowed.
+ * attention, saved opportunities — is active applications only, because those
+ * sections answer "what do I do now" and a filed-away application is not on
+ * that list. Neither semantic is changed here; both are borrowed.
  *
  * Pure, and given "today" and a zone rather than reading a clock, so every
  * rule below is reproducible in a test.
@@ -113,12 +116,16 @@ export function buildDashboard(
   // How long an unsubmitted application has been saved decides whether its
   // approaching deadline is worth mentioning, and that has to be a comparison
   // between calendar days rather than between an instant and a date.
-  const attentionInput: AttentionApplication[] = applications.map(
-    (application) => ({
+  const workingApplications: (AttentionApplication &
+    SavedOpportunityApplication)[] = applications.map((application) => {
+    const savedOn = dateOnlyFromTimestamp(application.created_at, timeZone);
+
+    return {
       ...application,
-      createdOn: dateOnlyFromTimestamp(application.created_at, timeZone),
-    }),
-  );
+      createdOn: savedOn,
+      savedOn,
+    };
+  });
 
   const analytics = summarizeApplications(applications, timelineRead.data);
 
@@ -131,8 +138,8 @@ export function buildDashboard(
       interviews: reached(analytics.conversions, "Reached an interview"),
       offers: reached(analytics.conversions, "Received an offer"),
     },
-    attention: needsAttention(attentionInput, today),
-    pipeline: pipelineSnapshot(applications),
+    attention: needsAttention(workingApplications, today),
+    savedOpportunities: savedOpportunities(workingApplications, today),
     week: summarizeWeek(events, today),
     activity: recentActivity(events, applications),
   };
