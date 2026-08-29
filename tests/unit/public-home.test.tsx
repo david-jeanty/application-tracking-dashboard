@@ -293,6 +293,16 @@ describe("the product preview", () => {
     expect(container.textContent).not.toMatch(/\d+ applications/);
   });
 
+  it("keeps the excerpt as closed rows without disclosure controls or edit links", () => {
+    const { container } = render(<HomePage />);
+    const preview = container.querySelector(
+      'ul[aria-label="Applications"]',
+    ) as HTMLElement;
+
+    expect(within(preview).queryByRole("button", { name: /details for/i })).not.toBeInTheDocument();
+    expect(within(preview).queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
   it("says the sample applications are fictional", () => {
     render(<HomePage />);
 
