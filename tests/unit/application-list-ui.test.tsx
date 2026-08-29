@@ -25,9 +25,6 @@ vi.mock("@/lib/applications/repository", () => ({
 const { ApplicationList } = await import(
   "@/components/applications/application-list"
 );
-const { ApplicationRecords } = await import(
-  "@/components/applications/application-list"
-);
 
 function application(
   overrides: Partial<ApplicationListItem> = {},
@@ -131,78 +128,6 @@ describe("what a record shows", () => {
     await renderList();
 
     expect(screen.getByText("1 application")).toBeInTheDocument();
-  });
-});
-
-describe("the wide-screen selected-record preview", () => {
-  it("defaults to the first visible record", () => {
-    render(
-      <ApplicationRecords
-        applications={[
-          application(),
-          application({
-            id: "22222222-2222-4222-8222-222222222222",
-            company_name: "BMO",
-            original_job_title: "Project Coordinator",
-          }),
-        ]}
-        history={[]}
-      />,
-    );
-
-    expect(
-      screen.getByRole("complementary", {
-        name: "Selected application: Business Analyst Intern",
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it("shows the selected record and preserves active filters in preview links", () => {
-    render(
-      <ApplicationRecords
-        applications={[
-          application(),
-          application({
-            id: "22222222-2222-4222-8222-222222222222",
-            company_name: "BMO",
-            original_job_title: "Project Coordinator",
-          }),
-        ]}
-        filters={{ search: "coordinator", status: "Applied" }}
-        history={[]}
-        selectedId="22222222-2222-4222-8222-222222222222"
-      />,
-    );
-
-    const preview = screen.getByRole("complementary", {
-      name: "Selected application: Project Coordinator",
-    });
-    expect(preview.textContent).toContain("BMO");
-    expect(
-      screen.getByRole("link", { name: "Preview Business Analyst Intern" }),
-    ).toHaveAttribute(
-      "href",
-      "/applications?selected=11111111-1111-4111-8111-111111111111&q=coordinator&status=Applied",
-    );
-    expect(
-      within(preview).getByRole("link", { name: "Open full record" }),
-    ).toHaveAttribute(
-      "href",
-      "/applications/22222222-2222-4222-8222-222222222222",
-    );
-  });
-
-  it("keeps full-record navigation on every row for smaller screens", () => {
-    render(
-      <ApplicationRecords applications={[application()]} history={[]} />,
-    );
-
-    expect(
-      screen.getByRole("link", { name: "Open Business Analyst Intern" }),
-    ).toHaveAttribute(
-      "href",
-      "/applications/11111111-1111-4111-8111-111111111111",
-    );
   });
 });
 

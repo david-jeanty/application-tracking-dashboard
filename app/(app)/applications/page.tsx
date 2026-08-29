@@ -24,10 +24,6 @@ export default async function ApplicationsPage({
   searchParams: Promise<RawSearchParams>;
 }) {
   const rawSearchParams = await searchParams;
-  const selectedId =
-    typeof rawSearchParams.selected === "string"
-      ? rawSearchParams.selected
-      : undefined;
   // Unrecognized parameters are dropped rather than rejected, so an edited URL
   // falls back to the ordinary list instead of an error.
   const filters = parseApplicationFilters(rawSearchParams);
@@ -98,7 +94,7 @@ export default async function ApplicationsPage({
       />
 
       <Suspense fallback={<ApplicationsListLoading />} key={listKey}>
-        <ApplicationList filters={filters} selectedId={selectedId} />
+        <ApplicationList filters={filters} />
       </Suspense>
     </div>
   );
