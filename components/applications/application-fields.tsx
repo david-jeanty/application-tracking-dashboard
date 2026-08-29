@@ -23,6 +23,7 @@ const textareaClassName =
 
 function Field({
   children,
+  className,
   error,
   hint,
   id,
@@ -30,6 +31,7 @@ function Field({
   required = false,
 }: {
   children: ReactNode;
+  className?: string;
   error?: string[];
   /**
    * One short line under the control, for a field whose purpose is not
@@ -42,7 +44,7 @@ function Field({
   required?: boolean;
 }) {
   return (
-    <div>
+    <div className={className}>
       <label className="text-sm font-medium text-foreground" htmlFor={id}>
         {label}
         {required ? (
@@ -86,8 +88,13 @@ export function ApplicationFields({
 
   return (
     <>
-      <div className="grid gap-5 sm:grid-cols-2">
-        <Field
+      <fieldset>
+        <legend className="mb-5 text-[15px] font-medium text-foreground">
+          Core details
+        </legend>
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-6">
+          <Field
+          className="lg:col-span-3"
           error={errors.companyName}
           id="companyName"
           label="Company name"
@@ -103,8 +110,9 @@ export function ApplicationFields({
             name="companyName"
             required
           />
-        </Field>
-        <Field
+          </Field>
+          <Field
+          className="lg:col-span-3"
           error={errors.originalJobTitle}
           id="originalJobTitle"
           label="Original job title"
@@ -119,8 +127,9 @@ export function ApplicationFields({
             name="originalJobTitle"
             required
           />
-        </Field>
-        <Field
+          </Field>
+          <Field
+          className="lg:col-span-2"
           error={errors.normalizedJobCategory}
           id="normalizedJobCategory"
           label="Normalized category"
@@ -144,8 +153,9 @@ export function ApplicationFields({
               </option>
             ))}
           </select>
-        </Field>
-        <Field
+          </Field>
+          <Field
+          className="lg:col-span-2"
           error={errors.currentStatus}
           id="currentStatus"
           label="Current status"
@@ -169,8 +179,9 @@ export function ApplicationFields({
               </option>
             ))}
           </select>
-        </Field>
-        <Field
+          </Field>
+          <Field
+          className="lg:col-span-2"
           error={errors.workTermSeason}
           id="workTermSeason"
           label="Work-term season"
@@ -186,8 +197,9 @@ export function ApplicationFields({
             placeholder="Summer 2027"
             required
           />
-        </Field>
-      </div>
+          </Field>
+        </div>
+      </fieldset>
 
       {/*
         Still a native disclosure — the browser gives it a focusable summary,
@@ -205,8 +217,8 @@ export function ApplicationFields({
             strokeWidth={1.5}
           />
         </summary>
-        <div className="grid gap-5 pt-5 sm:grid-cols-2">
-          <Field error={errors.location} id="location" label="Location">
+        <div className="grid gap-5 pt-5 sm:grid-cols-2 lg:grid-cols-6">
+          <Field className="lg:col-span-3" error={errors.location} id="location" label="Location">
             <Input
               aria-describedby={describedBy("location")}
               aria-invalid={Boolean(errors.location)}
@@ -218,6 +230,7 @@ export function ApplicationFields({
             />
           </Field>
           <Field
+            className="lg:col-span-3"
             error={errors.workArrangement}
             id="workArrangement"
             label="Work arrangement"
@@ -239,6 +252,7 @@ export function ApplicationFields({
             </select>
           </Field>
           <Field
+            className="lg:col-span-3"
             error={errors.companyDomain}
             hint="Optional. Used to display the company logo."
             id="companyDomain"
@@ -256,6 +270,7 @@ export function ApplicationFields({
             />
           </Field>
           <Field
+            className="lg:col-span-3"
             error={errors.applicationUrl}
             id="applicationUrl"
             label="Application URL"
@@ -272,6 +287,7 @@ export function ApplicationFields({
             />
           </Field>
           <Field
+            className="lg:col-span-2"
             error={errors.applicationSource}
             id="applicationSource"
             label="Application source"
@@ -287,6 +303,7 @@ export function ApplicationFields({
             />
           </Field>
           <Field
+            className="lg:col-span-2"
             error={errors.applicationDeadline}
             id="applicationDeadline"
             label="Application deadline"
@@ -301,6 +318,7 @@ export function ApplicationFields({
             />
           </Field>
           <Field
+            className="lg:col-span-2"
             error={errors.dateApplied}
             id="dateApplied"
             label="Date applied"
@@ -315,6 +333,7 @@ export function ApplicationFields({
             />
           </Field>
           <Field
+            className="lg:col-span-2"
             error={errors.workTermDuration}
             id="workTermDuration"
             label="Work-term duration"
@@ -329,7 +348,7 @@ export function ApplicationFields({
               placeholder="4 months"
             />
           </Field>
-          <Field error={errors.salary} id="salary" label="Salary">
+          <Field className="lg:col-span-2" error={errors.salary} id="salary" label="Salary">
             <Input
               aria-describedby={describedBy("salary")}
               aria-invalid={Boolean(errors.salary)}
@@ -340,7 +359,7 @@ export function ApplicationFields({
               placeholder="$20–$25/hour"
             />
           </Field>
-          <Field error={errors.nextAction} id="nextAction" label="Next action">
+          <Field className="lg:col-span-4" error={errors.nextAction} id="nextAction" label="Next action">
             <Input
               aria-describedby={describedBy("nextAction")}
               aria-invalid={Boolean(errors.nextAction)}
@@ -352,6 +371,7 @@ export function ApplicationFields({
             />
           </Field>
           <Field
+            className="lg:col-span-2"
             error={errors.nextActionDueDate}
             id="nextActionDueDate"
             label="Next-action due date"
@@ -365,7 +385,7 @@ export function ApplicationFields({
               type="date"
             />
           </Field>
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 lg:col-span-6">
             <Field
               error={errors.jobDescription}
               id="jobDescription"
@@ -382,7 +402,7 @@ export function ApplicationFields({
               />
             </Field>
           </div>
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 lg:col-span-6">
             <Field error={errors.notes} id="notes" label="Notes">
               <textarea
                 aria-describedby={describedBy("notes")}

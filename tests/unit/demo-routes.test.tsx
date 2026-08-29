@@ -290,7 +290,9 @@ describe("the demo applications list", () => {
       "action",
       "/demo/applications",
     );
-    expectDemoLinks(container);
+    expect(
+      container.querySelector('a[href^="/demo/applications/"]'),
+    ).toBeNull();
   });
 });
 

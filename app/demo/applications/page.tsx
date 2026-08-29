@@ -41,7 +41,7 @@ export default async function DemoApplicationsPage({
   const applications = filterDemoApplications(demo.activeApplications, filters);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
         <h1 className="text-[34px] font-medium leading-tight tracking-tight text-foreground sm:text-[38px]">
           Applications

@@ -51,8 +51,8 @@ function Row({
   label: string;
 }) {
   return (
-    <div className="flex items-baseline gap-4 border-b border-border/70 py-2.5 last:border-b-0">
-      <dt className="flex w-40 shrink-0 items-center gap-2 text-[13px] text-foreground-muted">
+    <div className="grid grid-cols-[8.5rem_minmax(0,1fr)] items-baseline gap-3 border-b border-border/70 py-2.5 last:border-b-0">
+      <dt className="flex items-center gap-2 text-[13px] text-foreground-muted">
         <Icon aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={1.5} />
         {label}
       </dt>
@@ -274,7 +274,7 @@ export function ApplicationDetail({
         <h2 className={headingClassName} id="application-heading">
           Application
         </h2>
-        <dl className="pt-3">
+        <dl className="grid gap-x-8 pt-3 lg:grid-cols-2">
           <Row icon={MapPin} label="Location">
             <OptionalValue value={application.location} />
           </Row>

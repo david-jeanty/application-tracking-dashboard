@@ -48,7 +48,7 @@ export default async function ApplicationsPage({
   const listKey = JSON.stringify(filters);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/*
         One page title, and a sentence that says what the page is for. The
         count belongs with the records it counts rather than up here, where

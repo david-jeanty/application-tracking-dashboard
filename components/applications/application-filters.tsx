@@ -19,7 +19,7 @@ import {
  * column, which is what keeps the controls next to the records they narrow.
  */
 const selectClassName =
-  "min-h-9 w-full rounded-control border border-border bg-surface px-2.5 text-base text-foreground hover:border-border-strong focus:border-accent focus:outline-none focus-visible:outline-none sm:text-[13px]";
+  "min-h-11 w-full rounded-control border border-border bg-surface px-2.5 text-base text-foreground hover:border-border-strong focus:border-accent focus:outline-none focus-visible:outline-none sm:min-h-9 sm:text-[13px]";
 
 /**
  * Search and filter controls for the applications list.
@@ -59,7 +59,7 @@ export function ApplicationFilters({
   return (
     <form
       action={action}
-      className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center"
+      className="flex flex-col gap-2.5 rounded-surface border border-border bg-surface-muted/45 p-3 sm:flex-row sm:flex-wrap sm:items-center"
       method="get"
     >
       <div className="sm:min-w-56 sm:flex-1">
@@ -67,6 +67,7 @@ export function ApplicationFilters({
           Search applications
         </label>
         <Input
+          className="min-h-11 sm:min-h-9"
           defaultValue={filters.search ?? ""}
           id="applications-search"
           maxLength={160}
@@ -81,7 +82,7 @@ export function ApplicationFilters({
         dissolve into the same flex row as the search field once there is
         width for it.
       */}
-      <div className="grid grid-cols-3 gap-2 sm:contents">
+      <div className="grid gap-2 sm:contents">
         <div className="sm:w-36">
           <label className="sr-only" htmlFor="applications-status">
             Filter by status

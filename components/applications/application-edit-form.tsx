@@ -34,7 +34,7 @@ export function ApplicationEditForm({
       The form is the page, on a readable measure. It used to sit inside a
       card, which drew a box around the only thing on the screen.
     */
-    <div className="mt-8 max-w-[760px] border-t border-border pt-6">
+    <div className="mt-8 max-w-[960px] border-t border-border pt-6">
       <form
         action={formAction}
         className="space-y-6"
