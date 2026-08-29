@@ -91,7 +91,7 @@ export function AppShell({ children, identity }: AppShellProps) {
           >
             <Menu aria-hidden="true" className="size-5" />
           </button>
-          <InterndexLogo className="h-6" />
+          <InterndexLogo size="small" />
         </header>
 
         <main

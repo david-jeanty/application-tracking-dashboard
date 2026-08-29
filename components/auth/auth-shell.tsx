@@ -51,7 +51,7 @@ export function AuthShell({
             data-testid="brand"
             href="/"
           >
-            <InterndexLogo className="h-7" />
+            <InterndexLogo size="medium" />
           </Link>
           <Link
             className="rounded-sm text-[14px] text-foreground-secondary transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"

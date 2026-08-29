@@ -227,8 +227,10 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000).
 
 `.env.example` explains each variable. Set `NEXT_PUBLIC_SITE_URL` to
-`http://localhost:3000`, and add `http://localhost:3000/auth/callback` as an
-allowed redirect URL in your Supabase project's auth settings.
+`http://localhost:3000`. In production, use the canonical public origin (for
+example, `https://www.interndex.dev`), not a temporary Vercel deployment URL.
+Add the matching `/auth/callback` URL as an allowed redirect URL in your
+Supabase project's auth settings.
 
 ### Company logos (optional)
 

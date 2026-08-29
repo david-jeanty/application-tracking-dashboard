@@ -293,7 +293,7 @@
 */
 @theme inline {
   --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-plex-serif), ui-serif, Georgia, serif;
+  --font-serif: ui-serif, Georgia, serif;
 
   --color-background: var(--background);
   --color-surface: var(--surface);
@@ -373,24 +373,24 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.interndex-logo-dark {
+.interndex-icon-dark {
   display: none;
 }
 
-:root[data-theme="dark"] .interndex-logo-light {
+:root[data-theme="dark"] .interndex-icon-light {
   display: none;
 }
 
-:root[data-theme="dark"] .interndex-logo-dark {
+:root[data-theme="dark"] .interndex-icon-dark {
   display: block;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .interndex-logo-light {
+  :root:not([data-theme="light"]) .interndex-icon-light {
     display: none;
   }
 
-  :root:not([data-theme="light"]) .interndex-logo-dark {
+  :root:not([data-theme="light"]) .interndex-icon-dark {
     display: block;
   }
 }

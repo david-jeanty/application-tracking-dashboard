@@ -14,7 +14,7 @@ export function PublicFooter() {
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-[1120px] flex-col gap-4 px-5 py-8 sm:flex-row sm:items-baseline sm:justify-between sm:px-8">
         <div>
-          <InterndexLogo className="h-5" />
+          <InterndexLogo size="small" />
           <p className="mt-2 text-[13px] text-foreground-muted">
             Built for students managing internship and co-op searches.
           </p>

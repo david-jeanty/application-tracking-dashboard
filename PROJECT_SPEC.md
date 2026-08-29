@@ -190,10 +190,10 @@ connection all operate on the same structured application records.
 
 Manual capture is now a material source of duplicate work: a student viewing a
 posting must move its known facts into either the web form or a conversation
-before JobTrack can store them. A narrowly scoped, explicitly invoked browser
+before Interndex can store them. A narrowly scoped, explicitly invoked browser
 capture extension is therefore approved as a post-MVP feature. It will be a
 capture layer for the posting the student is currently viewing, not another
-reasoning surface: **AI does the reasoning. JobTrack stores the truth.**
+reasoning surface: **AI does the reasoning. Interndex stores the truth.**
 
 This decision does not approve arbitrary or background scraping, autofill,
 auto-apply, submission detection, built-in AI, job classification, resume

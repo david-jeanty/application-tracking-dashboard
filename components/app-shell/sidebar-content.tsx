@@ -133,7 +133,7 @@ export function SidebarContent({
         href={identity.kind === "demo" ? "/demo" : "/dashboard"}
         onClick={onNavigate}
       >
-        <InterndexLogo className="h-7" />
+        <InterndexLogo size="medium" />
       </Link>
 
       <nav

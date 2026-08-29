@@ -23,7 +23,7 @@ export function PublicHeader() {
           className="inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
           href="/"
         >
-          <InterndexLogo className="h-7" />
+          <InterndexLogo size="medium" />
         </Link>
 
         <nav aria-label="Public navigation">

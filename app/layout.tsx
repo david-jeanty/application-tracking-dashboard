@@ -5,8 +5,7 @@ import { appearanceInlineScript } from "@/lib/appearance/inline-script";
 import "./globals.css";
 
 /**
- * IBM Plex Sans carries the whole interface; IBM Plex Serif carries only the
- * Interndex interface and wordmark.
+ * IBM Plex Sans carries the whole interface and the Interndex wordmark.
  *
  * Two weights of the sans, deliberately: the design leans on size and colour
  * for hierarchy rather than on weight, so regular and medium are all it needs.
