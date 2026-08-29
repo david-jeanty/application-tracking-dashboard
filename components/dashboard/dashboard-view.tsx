@@ -137,7 +137,7 @@ export function DashboardView({
       <div
         className={`grid items-start gap-8 ${
           dashboard.savedOpportunities.length > 0
-            ? "xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:gap-10"
+            ? "xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:items-stretch xl:gap-10"
             : "grid-cols-1"
         }`}
         data-dashboard-secondary-grid

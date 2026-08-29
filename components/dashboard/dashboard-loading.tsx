@@ -62,7 +62,7 @@ export function DashboardLoading() {
         </div>
       </section>
 
-      <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:gap-10">
+      <div className="grid items-start gap-8 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:items-stretch xl:gap-10">
         <section className="animate-pulse rounded-surface border border-border bg-surface p-5 sm:p-6">
           <div className="flex items-center justify-between gap-4">
             <Line className="h-4 w-36" />

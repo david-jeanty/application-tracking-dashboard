@@ -118,14 +118,14 @@ describe("dashboard composition", () => {
     ).toBeInTheDocument();
   });
 
-  it("lets adjacent dashboard modules keep their natural heights", () => {
+  it("stretches the paired desktop modules while keeping tablet and mobile natural", () => {
     const { container } = render(
       <DashboardView dashboard={readyDashboard()} today="2026-08-26" />,
     );
 
     expect(
       container.querySelector("[data-dashboard-secondary-grid]"),
-    ).toHaveClass("items-start");
+    ).toHaveClass("items-start", "xl:items-stretch");
   });
 
   it("removes an empty Saved opportunities module and lets activity reflow", () => {
