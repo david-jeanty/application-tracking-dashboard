@@ -5,7 +5,8 @@ import { appearanceInlineScript } from "@/lib/appearance/inline-script";
 import "./globals.css";
 
 /**
- * IBM Plex Sans carries the whole interface and the Interndex wordmark.
+ * IBM Plex Sans carries the interface. The Interndex wordmark itself is
+ * supplied raster artwork and does not depend on a browser font.
  *
  * Two weights of the sans, deliberately: the design leans on size and colour
  * for hierarchy rather than on weight, so regular and medium are all it needs.

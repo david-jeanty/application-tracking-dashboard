@@ -373,24 +373,24 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-.interndex-icon-dark {
+.interndex-logo-dark {
   display: none;
 }
 
-:root[data-theme="dark"] .interndex-icon-light {
+:root[data-theme="dark"] .interndex-logo-light {
   display: none;
 }
 
-:root[data-theme="dark"] .interndex-icon-dark {
+:root[data-theme="dark"] .interndex-logo-dark {
   display: block;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .interndex-icon-light {
+  :root:not([data-theme="light"]) .interndex-logo-light {
     display: none;
   }
 
-  :root:not([data-theme="light"]) .interndex-icon-dark {
+  :root:not([data-theme="light"]) .interndex-logo-dark {
     display: block;
   }
 }
