@@ -16,7 +16,7 @@ describe("the public privacy route", () => {
       screen.getByRole("heading", { name: "The web app today" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "The JobTrack Capture browser extension" }),
+      screen.getByRole("heading", { name: "The Interndex Capture browser extension" }),
     ).toBeInTheDocument();
   });
 
@@ -60,7 +60,7 @@ describe("the public privacy route", () => {
       "href",
       "#main-content",
     );
-    expect(screen.getByRole("link", { name: "JobTrack" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Interndex" })).toHaveAttribute("href", "/");
   });
 });
 

@@ -10,7 +10,7 @@
  * These describe the tools actually registered in `lib/mcp/tools.ts`. If a tool
  * is ever added or removed, this list changes with it.
  *
- * The list is also what the consent screen shows the JobTrack Capture browser
+ * The list is also what the consent screen shows the Interndex Capture browser
  * extension, and that is accurate rather than convenient: an OAuth grant issues
  * an ordinary Supabase user token, and Supabase scopes affect what is inside an
  * identity token, not what the database will accept. Any authorized client

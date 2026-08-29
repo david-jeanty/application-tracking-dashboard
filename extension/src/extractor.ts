@@ -36,7 +36,7 @@ import type {
 } from "./types.js";
 
 /**
- * Turns what the page said about itself into the facts JobTrack can store.
+ * Turns what the page said about itself into the facts Interndex can store.
  *
  * The order is a trust order, not a convenience order:
  *
@@ -59,7 +59,7 @@ import type {
  * nobody asked.
  */
 
-/** JobTrack's stored description limit, mirrored so the popup can warn early. */
+/** Interndex's stored description limit, mirrored so the popup can warn early. */
 export const DESCRIPTION_LIMIT = 50_000;
 
 /** The record contract's own field limits, so nothing is sent to be rejected. */
@@ -73,7 +73,7 @@ const LIMITS = {
 
 /** Said in the description itself when the posting did not fit. */
 const SHORTENED_NOTICE =
-  "\n\n[This description was too long for JobTrack and was shortened here. Open the posting for the complete text.]";
+  "\n\n[This description was too long for Interndex and was shortened here. Open the posting for the complete text.]";
 
 function clamp(value: string | undefined, limit: number): string | undefined {
   if (!value) return undefined;
@@ -117,7 +117,7 @@ function sameHost(candidate: string, pageUrl: string): string | undefined {
  * Indeed both show the selected job inside a search page whose own URL — and
  * whose own canonical link — describes the search. Filing every job a student
  * opened from one result list under that single address would make them all
- * look like one job to JobTrack's exact-URL duplicate check.
+ * look like one job to Interndex's exact-URL duplicate check.
  *
  * Otherwise a canonical link is preferred, so two visits to the same posting
  * through different tracking parameters are recognized as the same job. It is

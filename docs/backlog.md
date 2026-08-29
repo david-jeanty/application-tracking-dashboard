@@ -52,12 +52,12 @@ accounts, and public profiles.
 
 The line above records the original MVP boundary and is intentionally retained.
 Since then, the tracker, dashboard, pipeline, analytics, and MCP AI connection
-have shipped. The remaining manual transfer from a posting into JobTrack is a
+have shipped. The remaining manual transfer from a posting into Interndex is a
 significant source of duplicate work, so one narrow browser feature is now
 approved: an extension that saves the posting the student is currently viewing
 after an explicit user action.
 
-The server foundation shipped first; the JobTrack Capture Chrome extension
+The server foundation shipped first; the Interndex Capture Chrome extension
 followed as a locally loadable unpacked MV3 package. It is not distributed
 through the Chrome Web Store, and site-specific extraction adapters are
 deliberately not part of it.

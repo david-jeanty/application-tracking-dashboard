@@ -24,7 +24,7 @@ import {
  *
  * It is not one. That column is declared `timestamptz not null default now()`
  * and is written by the `record_application_status_change()` trigger — it is
- * the moment **JobTrack recorded** a transition, not the moment an **employer
+ * the moment **Interndex recorded** a transition, not the moment an **employer
  * acted**. A student who backfills a search they ran last term, saves an
  * application directly at `Interview`, or updates a rejection a fortnight after
  * reading the email produces a `changed_at` gap that has no relationship to how
@@ -36,7 +36,7 @@ import {
  * generated and a calendar day a student typed are not two ends of one
  * interval.
  *
- * So response timing is deferred until JobTrack records trustworthy
+ * So response timing is deferred until Interndex records trustworthy
  * event-occurrence dates — a `responded_on` a student enters, not an audit
  * trail reinterpreted. This module therefore reads `date_applied` and nothing
  * else with a time in it, and `listStatusHistory` deliberately projects only

@@ -2,7 +2,7 @@ import type { PageReadRules } from "./sites.js";
 import type { PageSignals } from "./types.js";
 
 /**
- * Reads the posting the student explicitly asked JobTrack to capture.
+ * Reads the posting the student explicitly asked Interndex to capture.
  *
  * This is the only code that ever touches a job site, it runs exactly once per
  * click, and it is deliberately the least capable part of the extension. It

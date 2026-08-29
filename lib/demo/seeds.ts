@@ -70,7 +70,7 @@ const TORONTO = "Toronto, ON";
  * Fictional throughout. The employers are real organisations named so that a
  * student recognises the shape of the dataset immediately, but no application,
  * title, description, date or outcome here describes anything that happened,
- * and none of these employers has any connection to JobTrack.
+ * and none of these employers has any connection to Interndex.
  *
  * Deliberately uneven. Several employers appear three or four times with
  * different roles, which is the case the whole product is designed around —

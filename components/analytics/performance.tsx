@@ -75,7 +75,7 @@ export function WhatWorks({
     <>
       {/*
         The heading and its rule run the full width of the page, like every
-        other section in JobTrack. The control does not: a toggle pinned to the
+        other section in Interndex. The control does not: a toggle pinned to the
         far right of a 1440px rule floats a quarter of a screen away from the
         rows it re-plots. It sits with the legend instead, on the chart's own
         measure, where the two things that explain the bars are read together.

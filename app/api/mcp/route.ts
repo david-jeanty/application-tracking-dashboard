@@ -13,7 +13,7 @@ export const RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
 const handler = createMcpHandler(
   (server) => registerJobTrackTools(server, createSupabaseJobTrackRepository),
   {
-    serverInfo: { name: "jobtrack", version: "0.1.0" },
+    serverInfo: { name: "interndex", version: "0.1.0" },
   },
 );
 

@@ -8,11 +8,11 @@ One new MCP tool, `import_jobs`, taking the tool set from four to five. A
 student exports their Google Sheets or Excel tracker as CSV, uploads it to
 their assistant, and asks for it to be imported. The assistant reads the file,
 settles what its columns, statuses and dates meant with the student, and sends
-JobTrack canonical records.
+Interndex canonical records.
 
-No CSV reaches JobTrack, and none ever will: no upload control, no parser, no
+No CSV reaches Interndex, and none ever will: no upload control, no parser, no
 column-mapping screen, no spreadsheet dependency. The assistant interprets;
-JobTrack validates and stores.
+Interndex validates and stores.
 
 ### Audit findings
 
@@ -72,7 +72,7 @@ ask. A deduplication guess made inside a database write is one nobody can see.
 
 **No invented history.** An application imported at Interview is stored at
 Interview with the `date_applied` the student recorded. The trigger writes the
-one creation event saying it entered JobTrack at that status, which is true.
+one creation event saying it entered Interndex at that status, which is true.
 `created_at` is import time and is never backdated: historical meaning comes
 from fields the student actually filled in, not from timestamps we made up.
 
@@ -141,7 +141,7 @@ unreachable from it rather than merely refused.
   accepted and written as one batch; and a plausible-looking but impossible
   date the assistant might produce (`2026-16-08`) is caught by the shared
   schema, named by record, before any write. The fixture is not committed —
-  JobTrack has no knowledge that those source strings exist.
+  Interndex has no knowledge that those source strings exist.
 
 ## 2026-08-24 — Phase 4: the pipeline board
 
@@ -483,7 +483,7 @@ so guidance buried in a field is guidance that may never be reached.
 
 ### What deliberately did not change
 
-The expectation lives entirely in prose that Claude reads. JobTrack still infers
+The expectation lives entirely in prose that Claude reads. Interndex still infers
 nothing — no employer-to-domain map in application code, no model called from
 the server, no Logo.dev Search or Brand API. The examples are guidance to a
 model, not a lookup table this product consults, which is the distinction that
@@ -537,12 +537,12 @@ transparency is precisely what forced the `bg-white` that broke the fallback.
 
 One additive nullable column, `applications.company_domain`, and the branding it
 enables. Product polish, not a phase: no new MCP tool, no new table, no
-authorization change, no AI call inside JobTrack, and nothing about enrichment,
+authorization change, no AI call inside Interndex, and nothing about enrichment,
 scraping, caching, or uploaded logos.
 
 The division of labour it rests on:
 
-> Claude can reason about the company and its domain. JobTrack stores the
+> Claude can reason about the company and its domain. Interndex stores the
 > structured truth. Logo.dev renders the brand asset.
 
 ### Audit result
@@ -590,7 +590,7 @@ mistyped one is a validation error the student sees, not a value silently
 dropped.
 
 It is deliberately not a discovery engine. No hard-coded `RBC -> rbc.com` map
-exists anywhere — that rots — and JobTrack never guesses a domain from a company
+exists anywhere — that rots — and Interndex never guesses a domain from a company
 name.
 
 ### Logo.dev integration

@@ -79,7 +79,7 @@ export function formFor(job: ExtractedJob): CaptureForm {
   };
 }
 
-/** Whether the form holds the two values JobTrack requires. */
+/** Whether the form holds the two values Interndex requires. */
 export function canSave(state: PopupState): boolean {
   if (state.view !== "ready") return false;
 
@@ -95,18 +95,18 @@ export function isIncomplete(job: ExtractedJob): boolean {
 
 const CONNECT_MESSAGES: Record<Exclude<ConnectResult["status"], "connected">, string> = {
   cancelled: "Connecting was cancelled. Try again when you are ready.",
-  denied: "JobTrack was not given access. Try connecting again to approve it.",
+  denied: "Interndex was not given access. Try connecting again to approve it.",
   state_mismatch:
     "That sign-in response could not be verified, so it was rejected. Try connecting again.",
   no_code: "Sign-in did not complete. Try connecting again.",
-  token_rejected: "JobTrack could not finish signing you in. Try connecting again.",
-  network_error: "JobTrack could not be reached. Check your connection and try again.",
+  token_rejected: "Interndex could not finish signing you in. Try connecting again.",
+  network_error: "Interndex could not be reached. Check your connection and try again.",
 };
 
 const OUTCOME_MESSAGES = {
-  network_error: "JobTrack could not be reached. Check your connection and try again.",
-  server_error: "JobTrack could not save this job. Try again in a moment.",
-  invalid: "JobTrack could not accept this job.",
+  network_error: "Interndex could not be reached. Check your connection and try again.",
+  server_error: "Interndex could not save this job. Try again in a moment.",
+  invalid: "Interndex could not accept this job.",
 } as const;
 
 /**
@@ -232,7 +232,7 @@ export function describeExtraction(job: ExtractedJob): string {
   }
 
   if (job.warnings.includes("description_too_long")) {
-    return "Job description found, shortened to fit JobTrack.";
+    return "Job description found, shortened to fit Interndex.";
   }
 
   if (job.jobDescription) return "Job description found";
@@ -284,7 +284,7 @@ export type FoundFact = { label: string; value: string };
  * read-only answer to "what else is going in".
  *
  * It lists only what will actually be stored, so a deadline the extractor
- * refused never appears here as a promise. It is not the JobTrack form: no
+ * refused never appears here as a promise. It is not the Interndex form: no
  * category, no work term, no confidence score, nothing editable.
  */
 export function alsoFound(job: ExtractedJob): FoundFact[] {

@@ -63,7 +63,7 @@ function describeRecord(record: NewJobRecord, index: number): string {
  *
  * Nothing here writes status history either, and the import path contains no
  * code that could: the creation trigger records the status each application
- * arrived at, and the stages it passed through before JobTrack existed are not
+ * arrived at, and the stages it passed through before Interndex existed are not
  * ours to invent.
  */
 export async function runImportJobs(

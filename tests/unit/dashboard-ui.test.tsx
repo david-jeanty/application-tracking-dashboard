@@ -159,7 +159,7 @@ describe("pipeline", () => {
   it("claims no total of its own", () => {
     render(<PipelineSnapshot stages={stages} />);
 
-    // These five stages are not JobTrack's ACTIVE_STATUSES vocabulary, so
+    // These five stages are not Interndex's ACTIVE_STATUSES vocabulary, so
     // summing them and calling the result "active" would invent a definition.
     // The counts already say what there is.
     expect(screen.queryByText(/active application/i)).toBeNull();

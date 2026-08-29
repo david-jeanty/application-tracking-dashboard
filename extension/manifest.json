@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "JobTrack Capture",
+  "name": "Interndex Capture",
   "version": "0.1.0",
-  "description": "Save the job posting you are viewing into your own JobTrack account.",
+  "description": "Save the job posting you are viewing into your own Interndex account.",
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "scripting", "storage", "identity"],
   "host_permissions": [
@@ -14,7 +14,13 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Save this job to JobTrack",
+    "default_title": "Save this job to Interndex",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    },
     "default_popup": "popup.html"
   }
 }

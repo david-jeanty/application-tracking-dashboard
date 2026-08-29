@@ -21,7 +21,7 @@ export function DemoBanner() {
           <span className="font-medium">Demo workspace</span>
           <span className="text-foreground-secondary">
             {" "}
-            — you&rsquo;re exploring JobTrack with sample data.
+            — you&rsquo;re exploring Interndex with sample data.
           </span>
         </p>
         <p className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-1 text-[13px]">
@@ -35,7 +35,7 @@ export function DemoBanner() {
             className="rounded-sm text-foreground-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             href="/"
           >
-            Back to JobTrack
+            Back to Interndex
           </Link>
         </p>
       </div>

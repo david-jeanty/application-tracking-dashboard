@@ -175,7 +175,7 @@ function toListItem(record: ApplicationRecord): ApplicationListItem {
  * running demo stays as current as the visitor's own calendar. There is no
  * randomness anywhere in this module, and nothing here reads a clock — the
  * caller resolves "today" through the product's own timezone helper and passes
- * it in, like every other date-aware calculation in JobTrack.
+ * it in, like every other date-aware calculation in Interndex.
  *
  * Ordering matches what the repository returns: newest first by `created_at`,
  * so the demo list is in the same order a real one would be.

@@ -22,7 +22,7 @@ function describeGrantedAt(value: string): string | null {
 /**
  * Everything a student has authorized, with a way to disconnect each.
  *
- * An entry may be an AI assistant connected over MCP or the JobTrack Capture
+ * An entry may be an AI assistant connected over MCP or the Interndex Capture
  * browser extension. Supabase reports a client's name and id and nothing about
  * its kind, so this list names each connection and declines to categorize it —
  * guessing from the name would put a confident label on a value the student
@@ -41,7 +41,7 @@ export function ConnectedClients({ clients }: { clients: ConnectedClient[] }) {
       <div className="border-t border-border pt-5">
         <p className="text-sm text-foreground">Nothing connected yet</p>
         <p className="mt-1 max-w-md text-sm leading-6 text-foreground-secondary">
-          Once you connect an assistant or the browser extension, it will appear
+          Once you connect an assistant or Interndex Capture, it will appear
           here and you can remove it at any time.
         </p>
       </div>

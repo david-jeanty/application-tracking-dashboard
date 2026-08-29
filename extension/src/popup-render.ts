@@ -22,15 +22,15 @@ import {
 const CONNECTED_VIEWS = ["extracting", "ready", "saving", "saved"];
 
 const ANNOUNCEMENTS: Record<PopupState["view"], string> = {
-  loading: "Checking your JobTrack connection.",
-  disconnected: "JobTrack is not connected.",
+  loading: "Checking your Interndex connection.",
+  disconnected: "Interndex is not connected.",
   connecting: "Waiting for you to finish signing in.",
-  connect_failed: "Connecting to JobTrack did not finish.",
+  connect_failed: "Connecting to Interndex did not finish.",
   extracting: "Reading this page.",
   extraction_failed: "This page could not be read.",
   ready: "Job details ready to confirm.",
-  saving: "Saving to JobTrack.",
-  unauthorized: "Your JobTrack connection has expired.",
+  saving: "Saving to Interndex.",
+  unauthorized: "Your Interndex connection has expired.",
   saved: "Saved.",
 };
 
@@ -58,8 +58,8 @@ export function render(root: Document, state: PopupState): void {
     "#announcement",
     state.view === "saved"
       ? state.duplicate
-        ? "Already in JobTrack."
-        : "Tracked in JobTrack."
+        ? "Already in Interndex."
+        : "Tracked in Interndex."
       : announcement,
   );
 
@@ -118,7 +118,7 @@ export function render(root: Document, state: PopupState): void {
     setText(
       root,
       "#saved-headline",
-      state.duplicate ? "Already in JobTrack" : "✓ Tracked in JobTrack",
+      state.duplicate ? "Already in Interndex" : "✓ Tracked in Interndex",
     );
     setText(root, "#saved-company", state.application.company);
     setText(root, "#saved-title", state.application.jobTitle);

@@ -97,8 +97,8 @@ export const MILESTONE_BUCKETS = [
  * What each segment is called.
  *
  * Plain descriptions of a recorded state. `No recorded response` says the
- * record is empty, not that the employer ignored the student — JobTrack knows
- * what was entered into JobTrack and nothing more.
+ * record is empty, not that the employer ignored the student — Interndex knows
+ * what was entered into Interndex and nothing more.
  */
 export const MILESTONE_BUCKET_LABELS: Record<MilestoneBucket, string> = {
   noResponse: "No recorded response",

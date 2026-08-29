@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { InterndexLogo } from "@/components/branding/interndex-logo";
 import { ButtonLink } from "@/components/ui/button";
 
 /**
@@ -10,7 +11,7 @@ import { ButtonLink } from "@/components/ui/button";
  *
  * The order is the order a first-time visitor should consider them in: look at
  * the product, then sign in if you already have a workspace, then make one.
- * Try demo carries the filled button because seeing JobTrack is the thing this
+ * Try demo carries the filled button because seeing Interndex is the thing this
  * page most wants to happen; Create account follows it as the quieter outline.
  */
 export function PublicHeader() {
@@ -18,10 +19,11 @@ export function PublicHeader() {
     <header className="border-b border-border">
       <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-4 px-5 py-4 sm:px-8">
         <Link
-          className="font-wordmark rounded-sm text-[24px] leading-none text-foreground focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+          aria-label="Interndex"
+          className="-ml-2 inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
           href="/"
         >
-          JobTrack
+          <InterndexLogo size="medium" />
         </Link>
 
         <nav aria-label="Public navigation">

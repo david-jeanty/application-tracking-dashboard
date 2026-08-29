@@ -7,7 +7,7 @@ import type {
 } from "./types.js";
 
 /**
- * Sending one confirmed posting to the student's JobTrack account.
+ * Sending one confirmed posting to the student's Interndex account.
  *
  * The extension writes through `POST /api/browser-capture` and never touches a
  * Supabase table directly, even though the access token it holds would
@@ -58,7 +58,7 @@ export type CaptureRecord = {
  * `date_applied` is deliberately absent even when the status is `Applied`. The
  * extension has no idea when the student applied, and today's date would be a
  * plausible-looking guess written into a record used for follow-up timing.
- * They can set it in JobTrack, which knows how to ask.
+ * They can set it in Interndex, which knows how to ask.
  */
 export function buildCaptureRecord(
   extracted: ExtractedJob,
@@ -102,7 +102,7 @@ function readApplication(payload: unknown) {
     typeof company !== "string" ||
     typeof jobTitle !== "string" ||
     typeof href !== "string" ||
-    // A relative JobTrack path and nothing else: the link the popup offers is
+    // A relative Interndex path and nothing else: the link the popup offers is
     // built from the configured origin, so a response cannot point it away.
     !href.startsWith("/") ||
     href.startsWith("//")

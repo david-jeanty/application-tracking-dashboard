@@ -29,7 +29,7 @@ import type { ConnectResult } from "./auth.js";
 /**
  * The popup: the student's intent, and the only place capture begins.
  *
- * Nothing in JobTrack Capture reads a page until this window is open and this
+ * Nothing in Interndex Capture reads a page until this window is open and this
  * code asks it to. There is no content script in the manifest, no host
  * permission for job sites, and no listener watching navigation — the extension
  * has no way to see a page until the student clicks the toolbar button, and
@@ -189,7 +189,7 @@ async function startExtraction(): Promise<void> {
     if (!job) {
       apply({
         type: "extraction_failed",
-        message: "JobTrack cannot read this page. Open the job posting and try again.",
+        message: "Interndex cannot read this page. Open the job posting and try again.",
       });
       return;
     }
@@ -198,7 +198,7 @@ async function startExtraction(): Promise<void> {
   } catch {
     apply({
       type: "extraction_failed",
-      message: "JobTrack cannot read this page. Open the job posting and try again.",
+      message: "Interndex cannot read this page. Open the job posting and try again.",
     });
   }
 }

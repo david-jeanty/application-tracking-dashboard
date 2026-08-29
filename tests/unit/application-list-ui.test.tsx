@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplicationListItem } from "@/lib/applications/types";
 
@@ -24,6 +24,9 @@ vi.mock("@/lib/applications/repository", () => ({
 
 const { ApplicationList } = await import(
   "@/components/applications/application-list"
+);
+const { ApplicationRecords } = await import(
+  "@/components/applications/application-records"
 );
 
 function application(
@@ -128,6 +131,94 @@ describe("what a record shows", () => {
     await renderList();
 
     expect(screen.getByText("1 application")).toBeInTheDocument();
+  });
+});
+
+describe("the inline record disclosure", () => {
+  it("opens compact context beneath the selected production row", () => {
+    render(
+      <ApplicationRecords
+        applications={[application({ application_deadline: "2026-09-03" })]}
+        history={[]}
+      />,
+    );
+
+    const disclosure = screen.getByRole("button", {
+      name: "Show details for Business Analyst Intern",
+    });
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(records()[0]);
+
+    const context = screen.getByRole("region", {
+      name: "Business Analyst Intern",
+    });
+    expect(context).toHaveTextContent("Business Analysis");
+    expect(context).toHaveTextContent("Hybrid");
+    expect(context).toHaveTextContent("Sep 3, 2026");
+    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
+      "href",
+      "/applications/11111111-1111-4111-8111-111111111111/edit",
+    );
+    expect(screen.getByRole("link", { name: "Open record" })).toHaveAttribute(
+      "href",
+      "/applications/11111111-1111-4111-8111-111111111111",
+    );
+    expect(
+      screen.getByRole("button", {
+        name: "Hide details for Business Analyst Intern",
+      }),
+    ).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("keeps only one record expanded at a time without introducing a side panel", () => {
+    render(
+      <ApplicationRecords
+        applications={[
+          application(),
+          application({
+            id: "22222222-2222-4222-8222-222222222222",
+            original_job_title: "Strategy Intern",
+          }),
+        ]}
+        history={[]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Show details for Business Analyst Intern",
+      }),
+    );
+    expect(
+      screen.getByRole("region", { name: "Business Analyst Intern" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show details for Strategy Intern" }),
+    );
+    expect(
+      screen.queryByRole("region", { name: "Business Analyst Intern" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Strategy Intern" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+  });
+
+  it("keeps the demo disclosure read-only while preserving the demo record link", () => {
+    render(
+      <ApplicationRecords applications={[application()]} basePath="/demo" history={[]} />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Show details for Business Analyst Intern",
+      }),
+    );
+
+    expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open record" })).toHaveAttribute(
+      "href",
+      "/demo/applications/11111111-1111-4111-8111-111111111111",
+    );
   });
 });
 

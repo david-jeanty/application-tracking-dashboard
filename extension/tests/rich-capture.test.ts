@@ -23,7 +23,7 @@ import {
 /**
  * Rich capture: work arrangement, work term, and duration.
  *
- * These three fields are the easiest in JobTrack to fill in plausibly and
+ * These three fields are the easiest in Interndex to fill in plausibly and
  * wrongly, so most of what is asserted below is refusal. A city is not an
  * arrangement, "flexible working environment" is not Hybrid, a season with no
  * year is not a term, and a two-week training period is not how long the job

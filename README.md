@@ -1,15 +1,15 @@
-# JobTrack
+# Interndex
 
 A job tracker your AI assistant can actually use.
 
-## What is JobTrack?
+## What is Interndex?
 
-JobTrack is an application tracker for students applying to internships and
+Interndex is an application tracker for students applying to internships and
 co-ops. It holds everything about a job search in one place: the company, the
 role, the deadline, where you are in the process, what you need to do next, and
 the notes you made along the way.
 
-What makes it different is that you don't have to fill it in yourself. JobTrack
+What makes it different is that you don't have to fill it in yourself. Interndex
 connects to an AI assistant like Claude, so you can say "save this job" or "I
 applied to the RBC one today," and the tracker updates itself.
 
@@ -26,31 +26,31 @@ That copying is the part nobody keeps up with. A few weeks into a search the
 tracker is out of date, half the applications were never added, and the details
 that mattered are buried somewhere in a chat history you can't search properly.
 
-JobTrack removes that duplicate work. The assistant that just read the posting
+Interndex removes that duplicate work. The assistant that just read the posting
 with you is the one that files it.
 
 ## The philosophy
 
-**AI does the reasoning. JobTrack stores the truth.**
+**AI does the reasoning. Interndex stores the truth.**
 
 AI assistants are already good at reading a job description, judging whether a
-role fits, and helping you prepare. JobTrack doesn't try to rebuild any of that.
+role fits, and helping you prepare. Interndex doesn't try to rebuild any of that.
 There is no chatbot in the app, no resume generator, and no posting parser.
 
-Instead, JobTrack does the part a conversation is bad at: keeping a reliable
+Instead, Interndex does the part a conversation is bad at: keeping a reliable
 record over time. A job search runs for months and needs deadlines that don't
 move, statuses that stay accurate, and notes you can find again when you need
 them.
 
 So the work is split. The assistant handles the thinking and the conversation.
-JobTrack handles the organization, history, deadlines, statuses, notes, and
+Interndex handles the organization, history, deadlines, statuses, notes, and
 application data.
 
 ## What you can do
 
-Once JobTrack is connected, the whole thing is just conversation:
+Once Interndex is connected, the whole thing is just conversation:
 
-- "Save this job to JobTrack."
+- "Save this job to Interndex."
 - "What RBC jobs am I tracking?"
 - "Show me the details for that Business Analyst role."
 - "I applied to it today."
@@ -68,9 +68,9 @@ its tracked information.
 
 If you already track applications in Google Sheets or Excel, you don't retype
 them. Export that sheet as a CSV, upload it **to your assistant** — not to
-JobTrack — and ask:
+Interndex — and ask:
 
-> **You:** Import this old tracker into JobTrack. *(CSV attached)*
+> **You:** Import this old tracker into Interndex. *(CSV attached)*
 >
 > **Assistant:** I found 34 rows. Your "Stage" column has values I want to
 > check: "OA" appears 5 times — should that be Assessment? And "Interviewing"
@@ -84,50 +84,50 @@ JobTrack — and ask:
 > **You:** August 12th. Day is second.
 >
 > **Assistant:** One more thing: RBC — Business Analyst Intern is already in
-> JobTrack from last week. Skip that row?
+> Interndex from last week. Skip that row?
 >
 > **You:** Skip it.
 >
 > **Assistant:** Importing 33 applications in two batches. Your "Recruiter" and
-> "Resume version" columns have no JobTrack field, so I'll keep them in each
-> application's notes. *…* Imported 33 applications into JobTrack.
+> "Resume version" columns have no Interndex field, so I'll keep them in each
+> application's notes. *…* Imported 33 applications into Interndex.
 
 The division of labour is deliberate:
 
 - **Your assistant interprets.** It reads the spreadsheet, works out what the
   columns meant, and settles anything ambiguous with you first.
-- **JobTrack validates and stores.** It never sees the CSV, never parses one,
+- **Interndex validates and stores.** It never sees the CSV, never parses one,
   and has no upload button.
 - **Dates arrive unambiguous.** `03/04/2026` must become a real calendar date
   before it crosses over, because only you know which convention your sheet
   used.
-- **Statuses arrive as JobTrack's own.** "OA" and "Ghosted" are questions for
+- **Statuses arrive as Interndex's own.** "OA" and "Ghosted" are questions for
   you, not guesses for a tracker to make.
 - **Nothing is invented.** An application imported at Interview is stored at
-  Interview with the date you applied. JobTrack does not manufacture the
+  Interview with the date you applied. Interndex does not manufacture the
   Applied → Screening → Interview trail it never saw.
 - **Duplicates are yours to decide.** Your assistant checks what is already in
-  JobTrack and asks; nothing is merged or skipped behind your back.
+  Interndex and asks; nothing is merged or skipped behind your back.
 
 ## How it works
 
 ```text
-Student → AI assistant → JobTrack → application tracker
+Student → AI assistant → Interndex → application tracker
 ```
 
-JobTrack connects to AI assistants through MCP, an open standard that lets an
-assistant use an outside tool. In practice you add JobTrack to Claude once and
+Interndex connects to AI assistants through MCP, an open standard that lets an
+assistant use an outside tool. In practice you add Interndex to Claude once and
 sign in to your own account; after that, Claude can work with your applications
 whenever you ask.
 
 Everything you need to set that up — the connection address, the steps, and a
 list of what an assistant can and cannot do — is on the **Settings** page once
 you sign in. The same page lists anything you have connected and lets you
-disconnect it. JobTrack never provides or charges for AI; you bring an
+disconnect it. Interndex never provides or charges for AI; you bring an
 assistant you already have.
 
 Each user can only access their own applications, and the AI connection uses the
-same authenticated JobTrack account.
+same authenticated Interndex account.
 
 ## The web app
 
@@ -144,7 +144,7 @@ site, and anything you edit on the site is what the assistant sees next time.
 
 ## Try it without an account
 
-`/demo` is a public, read-only JobTrack workspace: a sample search of 56
+`/demo` is a public, read-only Interndex workspace: a sample search of 56
 internship and co-op applications across the dashboard, the applications list,
 an application's details, the pipeline board and analytics.
 
@@ -153,7 +153,7 @@ an application's details, the pipeline board and analytics.
 - **The applications are fictional.** Familiar employers appear so the dataset
   reads like a real recruiting spreadsheet, but no application, title,
   description, date or outcome describes anything that happened, and none of
-  those organisations has any connection to JobTrack.
+  those organisations has any connection to Interndex.
 - **Static, in-memory data.** The sample search is generated in the app from a
   fixture, deterministically, with dates expressed as offsets from the current
   day so it stays current instead of aging. There is no demo database, no
@@ -170,7 +170,7 @@ an application's details, the pipeline board and analytics.
 
 ## Current status
 
-JobTrack is deployed and the Claude connection works today.
+Interndex is deployed and the Claude connection works today.
 
 **Working now**
 
@@ -227,12 +227,14 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000).
 
 `.env.example` explains each variable. Set `NEXT_PUBLIC_SITE_URL` to
-`http://localhost:3000`, and add `http://localhost:3000/auth/callback` as an
-allowed redirect URL in your Supabase project's auth settings.
+`http://localhost:3000`. In production, use the canonical public origin (for
+example, `https://www.interndex.dev`), not a temporary Vercel deployment URL.
+Add the matching `/auth/callback` URL as an allowed redirect URL in your
+Supabase project's auth settings.
 
 ### Company logos (optional)
 
-JobTrack can show an employer's logo beside its name, using
+Interndex can show an employer's logo beside its name, using
 [Logo.dev](https://www.logo.dev). It's an enhancement and nothing depends on
 it: leave it unconfigured and every screen works exactly as it does now, with a
 letter in a small rounded box standing in for each logo.
@@ -241,7 +243,7 @@ To turn it on, set `NEXT_PUBLIC_LOGO_DEV_TOKEN` to a Logo.dev **publishable**
 key (it starts with `pk_`) in `.env.local`, and in the same variable on Vercel
 for a deployment. That value is served to the browser, which is what a
 publishable key is for. Never put a Logo.dev secret or Brand API key in this
-application — JobTrack only ever uses the Logo API's plain image URLs, and
+application — Interndex only ever uses the Logo API's plain image URLs, and
 never calls the Search or Brand APIs.
 
 A logo appears only where an application has a **company website** saved
@@ -251,7 +253,7 @@ assistant, it fills the domain in for you as part of saving — ask it to save a
 KPMG internship and it records `kpmg.com` without being asked again — and it
 fills in a missing one when it next updates an older application.
 
-JobTrack itself never works a domain out: it keeps no list of employers, calls
+Interndex itself never works a domain out: it keeps no list of employers, calls
 no AI of its own, and stores only what it was given. If an employer can't be
 identified confidently the application still saves, and keeps the lettermark
 until you or your assistant add a domain.

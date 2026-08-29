@@ -41,7 +41,7 @@ function response(status: number, body: unknown) {
   });
 }
 
-describe("the record sent to JobTrack", () => {
+describe("the record sent to Interndex", () => {
   it("carries the confirmed values and the extracted extras", () => {
     expect(buildCaptureRecord(extracted, confirmation)).toEqual({
       company: "IBM",

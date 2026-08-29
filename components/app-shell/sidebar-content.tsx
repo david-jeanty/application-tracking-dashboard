@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
+import { InterndexLogo } from "@/components/branding/interndex-logo";
 import { signOutAction } from "@/lib/auth/actions";
 import { cn } from "@/lib/utils";
 import {
@@ -127,11 +128,12 @@ export function SidebarContent({
   return (
     <div className="flex h-full flex-col">
       <Link
-        className="font-wordmark px-5 py-6 text-[26px] leading-none text-foreground"
+        aria-label="Interndex"
+        className="inline-flex px-5 py-6"
         href={identity.kind === "demo" ? "/demo" : "/dashboard"}
         onClick={onNavigate}
       >
-        JobTrack
+        <InterndexLogo size="medium" />
       </Link>
 
       <nav

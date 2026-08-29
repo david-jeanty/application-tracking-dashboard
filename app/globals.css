@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
-  JobTrack design foundations
+  Interndex design foundations
   ---------------------------
   Two independent axes:
 
@@ -20,9 +20,9 @@
 
 :root,
 :root[data-accent="blue"] {
-  --accent-light: #315f96;
-  --accent-hover-light: #274d7b;
-  --accent-soft-light: #e7edf6;
+  --accent-light: #2f4e9e;
+  --accent-hover-light: #243f84;
+  --accent-soft-light: #e7ecf8;
   --accent-on-light: #ffffff;
 
   --accent-dark: #88ace0;
@@ -75,7 +75,7 @@
     control surface are three close, warm neutrals; what separates them is a
     shade and a hairline, not a shadow or a rounded card.
   */
-  --background: #f8f6f1;
+  --background: #f7f6f2;
   --surface: #fcfbf8;
   --surface-muted: #f3f0ea;
   --surface-raised: #fdfcfa;
@@ -171,7 +171,7 @@
   no-JavaScript `prefers-color-scheme` fallback below.
 */
 :root[data-theme="dark"] {
-  --background: #14161a;
+  --background: #0f131b;
   --surface: #1a1d22;
   --surface-muted: #202429;
   --surface-raised: #252a30;
@@ -231,7 +231,7 @@
 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #14161a;
+    --background: #0f131b;
     --surface: #1a1d22;
     --surface-muted: #202429;
     --surface-raised: #252a30;
@@ -293,7 +293,7 @@
 */
 @theme inline {
   --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-serif: var(--font-plex-serif), ui-serif, Georgia, serif;
+  --font-serif: ui-serif, Georgia, serif;
 
   --color-background: var(--background);
   --color-surface: var(--surface);
@@ -373,12 +373,26 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/*
-  The wordmark, and nothing else. The serif is identity rather than interface:
-  giving it a class rather than an element keeps it from creeping into headings.
-*/
-.font-wordmark {
-  font-family: var(--font-plex-serif), ui-serif, Georgia, serif;
+.interndex-logo-dark {
+  display: none;
+}
+
+:root[data-theme="dark"] .interndex-logo-light {
+  display: none;
+}
+
+:root[data-theme="dark"] .interndex-logo-dark {
+  display: block;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .interndex-logo-light {
+    display: none;
+  }
+
+  :root:not([data-theme="light"]) .interndex-logo-dark {
+    display: block;
+  }
 }
 
 button,

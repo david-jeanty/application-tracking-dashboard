@@ -1,11 +1,11 @@
 /**
- * The values that cross a context boundary inside JobTrack Capture.
+ * The values that cross a context boundary inside Interndex Capture.
  *
  * Three contexts exist and they trust each other unequally. The injected
  * collector runs inside a page nobody controls and may only hand back plain
  * data. The popup renders and takes the student's confirmation. The background
  * service worker is the only context that ever holds a token or speaks to
- * Supabase or JobTrack. These types are the shapes allowed to move between
+ * Supabase or Interndex. These types are the shapes allowed to move between
  * them, and `messages.ts` is where they are re-validated on arrival.
  */
 
@@ -275,7 +275,7 @@ export type ExtractedJob = {
   location?: string;
   /** Only when employer-owned data supplied it. Never the page host. */
   companyDomain?: string;
-  /** Plain text, already within JobTrack's stored limit. */
+  /** Plain text, already within Interndex's stored limit. */
   jobDescription?: string;
   /** Canonical posting URL when offered, otherwise the page URL. */
   jobUrl?: string;
@@ -306,7 +306,7 @@ export type CaptureConfirmation = {
   status: CaptureStatus;
 };
 
-/** Whether the extension currently holds usable JobTrack credentials. */
+/** Whether the extension currently holds usable Interndex credentials. */
 export type ConnectionState = { connected: boolean };
 
 /**

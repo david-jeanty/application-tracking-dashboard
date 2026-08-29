@@ -67,7 +67,7 @@ export default async function ConsentPage({
         </span>
 
         <h1 className="mt-5 text-xl font-semibold text-foreground">
-          Allow {data.client.name} to use your tracker?
+          Allow {data.client.name} to connect to Interndex?
         </h1>
         <p className="mt-2 text-sm leading-6 text-foreground-secondary">
           Signed in as <span className="font-medium">{data.user.email}</span>.
@@ -92,7 +92,7 @@ export default async function ConsentPage({
           </ul>
           <p className="mt-3 text-xs leading-5 text-foreground-muted">
             {ASSISTANT_OWNERSHIP_NOTE} You can disconnect it at any time from
-            JobTrack settings.
+            Interndex settings.
           </p>
         </div>
 

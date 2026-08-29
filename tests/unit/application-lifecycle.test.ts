@@ -44,7 +44,7 @@ describe("mapping the ten exact statuses onto five stages", () => {
     expect(seen.slice().sort()).toEqual([...APPLICATION_STATUSES].sort());
   });
 
-  it("groups the statuses the way JobTrack describes them", () => {
+  it("groups the statuses the way Interndex describes them", () => {
     expect(stageForStatus("Interested")).toBe("saved");
     expect(stageForStatus("Preparing")).toBe("saved");
     expect(stageForStatus("Applied")).toBe("applied");

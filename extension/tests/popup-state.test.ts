@@ -118,18 +118,18 @@ describe("reading the page", () => {
   it("reports a page it could not read at all", () => {
     const state = reduce(
       { view: "extracting" },
-      { type: "extraction_failed", message: "JobTrack cannot read this page." },
+      { type: "extraction_failed", message: "Interndex cannot read this page." },
     );
 
     expect(state).toEqual({
       view: "extraction_failed",
-      message: "JobTrack cannot read this page.",
+      message: "Interndex cannot read this page.",
     });
   });
 
   it.each([
     [[], "Job description found"],
-    [["description_too_long"], "Job description found, shortened to fit JobTrack."],
+    [["description_too_long"], "Job description found, shortened to fit Interndex."],
     [["no_job_posting_found"], "No job details found on this page — add them below."],
   ] as const)("describes what it found", (warnings, expected) => {
     expect(
@@ -235,7 +235,7 @@ describe("saving", () => {
     );
   });
 
-  it("keeps the typed form when JobTrack fails", () => {
+  it("keeps the typed form when Interndex fails", () => {
     const state = reduce(saving(), {
       type: "save_result",
       outcome: { kind: "server_error" },

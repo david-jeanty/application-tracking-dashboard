@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { describeLifecycle, type Lifecycle } from "@/lib/applications/lifecycle";
 
 /**
- * JobTrack's lifecycle rail.
+ * Interndex's lifecycle rail.
  *
  * A coarse visual summary of how far an application has travelled, led by the
  * stage names rather than by the dots: the labels are the information, and the

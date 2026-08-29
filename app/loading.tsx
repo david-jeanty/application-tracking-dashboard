@@ -8,7 +8,7 @@ export default function Loading() {
     >
       <div className="flex items-center gap-3">
         <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
-        <span>Loading JobTrack…</span>
+        <span>Loading Interndex…</span>
       </div>
     </div>
   );
