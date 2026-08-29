@@ -10,12 +10,10 @@ import {
   activityDayLabel,
   groupActivityByDay,
   type ActivityEntry,
-  type WeekSummary,
 } from "@/lib/dashboard/calculate";
 import type { SavedOpportunity } from "@/lib/dashboard/saved-opportunities";
 import { formatDateOnly } from "@/lib/dates/date-only";
 import {
-  analyticsPath,
   applicationPath,
   applicationsPath,
   type WorkspaceBasePath,
@@ -77,9 +75,13 @@ export function SectionLink({
  * hold its shape when it does.
  */
 export function SearchSummaryMetrics({
+  analyticsHref,
   metrics,
+  statusChanges,
 }: {
-  metrics: { label: string; value: number }[];
+  analyticsHref?: string;
+  metrics: { label: string; value: number; weeklyChange?: string }[];
+  statusChanges?: number;
 }) {
   const dividers = [
     "border-b border-r sm:border-b-0",
@@ -89,27 +91,57 @@ export function SearchSummaryMetrics({
   ];
 
   return (
-    <dl className="grid grid-cols-2 sm:grid-cols-4">
-      {metrics.map((metric, index) => (
-        /*
-          The term precedes its description in the DOM, which is what a
-          description list means and what a screen reader reads. The visual
-          order — number first, label under it — is produced by reversing the
-          column, so the markup and the design can each be right.
-        */
+    <div>
+      <dl className="grid grid-cols-2 sm:grid-cols-4">
+        {metrics.map((metric, index) => (
+          /*
+            The term precedes its description in the DOM, which is what a
+            description list means and what a screen reader reads. CSS order
+            gives the number visual priority without reversing that meaning.
+          */
+          <div
+            className={`flex min-h-24 flex-col justify-center gap-1 border-border px-4 py-3.5 sm:min-h-28 sm:px-5 ${dividers[index] ?? ""}`}
+            key={metric.label}
+          >
+            <dt className="order-2 text-[12px] font-medium text-foreground-secondary sm:text-[13px]">
+              {metric.label}
+            </dt>
+            <dd className="order-1 text-[25px] font-medium leading-none tabular-nums tracking-tight text-foreground sm:text-[28px]">
+              {metric.value}
+            </dd>
+            {metric.weeklyChange ? (
+              <p
+                aria-label={`${metric.label}: ${metric.weeklyChange}`}
+                className="order-3 mt-0.5 text-[11px] leading-4 text-foreground-muted sm:text-[12px]"
+              >
+                {metric.weeklyChange}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </dl>
+
+      {analyticsHref ? (
         <div
-          className={`flex min-h-20 flex-col-reverse justify-center gap-1.5 border-border px-4 py-3.5 sm:min-h-24 sm:px-5 ${dividers[index] ?? ""}`}
-          key={metric.label}
+          className={`flex min-h-10 items-center px-4 py-2 sm:px-5 ${
+            statusChanges ? "justify-between gap-4" : "justify-end"
+          } border-t border-border`}
         >
-          <dt className="text-[12px] font-medium text-foreground-secondary sm:text-[13px]">
-            {metric.label}
-          </dt>
-          <dd className="text-[25px] font-medium leading-none tabular-nums tracking-tight text-foreground sm:text-[28px]">
-            {metric.value}
-          </dd>
+          {statusChanges ? (
+            <p
+              aria-label={`${statusChanges} ${
+                statusChanges === 1 ? "progress update" : "progress updates"
+              } this week`}
+              className="text-[12px] text-foreground-secondary"
+            >
+              {statusChanges} {statusChanges === 1 ? "progress update" : "progress updates"}
+              <span aria-hidden="true"> this week ·</span>
+            </p>
+          ) : null}
+          <SectionLink href={analyticsHref}>View analytics</SectionLink>
         </div>
-      ))}
-    </dl>
+      ) : null}
+    </div>
   );
 }
 
@@ -280,70 +312,6 @@ export function RecentActivity({
           ))}
         </div>
       )}
-    </section>
-  );
-}
-
-/**
- * The week so far, stated and not scored.
- *
- * One flat row. No target, no streak, no comparison with last week: a quiet
- * week in a job search is usually a fact about employers, and turning it into
- * a number a student is failing to hit would make this the section they avoid.
- */
-export function ThisWeek({
-  basePath = "",
-  week,
-  weekStartLabel,
-}: {
-  basePath?: WorkspaceBasePath;
-  week: WeekSummary;
-  weekStartLabel: string;
-}) {
-  // The noun agrees with the number. "1 interviews reached" is the kind of
-  // seam that makes a page read as generated rather than written.
-  const metrics = [
-    { label: "submitted", value: week.submitted },
-    {
-      label: week.statusChanges === 1 ? "status change" : "status changes",
-      value: week.statusChanges,
-    },
-    {
-      label: week.interviews === 1 ? "interview reached" : "interviews reached",
-      value: week.interviews,
-    },
-  ];
-
-  return (
-    <section
-      aria-labelledby="dashboard-week"
-      className="rounded-surface border border-border bg-surface-muted/45 px-5 py-4 sm:px-6 sm:py-5"
-    >
-      <SectionHeading
-        action={
-          <SectionLink href={analyticsPath(basePath)}>View analytics</SectionLink>
-        }
-        id="dashboard-week"
-      >
-        This week
-      </SectionHeading>
-
-      <dl className="flex flex-wrap gap-x-8 gap-y-3 pt-4">
-        {metrics.map((metric) => (
-          <div className="flex items-baseline gap-1.5" key={metric.label}>
-            <dd className="text-[20px] font-medium tabular-nums leading-none text-foreground">
-              {metric.value}
-            </dd>
-            <dt className="text-[14px] text-foreground-secondary">
-              {metric.label}
-            </dt>
-          </div>
-        ))}
-      </dl>
-
-      <p className="mt-2.5 text-[12px] text-foreground-muted">
-        Since {weekStartLabel}
-      </p>
     </section>
   );
 }

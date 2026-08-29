@@ -35,6 +35,9 @@ export function DashboardLoading() {
             <Line className="h-2.5 w-16" />
           </div>
         ))}
+        <div className="col-span-2 h-10 animate-pulse border-t border-border px-4 py-3 sm:col-span-4 sm:px-5">
+          <Line className="ml-auto h-2.5 w-24" />
+        </div>
       </div>
 
       <section className="overflow-hidden rounded-surface border border-border bg-surface">

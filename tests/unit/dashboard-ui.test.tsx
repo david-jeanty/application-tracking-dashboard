@@ -4,7 +4,6 @@ import {
   RecentActivity,
   SavedOpportunities,
   SearchSummaryMetrics,
-  ThisWeek,
   Upcoming,
 } from "@/components/dashboard/dashboard-sections";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
@@ -80,15 +79,15 @@ function readyDashboard(
     activity: [activityEntry()],
     week: {
       weekStart: "2026-08-24",
-      submitted: 6,
-      statusChanges: 3,
+      submitted: 2,
+      statusChanges: 4,
       interviews: 1,
     },
   };
 }
 
 describe("dashboard composition", () => {
-  it("places meaningful Upcoming above the working grid and This week", () => {
+  it("places meaningful Upcoming above the working grid without a standalone week module", () => {
     const { container } = render(
       <DashboardView dashboard={readyDashboard()} today="2026-08-26" />,
     );
@@ -101,7 +100,6 @@ describe("dashboard composition", () => {
       "Upcoming",
       "Saved opportunities",
       "Recent activity",
-      "This week",
     ]);
   });
 
@@ -162,6 +160,14 @@ describe("dashboard composition", () => {
     expect(summary.getByText("9")).toBeInTheDocument();
     expect(summary.getByText("2")).toBeInTheDocument();
     expect(summary.queryByText("30")).toBeNull();
+    expect(summary.getByText("+2 submitted this week")).toBeInTheDocument();
+    expect(summary.getByText("+1 reached this week")).toBeInTheDocument();
+    expect(
+      summary.getByLabelText("4 progress updates this week"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "This week" }),
+    ).toBeNull();
   });
 
   it("keeps every working action as a keyboard-reachable link", () => {
@@ -258,6 +264,54 @@ describe("your search", () => {
 
     expect(screen.getByText("142")).toBeInTheDocument();
     expect(screen.getByText("0")).toBeInTheDocument();
+  });
+
+  it("shows supported weekly movement and the shared progress context", () => {
+    render(
+      <SearchSummaryMetrics
+        analyticsHref="/analytics"
+        metrics={[
+          { label: "Applications", value: 142 },
+          {
+            label: "Submitted",
+            value: 118,
+            weeklyChange: "+2 submitted this week",
+          },
+          {
+            label: "Interviews",
+            value: 9,
+            weeklyChange: "+1 reached this week",
+          },
+          { label: "Offers", value: 2 },
+        ]}
+        statusChanges={4}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText("Submitted: +2 submitted this week"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Interviews: +1 reached this week"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("4 progress updates this week")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /View analytics/ })).toHaveAttribute(
+      "href",
+      "/analytics",
+    );
+  });
+
+  it("does not invent zero-change copy", () => {
+    render(
+      <SearchSummaryMetrics
+        analyticsHref="/analytics"
+        metrics={metrics}
+        statusChanges={0}
+      />,
+    );
+
+    expect(screen.queryByText(/this week/i)).toBeNull();
+    expect(screen.getByRole("link", { name: /View analytics/ })).toBeInTheDocument();
   });
 });
 
@@ -397,69 +451,6 @@ describe("recent activity", () => {
     render(<RecentActivity entries={[]} today="2026-08-26" />);
 
     expect(screen.getByText(/nothing has changed yet/i)).toBeInTheDocument();
-  });
-});
-
-describe("this week", () => {
-  const week = {
-    weekStart: "2026-08-24",
-    submitted: 6,
-    statusChanges: 3,
-    interviews: 1,
-  };
-
-  it("reports the three metrics the data supports honestly", () => {
-    render(<ThisWeek week={week} weekStartLabel="Aug 24, 2026" />);
-
-    expect(screen.getByText("submitted")).toBeInTheDocument();
-    expect(screen.getByText("status changes")).toBeInTheDocument();
-    expect(screen.getByText("interview reached")).toBeInTheDocument();
-    expect(screen.getByText("Since Aug 24, 2026")).toBeInTheDocument();
-  });
-
-  it("agrees its nouns with its numbers", () => {
-    render(
-      <ThisWeek
-        week={{ ...week, statusChanges: 1, interviews: 1 }}
-        weekStartLabel="Aug 24, 2026"
-      />,
-    );
-
-    expect(screen.getByText("status change")).toBeInTheDocument();
-    expect(screen.getByText("interview reached")).toBeInTheDocument();
-    expect(screen.queryByText("interviews reached")).toBeNull();
-  });
-
-  it("uses plural nouns beyond one", () => {
-    render(
-      <ThisWeek
-        week={{ ...week, statusChanges: 3, interviews: 4 }}
-        weekStartLabel="Aug 24, 2026"
-      />,
-    );
-
-    expect(screen.getByText("status changes")).toBeInTheDocument();
-    expect(screen.getByText("interviews reached")).toBeInTheDocument();
-  });
-
-  it("offers the quiet analytics link", () => {
-    render(<ThisWeek week={week} weekStartLabel="Aug 24, 2026" />);
-
-    expect(
-      screen.getByRole("link", { name: /view analytics/i }).getAttribute("href"),
-    ).toBe("/analytics");
-  });
-
-  it("shows honest zeros for a quiet week, with nothing to beat", () => {
-    render(
-      <ThisWeek
-        week={{ ...week, submitted: 0, statusChanges: 0, interviews: 0 }}
-        weekStartLabel="Aug 24, 2026"
-      />,
-    );
-
-    expect(screen.getAllByText("0")).toHaveLength(3);
-    expect(screen.queryByText(/streak|goal|target|last week|score/i)).toBeNull();
   });
 });
 

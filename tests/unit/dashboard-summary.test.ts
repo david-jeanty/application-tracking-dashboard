@@ -335,7 +335,7 @@ describe("the dashboard page contract", () => {
 
   it("renders Upcoming only when there is something in it", () => {
     // The section is a utility, not the page's purpose. At zero items the
-    // dashboard simply ends after This week.
+    // dashboard lets the working row follow the summary strip.
     expect(page).toContain("dashboard.attention.length > 0");
   });
 
@@ -356,12 +356,17 @@ describe("the dashboard page contract", () => {
     expect(sections).not.toMatch(/How is the search going overall/);
   });
 
-  it("links to analytics from This week instead", () => {
+  it("links to analytics from the summary pulse", () => {
     // The href is built from the workspace's base path so the demo's copy of
     // this section stays inside the demo; in the signed-in workspace the base
     // is empty and it resolves to `/analytics` exactly as before.
-    expect(sections).toContain("analyticsPath(basePath)");
+    expect(page).toContain("analyticsPath(basePath)");
     expect(sections).toContain("View analytics");
+  });
+
+  it("does not retain a standalone This week module", () => {
+    expect(page).not.toContain("<ThisWeek");
+    expect(sections).not.toContain("export function ThisWeek");
   });
 
   it("does not retain a pipeline link after replacing that module", () => {

@@ -2,13 +2,16 @@ import {
   RecentActivity,
   SavedOpportunities,
   SearchSummaryMetrics,
-  ThisWeek,
   Upcoming,
 } from "@/components/dashboard/dashboard-sections";
 import { ButtonLink } from "@/components/ui/button";
 import type { DashboardSummary } from "@/lib/dashboard/summary";
 import { formatDateOnly } from "@/lib/dates/date-only";
-import { applicationsPath, type WorkspaceBasePath } from "@/lib/demo/paths";
+import {
+  analyticsPath,
+  applicationsPath,
+  type WorkspaceBasePath,
+} from "@/lib/demo/paths";
 
 /**
  * The page title, with today's date sitting quietly opposite it.
@@ -102,12 +105,28 @@ export function DashboardView({
           Your search
         </h2>
         <SearchSummaryMetrics
+          analyticsHref={analyticsPath(basePath)}
           metrics={[
             { label: "Applications", value: search.applications },
-            { label: "Submitted", value: search.submitted },
-            { label: "Interviews", value: search.interviews },
+            {
+              label: "Submitted",
+              value: search.submitted,
+              weeklyChange:
+                dashboard.week.submitted > 0
+                  ? `+${dashboard.week.submitted} submitted this week`
+                  : undefined,
+            },
+            {
+              label: "Interviews",
+              value: search.interviews,
+              weeklyChange:
+                dashboard.week.interviews > 0
+                  ? `+${dashboard.week.interviews} reached this week`
+                  : undefined,
+            },
             { label: "Offers", value: search.offers },
           ]}
+          statusChanges={dashboard.week.statusChanges}
         />
       </section>
 
@@ -136,12 +155,6 @@ export function DashboardView({
           today={today}
         />
       </div>
-
-      <ThisWeek
-        basePath={basePath}
-        week={dashboard.week}
-        weekStartLabel={formatDateOnly(dashboard.week.weekStart)}
-      />
     </div>
   );
 }

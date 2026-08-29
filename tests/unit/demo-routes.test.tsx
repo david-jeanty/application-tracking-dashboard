@@ -123,7 +123,6 @@ describe("the demo dashboard", () => {
       "Your search",
       "Saved opportunities",
       "Recent activity",
-      "This week",
       "Upcoming",
     ]) {
       expect(
@@ -140,7 +139,6 @@ describe("the demo dashboard", () => {
       "Upcoming",
       "Saved opportunities",
       "Recent activity",
-      "This week",
     ]);
   });
 
