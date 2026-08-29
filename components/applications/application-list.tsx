@@ -14,10 +14,32 @@ export { ApplicationRecords } from "@/components/applications/application-record
 
 export function ApplicationsListLoading() {
   return (
-    <div aria-label="Loading applications" className="space-y-px" role="status">
-      {[0, 1, 2, 3].map((item) => (
-        <div className="h-24 animate-pulse bg-surface-muted" key={item} />
-      ))}
+    <div
+      aria-label="Loading applications"
+      className="xl:grid xl:grid-cols-[minmax(0,7fr)_minmax(17rem,3fr)] xl:items-start xl:gap-6"
+      role="status"
+    >
+      <div>
+        <div className="h-6 animate-pulse border-b border-border bg-surface-muted/70" />
+        <div className="hidden h-8 border-b border-border md:block" />
+        {[0, 1, 2, 3, 4].map((item) => (
+          <div
+            className="grid min-h-[84px] animate-pulse items-center gap-5 border-b border-border px-3 py-3 md:grid-cols-[minmax(0,42fr)_minmax(13rem,36fr)_minmax(7rem,22fr)]"
+            key={item}
+          >
+            <div className="flex items-center gap-3">
+              <div className="size-10 rounded-control bg-surface-muted" />
+              <div className="space-y-2">
+                <div className="h-3.5 w-40 rounded-control bg-surface-muted" />
+                <div className="h-3 w-24 rounded-control bg-surface-muted" />
+              </div>
+            </div>
+            <div className="hidden h-7 rounded-control bg-surface-muted md:block" />
+            <div className="hidden h-7 rounded-control bg-surface-muted md:block" />
+          </div>
+        ))}
+      </div>
+      <div className="hidden h-[430px] animate-pulse rounded-surface border border-border bg-surface-muted xl:block" />
       <span className="sr-only">Loading applications…</span>
     </div>
   );

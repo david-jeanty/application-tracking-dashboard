@@ -114,11 +114,26 @@ describe("company branding across the product", () => {
 
       const { container } = render(await ApplicationList({}));
 
-      // One record per application, at every width: the three regions reflow
-      // rather than a second markup being rendered for phones.
+      // One logo belongs to the record row and one to the selected-record
+      // preview. The preview is desktop context, not a second mobile row.
       const sources = logoSources(container);
-      expect(sources).toHaveLength(1);
-      expect(sources[0]).toContain(`https://${LOGO_DEV_HOST}/shopify.com?`);
+      expect(sources).toHaveLength(2);
+      expect(sources).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining(`https://${LOGO_DEV_HOST}/shopify.com?`),
+          expect.stringContaining(`https://${LOGO_DEV_HOST}/shopify.com?`),
+        ]),
+      );
+      expect(
+        logoSources(screen.getByRole("list", { name: "Applications" })),
+      ).toHaveLength(1);
+      expect(
+        logoSources(
+          screen.getByRole("complementary", {
+            name: "Selected application preview",
+          }),
+        ),
+      ).toHaveLength(1);
       // The role is what links to the record; the company sits beneath it.
       expect(
         screen.getByRole("link", { name: "Data Analyst Intern" }),

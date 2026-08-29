@@ -127,7 +127,7 @@ export default async function ApplicationDetailPage({
 
       {/* Part of the page rather than a boxed widget on top of it. */}
       {lifecycle ? (
-        <div className="mt-10 border-b border-border pb-6">
+        <div className="mt-8 border-b border-border pb-5">
           <LifecycleRail lifecycle={lifecycle} size="detail" />
         </div>
       ) : null}
@@ -158,14 +158,14 @@ export default async function ApplicationDetailPage({
         It stacks below `xl`, where two columns would leave the controls
         cramped rather than convenient.
       */}
-      <div className="mt-2 grid gap-10 xl:grid-cols-[minmax(0,63fr)_minmax(0,37fr)] xl:gap-12">
+      <div className="mt-2 grid gap-8 xl:grid-cols-[minmax(0,63fr)_minmax(0,37fr)] xl:gap-10">
         <ApplicationDetail application={application} />
         {/*
           Stacked, the working area comes first: there is no reason to scroll
           past the whole record to change a status on a phone. Side by side it
           returns to the right, where the eye expects the controls.
         */}
-        <div className="order-first xl:order-none xl:border-l xl:border-border xl:pl-12">
+        <div className="order-first xl:order-none xl:border-l xl:border-border xl:pl-10">
           {/* Renders nothing for an archived application; the rule lives inside. */}
           <QuickUpdate application={application} />
           <ApplicationRecordMeta application={application} />

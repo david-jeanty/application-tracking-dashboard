@@ -74,7 +74,24 @@ async function renderList(options: {
 beforeEach(() => {
   listActiveApplications.mockReset();
   listStatusHistory.mockReset();
+  setDesktopViewport(true);
 });
+
+function setDesktopViewport(matches: boolean) {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+}
 
 /** The application records: the list's own children, not the rails inside. */
 function records(): HTMLElement[] {
@@ -134,8 +151,8 @@ describe("what a record shows", () => {
   });
 });
 
-describe("the inline record disclosure", () => {
-  it("opens compact context beneath the selected production row", () => {
+describe("the desktop selected-record workspace", () => {
+  it("starts with exactly one selected record preview", () => {
     render(
       <ApplicationRecords
         applications={[application({ application_deadline: "2026-09-03" })]}
@@ -143,34 +160,20 @@ describe("the inline record disclosure", () => {
       />,
     );
 
-    const disclosure = screen.getByRole("button", {
-      name: "Show details for Business Analyst Intern",
+    const previews = screen.getAllByRole("complementary", {
+      name: "Selected application preview",
     });
-    expect(disclosure).toHaveAttribute("aria-expanded", "false");
-    fireEvent.click(records()[0]);
-
-    const context = screen.getByRole("region", {
-      name: "Business Analyst Intern",
-    });
-    expect(context).toHaveTextContent("Business Analysis");
-    expect(context).toHaveTextContent("Hybrid");
-    expect(context).toHaveTextContent("Sep 3, 2026");
-    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
-      "href",
-      "/applications/11111111-1111-4111-8111-111111111111/edit",
-    );
-    expect(screen.getByRole("link", { name: "Open record" })).toHaveAttribute(
+    expect(previews).toHaveLength(1);
+    expect(previews[0]).toHaveTextContent("Business Analyst Intern");
+    expect(previews[0]).toHaveTextContent("Business Analysis");
+    expect(previews[0]).toHaveTextContent("Hybrid");
+    expect(screen.getByRole("link", { name: "Open full record" })).toHaveAttribute(
       "href",
       "/applications/11111111-1111-4111-8111-111111111111",
     );
-    expect(
-      screen.getByRole("button", {
-        name: "Hide details for Business Analyst Intern",
-      }),
-    ).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("keeps only one record expanded at a time without introducing a side panel", () => {
+  it("updates the one preview when another row is selected", () => {
     render(
       <ApplicationRecords
         applications={[
@@ -184,41 +187,133 @@ describe("the inline record disclosure", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Show details for Business Analyst Intern",
-      }),
+    const strategyRow = screen.getByRole("link", { name: "Strategy Intern" });
+    expect(fireEvent.click(strategyRow)).toBe(false);
+
+    const preview = screen.getByRole("complementary", {
+      name: "Selected application preview",
+    });
+    expect(within(preview).getByRole("heading", { name: "Strategy Intern" })).toBeInTheDocument();
+    expect(within(preview).queryByRole("heading", { name: "Business Analyst Intern" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("complementary")).toHaveLength(1);
+    expect(strategyRow).toHaveAttribute("aria-current", "true");
+  });
+
+  it("falls back to a valid selected preview when filtering removes the selection", () => {
+    const first = application();
+    const second = application({
+      id: "22222222-2222-4222-8222-222222222222",
+      original_job_title: "Strategy Intern",
+    });
+    const view = render(
+      <ApplicationRecords applications={[first, second]} history={[]} />,
     );
+
+    fireEvent.click(screen.getByRole("link", { name: "Strategy Intern" }));
+    view.rerender(<ApplicationRecords applications={[first]} history={[]} />);
+
+    const preview = screen.getByRole("complementary", {
+      name: "Selected application preview",
+    });
+    expect(within(preview).getByRole("heading", { name: "Business Analyst Intern" })).toBeInTheDocument();
+    expect(records()).toHaveLength(1);
+  });
+
+  it("keeps the desktop demo preview read-only without a detail-route link", () => {
+    const { container } = render(
+      <ApplicationRecords
+        applications={[
+          application(),
+          application({
+            id: "22222222-2222-4222-8222-222222222222",
+            original_job_title: "Strategy Intern",
+          }),
+        ]}
+        basePath="/demo"
+        history={[]}
+      />,
+    );
+
+    expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /archive|restore|delete/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open full record" })).not.toBeInTheDocument();
     expect(
-      screen.getByRole("region", { name: "Business Analyst Intern" }),
-    ).toBeInTheDocument();
+      container.querySelector('a[href^="/demo/applications/"]'),
+    ).toBeNull();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Show details for Strategy Intern" }),
     );
     expect(
-      screen.queryByRole("region", { name: "Business Analyst Intern" }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Strategy Intern" })).toBeInTheDocument();
-    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+      within(
+        screen.getByRole("complementary", {
+          name: "Selected application preview",
+        }),
+      ).getByRole("heading", { name: "Strategy Intern" }),
+    ).toBeInTheDocument();
   });
 
-  it("keeps the demo disclosure read-only while preserving the demo record link", () => {
-    render(
-      <ApplicationRecords applications={[application()]} basePath="/demo" history={[]} />,
+  it("expands demo record context in place below desktop", () => {
+    setDesktopViewport(false);
+    const { container } = render(
+      <ApplicationRecords
+        applications={[
+          application({
+            application_deadline: "2026-09-03",
+            next_action: "Follow up",
+            next_action_due_date: "2026-08-28",
+          }),
+        ]}
+        basePath="/demo"
+        history={[]}
+      />,
     );
 
-    fireEvent.click(
+    const row = screen.getByRole("button", {
+      name: "Show details for Business Analyst Intern",
+    });
+    expect(row).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(row);
+
+    const context = screen.getByRole("region", {
+      name: "Business Analyst Intern details",
+    });
+    expect(context).toHaveTextContent("Business Analysis");
+    expect(context).toHaveTextContent("Hybrid");
+    expect(context).toHaveTextContent("Sep 3, 2026");
+    expect(context).toHaveTextContent("Follow up");
+    expect(
       screen.getByRole("button", {
-        name: "Show details for Business Analyst Intern",
+        name: "Hide details for Business Analyst Intern",
       }),
-    );
+    ).toHaveAttribute("aria-expanded", "true");
+    expect(
+      container.querySelector('a[href^="/demo/applications/"]'),
+    ).toBeNull();
+  });
 
-    expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open record" })).toHaveAttribute(
+  it("uses the production detail route below desktop instead of activating the preview", () => {
+    setDesktopViewport(false);
+    render(<ApplicationRecords applications={[application()]} history={[]} />);
+
+    const row = screen.getByRole("link", { name: "Business Analyst Intern" });
+    expect(row).toHaveAttribute(
       "href",
-      "/demo/applications/11111111-1111-4111-8111-111111111111",
+      "/applications/11111111-1111-4111-8111-111111111111",
     );
+    expect(fireEvent.click(row)).toBe(true);
+    expect(
+      screen.getByRole("complementary", { name: "Selected application preview" }),
+    ).toHaveClass("hidden", "xl:block");
+  });
+
+  it("makes every row a labelled keyboard-focusable record control", () => {
+    render(<ApplicationRecords applications={[application()]} history={[]} />);
+
+    const row = screen.getByRole("link", { name: "Business Analyst Intern" });
+    row.focus();
+    expect(row).toHaveFocus();
+    expect(row).toHaveAttribute("aria-controls");
   });
 });
 

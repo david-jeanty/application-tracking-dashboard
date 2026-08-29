@@ -79,8 +79,8 @@ describe("the shared applications list", () => {
     ).toHaveAttribute("href", "/applications/11111111-1111-4111-8111-111111111111");
   });
 
-  it("links inside the demo when it is", () => {
-    render(
+  it("keeps demo records on the existing Applications surface", () => {
+    const { container } = render(
       <ApplicationRecords
         applications={[application()]}
         basePath="/demo"
@@ -89,11 +89,27 @@ describe("the shared applications list", () => {
     );
 
     expect(
-      screen.getByRole("link", { name: "Business Analyst Intern" }),
-    ).toHaveAttribute(
-      "href",
-      "/demo/applications/11111111-1111-4111-8111-111111111111",
+      screen.getByRole("button", {
+        name: "Show details for Business Analyst Intern",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      container.querySelector('a[href^="/demo/applications/"]'),
+    ).toBeNull();
+  });
+
+  it("keeps the public homepage excerpt static", () => {
+    const { container } = render(
+      <ApplicationRecords
+        applications={[application()]}
+        basePath="/demo"
+        history={[]}
+        showSummary={false}
+      />,
     );
+
+    expect(container.querySelector("a")).toBeNull();
+    expect(container.querySelector("button")).toBeNull();
   });
 });
 
