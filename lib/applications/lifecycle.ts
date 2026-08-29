@@ -50,6 +50,45 @@ export const LIFECYCLE_STAGES = [
   statuses: readonly ApplicationStatus[];
 }[];
 
+/**
+ * The calmer four-milestone projection used by the Applications index.
+ *
+ * Screening and Assessment remain exact statuses, but both sit within the
+ * broader Applied milestone here. The five-stage detail rail above remains
+ * unchanged for surfaces where that finer distinction has room to be useful.
+ */
+export const APPLICATION_INDEX_STAGES = [
+  {
+    id: "saved",
+    label: "Saved",
+    shortLabel: "Saved",
+    statuses: ["Interested", "Preparing"],
+  },
+  {
+    id: "applied",
+    label: "Applied",
+    shortLabel: "Applied",
+    statuses: ["Applied", "Screening", "Assessment"],
+  },
+  {
+    id: "interview",
+    label: "Interview",
+    shortLabel: "Interview",
+    statuses: ["Interview"],
+  },
+  {
+    id: "outcome",
+    label: "Outcome",
+    shortLabel: "Outcome",
+    statuses: ["Offer", "Accepted", "Rejected", "Withdrawn"],
+  },
+] as const satisfies readonly {
+  id: LifecycleStageId;
+  label: string;
+  shortLabel: string;
+  statuses: readonly ApplicationStatus[];
+}[];
+
 export type LifecycleStageId = (typeof LIFECYCLE_STAGES)[number]["id"];
 
 export type LifecycleStage = {
@@ -130,6 +169,35 @@ export function buildLifecycle(
   return { stages, connectors };
 }
 
+/** Builds the four visible milestones used in index rows and their preview. */
+export function buildApplicationIndexLifecycle(
+  currentStatus: ApplicationStatus,
+  everHeld: Iterable<ApplicationStatus> = [],
+): Lifecycle {
+  const held = new Set<ApplicationStatus>(everHeld);
+  held.add(currentStatus);
+
+  const stages: LifecycleStage[] = APPLICATION_INDEX_STAGES.map((stage) => ({
+    id: stage.id,
+    label: stage.label,
+    shortLabel: stage.shortLabel,
+    reached:
+      stage.id === "saved" ||
+      (stage.statuses as readonly ApplicationStatus[]).some((status) =>
+        held.has(status),
+      ),
+    current: (stage.statuses as readonly ApplicationStatus[]).includes(
+      currentStatus,
+    ),
+  }));
+
+  const connectors = stages
+    .slice(0, -1)
+    .map((stage, index) => stage.reached && stages[index + 1].reached);
+
+  return { stages, connectors };
+}
+
 /**
  * The set of statuses each application has ever held, from one pass over the
  * whole of a user's history.
@@ -171,6 +239,26 @@ export function buildLifecycles(
     applications.map((application) => [
       application.id,
       buildLifecycle(
+        application.current_status,
+        reached.get(application.id) ?? [],
+      ),
+    ]),
+  );
+}
+
+/** The four-milestone rail for every application in an Applications index. */
+export function buildApplicationIndexLifecycles(
+  applications: readonly { id: string; current_status: ApplicationStatus }[],
+  events: readonly ApplicationStatusEvent[] | null,
+): Map<string, Lifecycle> | null {
+  if (!events) return null;
+
+  const reached = reachedStatusesByApplication(events);
+
+  return new Map(
+    applications.map((application) => [
+      application.id,
+      buildApplicationIndexLifecycle(
         application.current_status,
         reached.get(application.id) ?? [],
       ),

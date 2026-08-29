@@ -34,8 +34,8 @@ const dataset = buildDemoDataset(demoToday());
 /**
  * The record rows, and not the lifecycle stages inside them.
  *
- * Each record contains a rail, which is an ordered list of five stages, so a
- * `listitem` role query returns six elements per application.
+ * Each record contains a four-milestone ordered rail, so this helper targets
+ * only direct children of the Applications list instead of every list item.
  */
 function recordRows(container: HTMLElement): Element[] {
   return [
@@ -176,8 +176,13 @@ describe("the demo applications list", () => {
   it("renders the whole working search", async () => {
     const { container } = render(await applications());
 
+    const statusSummary = within(
+      screen.getByRole("list", { name: "Application status summary" }),
+    );
     expect(
-      screen.getByText(`${dataset.activeApplications.length} applications`),
+      within(statusSummary.getByText("All").closest("li") as HTMLElement).getByText(
+        String(dataset.activeApplications.length),
+      ),
     ).toBeInTheDocument();
     expect(recordRows(container)).toHaveLength(
       dataset.activeApplications.length,
@@ -216,6 +221,26 @@ describe("the demo applications list", () => {
     ).length;
     expect(recordRows(container)).toHaveLength(expected);
     expect(expected).toBeGreaterThanOrEqual(2);
+  });
+
+  it("narrows by a truthful status summary and keeps the status select in sync", async () => {
+    const { container } = render(
+      await applications({ status: "summary:applied" }),
+    );
+    const appliedStatuses = new Set(["Applied", "Screening", "Assessment"]);
+    const expected = dataset.activeApplications.filter((application) =>
+      appliedStatuses.has(application.current_status),
+    ).length;
+
+    expect(recordRows(container)).toHaveLength(expected);
+    expect(screen.getByLabelText("Filter by status")).toHaveValue(
+      "summary:applied",
+    );
+    expect(
+      within(
+        screen.getByRole("list", { name: "Application status summary" }),
+      ).getByText("Applied").closest("a"),
+    ).toHaveAttribute("aria-current", "page");
   });
 
   it("narrows by work term", async () => {

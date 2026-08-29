@@ -39,6 +39,11 @@ export default async function DemoApplicationsPage({
   // on it. The archived records are still in the dataset, and still in the
   // dashboard's totals and the analytics — they are simply not here.
   const applications = filterDemoApplications(demo.activeApplications, filters);
+  const summaryApplications = filterDemoApplications(demo.activeApplications, {
+    ...filters,
+    status: undefined,
+    statusSummary: undefined,
+  });
 
   return (
     <div className="space-y-6">
@@ -62,7 +67,18 @@ export default async function DemoApplicationsPage({
         <ApplicationRecords
           applications={applications}
           basePath={DEMO_BASE_PATH}
+          filters={filters}
           history={demo.statusEvents}
+          previewContent={applications.map((application) => ({
+            id: application.id,
+            job_description:
+              demo.records.get(application.id)?.job_description ?? null,
+            salary: demo.records.get(application.id)?.salary ?? null,
+            notes: demo.records.get(application.id)?.notes ?? null,
+          }))}
+          summaryStatuses={summaryApplications.map(
+            (application) => application.current_status,
+          )}
         />
       ) : (
         <ApplicationsEmptyState

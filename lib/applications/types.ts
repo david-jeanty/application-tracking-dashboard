@@ -68,6 +68,18 @@ export type ApplicationListItem = {
 };
 
 /**
+ * The optional detail fields an explicitly opened Applications preview may
+ * show. Kept separate from `ApplicationListItem` so dashboards, archives and
+ * MCP list responses retain their bounded summary projection.
+ */
+export type ApplicationPreviewContent = {
+  id: string;
+  job_description: string | null;
+  salary: string | null;
+  notes: string | null;
+};
+
+/**
  * The projection the analytics page reads, and only that page.
  *
  * A separate, narrower shape than `ApplicationListItem` rather than a widening
