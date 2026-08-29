@@ -1,14 +1,17 @@
 import {
-  PipelineSnapshot,
   RecentActivity,
+  SavedOpportunities,
   SearchSummaryMetrics,
-  ThisWeek,
   Upcoming,
 } from "@/components/dashboard/dashboard-sections";
 import { ButtonLink } from "@/components/ui/button";
 import type { DashboardSummary } from "@/lib/dashboard/summary";
 import { formatDateOnly } from "@/lib/dates/date-only";
-import { applicationsPath, type WorkspaceBasePath } from "@/lib/demo/paths";
+import {
+  analyticsPath,
+  applicationsPath,
+  type WorkspaceBasePath,
+} from "@/lib/demo/paths";
 
 /**
  * The page title, with today's date sitting quietly opposite it.
@@ -20,11 +23,16 @@ import { applicationsPath, type WorkspaceBasePath } from "@/lib/demo/paths";
  */
 export function DashboardHeader({ today }: { today: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-4">
-      <h1 className="text-[34px] font-medium leading-tight tracking-tight text-foreground sm:text-[38px]">
-        Dashboard
-      </h1>
-      <p className="shrink-0 text-[13px] text-foreground-muted">
+    <div className="flex items-end justify-between gap-4">
+      <div>
+        <p className="mb-1 text-[12px] font-medium uppercase tracking-[0.08em] text-accent">
+          Search workspace
+        </p>
+        <h1 className="text-[30px] font-medium leading-none tracking-tight text-foreground sm:text-[34px]">
+          Dashboard
+        </h1>
+      </div>
+      <p className="shrink-0 pb-0.5 text-[13px] text-foreground-muted">
         {formatDateOnly(today)}
       </p>
     </div>
@@ -70,7 +78,8 @@ export function DashboardView({
           <p className="pt-6 text-[16px] text-foreground">No applications yet.</p>
           <p className="mt-1.5 max-w-md text-[14px] leading-6 text-foreground-secondary">
             Save your first application and Interndex will show your search
-            overview, pipeline, recent activity, and upcoming dates here.
+            overview, saved opportunities, recent activity, and upcoming dates
+            here.
           </p>
           <div className="mt-5">
             <ButtonLink href={applicationsPath(basePath)}>
@@ -85,50 +94,67 @@ export function DashboardView({
   const { search } = dashboard;
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-6 sm:space-y-7">
       <DashboardHeader today={today} />
 
-      <section aria-labelledby="dashboard-summary">
-        <div className="border-b border-border pb-2">
-          <h2
-            className="text-[17px] font-medium text-foreground"
-            id="dashboard-summary"
-          >
-            Your search
-          </h2>
-        </div>
+      <section
+        aria-labelledby="dashboard-summary"
+        className="overflow-hidden rounded-surface border border-border bg-surface"
+      >
+        <h2 className="sr-only" id="dashboard-summary">
+          Your search
+        </h2>
         <SearchSummaryMetrics
+          analyticsHref={analyticsPath(basePath)}
           metrics={[
             { label: "Applications", value: search.applications },
-            { label: "Submitted", value: search.submitted },
-            { label: "Interviews", value: search.interviews },
+            {
+              label: "Submitted",
+              value: search.submitted,
+              weeklyChange:
+                dashboard.week.submitted > 0
+                  ? `+${dashboard.week.submitted} submitted this week`
+                  : undefined,
+            },
+            {
+              label: "Interviews",
+              value: search.interviews,
+              weeklyChange:
+                dashboard.week.interviews > 0
+                  ? `+${dashboard.week.interviews} reached this week`
+                  : undefined,
+            },
             { label: "Offers", value: search.offers },
           ]}
+          statusChanges={dashboard.week.statusChanges}
         />
       </section>
 
-      <PipelineSnapshot basePath={basePath} stages={dashboard.pipeline} />
-
-      <RecentActivity
-        basePath={basePath}
-        entries={dashboard.activity}
-        today={today}
-      />
-
-      <ThisWeek
-        basePath={basePath}
-        week={dashboard.week}
-        weekStartLabel={formatDateOnly(dashboard.week.weekStart)}
-      />
-
-      {/*
-        Conditional, and the page simply ends above it when there is nothing.
-        A dashboard that congratulates somebody for having nothing due has made
-        itself the point; this section is a utility, not the reason to visit.
-      */}
       {dashboard.attention.length > 0 ? (
         <Upcoming basePath={basePath} items={dashboard.attention} />
       ) : null}
+
+      <div
+        className={`grid items-start gap-8 ${
+          dashboard.savedOpportunities.length > 0
+            ? "xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:gap-10"
+            : "grid-cols-1"
+        }`}
+        data-dashboard-secondary-grid
+      >
+        {dashboard.savedOpportunities.length > 0 ? (
+          <SavedOpportunities
+            basePath={basePath}
+            opportunities={dashboard.savedOpportunities}
+          />
+        ) : null}
+
+        <RecentActivity
+          basePath={basePath}
+          entries={dashboard.activity}
+          today={today}
+        />
+      </div>
     </div>
   );
 }

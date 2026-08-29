@@ -511,6 +511,38 @@ describe("urgency ordering", () => {
     ]);
   });
 
+  it("orders all non-overdue records by date across attention kinds", () => {
+    const items = needsAttention(
+      [
+        application({
+          id: "deadline-tomorrow",
+          company_name: "Tomorrow Co",
+          current_status: "Interested",
+          application_deadline: "2026-08-25",
+        }),
+        application({
+          id: "action-today",
+          company_name: "Today Co",
+          next_action: "Prepare for interview",
+          next_action_due_date: TODAY,
+        }),
+        application({
+          id: "overdue",
+          company_name: "Overdue Co",
+          next_action: "Send follow-up",
+          next_action_due_date: "2026-08-23",
+        }),
+      ],
+      TODAY,
+    );
+
+    expect(items.map((item) => item.companyName)).toEqual([
+      "Overdue Co",
+      "Today Co",
+      "Tomorrow Co",
+    ]);
+  });
+
   it("puts the most overdue first within a tier", () => {
     const items = needsAttention(
       [

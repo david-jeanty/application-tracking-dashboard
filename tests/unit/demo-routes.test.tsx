@@ -117,19 +117,38 @@ describe("the demo needs no account and no database", () => {
 
 describe("the demo dashboard", () => {
   it("shows every section a real dashboard has", async () => {
-    render(await DemoDashboardPage());
+    const { container } = render(await DemoDashboardPage());
 
     for (const heading of [
       "Your search",
-      "Pipeline",
+      "Saved opportunities",
       "Recent activity",
-      "This week",
       "Upcoming",
     ]) {
       expect(
         screen.getByRole("heading", { level: 2, name: heading }),
       ).toBeInTheDocument();
     }
+
+    expect(
+      [...container.querySelectorAll("h2")].map((heading) =>
+        heading.textContent?.trim(),
+      ),
+    ).toEqual([
+      "Your search",
+      "Upcoming",
+      "Saved opportunities",
+      "Recent activity",
+    ]);
+  });
+
+  it("reuses the shared DashboardView rather than a demo-only composition", () => {
+    const source = readFileSync("app/demo/page.tsx", "utf8");
+
+    expect(source).toContain(
+      'import { DashboardView } from "@/components/dashboard/dashboard-view"',
+    );
+    expect(source).toContain("<DashboardView");
   });
 
   it("counts the whole search, archived applications included", async () => {
@@ -149,21 +168,44 @@ describe("the demo dashboard", () => {
     );
   });
 
-  it("counts only live applications in the pipeline snapshot", async () => {
+  it("shows only live saved applications whose deadlines have not passed", async () => {
     render(await DemoDashboardPage());
 
     const snapshot = within(
-      screen.getByRole("heading", { level: 2, name: "Pipeline" })
+      screen.getByRole("heading", { level: 2, name: "Saved opportunities" })
         .closest("section") as HTMLElement,
     );
-    for (const status of ["Applied", "Screening", "Interview", "Offer"]) {
-      const expected = dataset.activeApplications.filter(
-        (a) => a.current_status === status,
-      ).length;
-      expect(
-        snapshot.getByRole("link", { name: new RegExp(`^${status}`) }),
-      ).toHaveTextContent(String(expected));
+
+    const eligibleIds = new Set(
+      dataset.activeApplications
+        .filter(
+          (application) =>
+            ["Interested", "Preparing"].includes(application.current_status) &&
+            (!application.application_deadline ||
+              application.application_deadline >= demoToday()),
+        )
+        .map((application) => application.id),
+    );
+    const opportunityLinks = snapshot
+      .getAllByRole("link")
+      .filter(
+        (link) =>
+          link.getAttribute("href") !==
+          "/demo/applications?status=summary%3Asaved",
+      );
+
+    expect(opportunityLinks).toHaveLength(4);
+    for (const link of opportunityLinks) {
+      expect(eligibleIds.has(link.getAttribute("href")?.split("/").at(-1) ?? ""))
+        .toBe(true);
     }
+    expect(
+      snapshot.getByRole("link", { name: "View saved applications" }),
+    ).toHaveAttribute(
+      "href",
+      "/demo/applications?status=summary%3Asaved",
+    );
+    expect(snapshot.queryByRole("button")).toBeNull();
   });
 
   it("keeps every link inside the demo", async () => {

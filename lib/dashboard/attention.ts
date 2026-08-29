@@ -241,9 +241,11 @@ function classify(
  * reports that an employer has not replied, because that is not a task and
  * there is nothing to do about it.
  *
- * Sorted by reason first, then by date within a reason, then by company so the
- * order never wobbles between two renders of identical data. Capped, because a
- * list that scrolls has stopped answering the question it was asked.
+ * Overdue work comes first. Everything else is chronological, whatever kind of
+ * record it is, so today's interview preparation cannot sit below tomorrow's
+ * deadline merely because the two dates came from different fields. Reason and
+ * company provide stable tie-breakers. Capped, because a list that scrolls has
+ * stopped answering the question it was asked.
  */
 export function needsAttention(
   applications: readonly AttentionApplication[],
@@ -255,13 +257,17 @@ export function needsAttention(
     .filter((item): item is AttentionItem => item !== null);
 
   items.sort((first, second) => {
+    const firstOverdue = first.daysFromToday < 0;
+    const secondOverdue = second.daysFromToday < 0;
+    if (firstOverdue !== secondOverdue) return firstOverdue ? -1 : 1;
+
+    const byUrgency = first.daysFromToday - second.daysFromToday;
+    if (byUrgency !== 0) return byUrgency;
+
     const byReason =
       ATTENTION_REASONS.indexOf(first.reason) -
       ATTENTION_REASONS.indexOf(second.reason);
     if (byReason !== 0) return byReason;
-
-    const byUrgency = first.daysFromToday - second.daysFromToday;
-    if (byUrgency !== 0) return byUrgency;
 
     return first.companyName.localeCompare(second.companyName);
   });

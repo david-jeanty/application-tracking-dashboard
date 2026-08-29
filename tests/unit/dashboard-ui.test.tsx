@@ -1,14 +1,16 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  PipelineSnapshot,
   RecentActivity,
+  SavedOpportunities,
   SearchSummaryMetrics,
-  ThisWeek,
   Upcoming,
 } from "@/components/dashboard/dashboard-sections";
+import { DashboardView } from "@/components/dashboard/dashboard-view";
 import type { AttentionItem } from "@/lib/dashboard/attention";
-import type { ActivityEntry, PipelineStage } from "@/lib/dashboard/calculate";
+import type { ActivityEntry } from "@/lib/dashboard/calculate";
+import type { SavedOpportunity } from "@/lib/dashboard/saved-opportunities";
+import type { DashboardSummary } from "@/lib/dashboard/summary";
 
 // This suite does not run with Vitest globals, so Testing Library's automatic
 // cleanup is never registered and renders would otherwise accumulate.
@@ -43,6 +45,155 @@ function activityEntry(overrides: Partial<ActivityEntry> = {}): ActivityEntry {
     ...overrides,
   };
 }
+
+function savedOpportunity(
+  overrides: Partial<SavedOpportunity> = {},
+): SavedOpportunity {
+  return {
+    applicationId: "saved-1",
+    companyName: "Shopify",
+    companyDomain: "shopify.com",
+    jobTitle: "Business Operations Intern",
+    location: "Toronto, ON",
+    workTerm: "Winter 2027",
+    deadline: "2026-09-03",
+    savedOn: "2026-08-20",
+    ...overrides,
+  };
+}
+
+function readyDashboard(
+  attention: AttentionItem[] = [attentionItem()],
+): Extract<DashboardSummary, { kind: "ready" }> {
+  return {
+    kind: "ready",
+    search: {
+      applications: 142,
+      submitted: 118,
+      active: 30,
+      interviews: 9,
+      offers: 2,
+    },
+    attention,
+    savedOpportunities: [savedOpportunity()],
+    activity: [activityEntry()],
+    week: {
+      weekStart: "2026-08-24",
+      submitted: 2,
+      statusChanges: 4,
+      interviews: 1,
+    },
+  };
+}
+
+describe("dashboard composition", () => {
+  it("places meaningful Upcoming above the working grid without a standalone week module", () => {
+    const { container } = render(
+      <DashboardView dashboard={readyDashboard()} today="2026-08-26" />,
+    );
+
+    const headings = [...container.querySelectorAll("h2")].map((heading) =>
+      heading.textContent?.trim(),
+    );
+    expect(headings).toEqual([
+      "Your search",
+      "Upcoming",
+      "Saved opportunities",
+      "Recent activity",
+    ]);
+  });
+
+  it("removes Upcoming and lets the working grid follow the summary", () => {
+    const { container } = render(
+      <DashboardView dashboard={readyDashboard([])} today="2026-08-26" />,
+    );
+
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "Upcoming" }),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        'section[aria-labelledby="dashboard-summary"] + [data-dashboard-secondary-grid]',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("lets adjacent dashboard modules keep their natural heights", () => {
+    const { container } = render(
+      <DashboardView dashboard={readyDashboard()} today="2026-08-26" />,
+    );
+
+    expect(
+      container.querySelector("[data-dashboard-secondary-grid]"),
+    ).toHaveClass("items-start");
+  });
+
+  it("removes an empty Saved opportunities module and lets activity reflow", () => {
+    const dashboard = {
+      ...readyDashboard(),
+      savedOpportunities: [],
+    };
+    const { container } = render(
+      <DashboardView dashboard={dashboard} today="2026-08-26" />,
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: "Saved opportunities" }),
+    ).toBeNull();
+    expect(
+      container.querySelector("[data-dashboard-secondary-grid]"),
+    ).toHaveClass("grid-cols-1");
+    expect(
+      screen.getByRole("heading", { name: "Recent activity" }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the four calculated values without substituting active", () => {
+    render(<DashboardView dashboard={readyDashboard()} today="2026-08-26" />);
+
+    const summary = within(
+      screen.getByRole("heading", { level: 2, name: "Your search" })
+        .closest("section") as HTMLElement,
+    );
+    expect(summary.getByText("142")).toBeInTheDocument();
+    expect(summary.getByText("118")).toBeInTheDocument();
+    expect(summary.getByText("9")).toBeInTheDocument();
+    expect(summary.getByText("2")).toBeInTheDocument();
+    expect(summary.queryByText("30")).toBeNull();
+    expect(summary.getByText("+2 submitted this week")).toBeInTheDocument();
+    expect(summary.getByText("+1 reached this week")).toBeInTheDocument();
+    expect(
+      summary.getByLabelText("4 progress updates this week"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "This week" }),
+    ).toBeNull();
+  });
+
+  it("keeps every working action as a keyboard-reachable link", () => {
+    render(<DashboardView dashboard={readyDashboard()} today="2026-08-26" />);
+
+    expect(screen.getByRole("link", { name: "KPMG Canada" })).toHaveAttribute(
+      "href",
+      "/applications/11111111-1111-4111-8111-111111111111",
+    );
+    expect(
+      screen.getByRole("link", {
+        name: "Business Operations Intern at Shopify",
+      }),
+    ).toHaveAttribute("href", "/applications/saved-1");
+    expect(
+      screen.getByRole("link", { name: /View saved applications/ }),
+    ).toHaveAttribute(
+      "href",
+      "/applications?status=summary%3Asaved",
+    );
+    expect(screen.getByRole("link", { name: /View analytics/ })).toHaveAttribute(
+      "href",
+      "/analytics",
+    );
+  });
+});
 
 describe("your search", () => {
   const metrics = [
@@ -114,127 +265,105 @@ describe("your search", () => {
     expect(screen.getByText("142")).toBeInTheDocument();
     expect(screen.getByText("0")).toBeInTheDocument();
   });
+
+  it("shows supported weekly movement and the shared progress context", () => {
+    render(
+      <SearchSummaryMetrics
+        analyticsHref="/analytics"
+        metrics={[
+          { label: "Applications", value: 142 },
+          {
+            label: "Submitted",
+            value: 118,
+            weeklyChange: "+2 submitted this week",
+          },
+          {
+            label: "Interviews",
+            value: 9,
+            weeklyChange: "+1 reached this week",
+          },
+          { label: "Offers", value: 2 },
+        ]}
+        statusChanges={4}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText("Submitted: +2 submitted this week"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Interviews: +1 reached this week"),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("4 progress updates this week")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /View analytics/ })).toHaveAttribute(
+      "href",
+      "/analytics",
+    );
+  });
+
+  it("does not invent zero-change copy", () => {
+    render(
+      <SearchSummaryMetrics
+        analyticsHref="/analytics"
+        metrics={metrics}
+        statusChanges={0}
+      />,
+    );
+
+    expect(screen.queryByText(/this week/i)).toBeNull();
+    expect(screen.getByRole("link", { name: /View analytics/ })).toBeInTheDocument();
+  });
 });
 
-describe("pipeline", () => {
-  const stages: PipelineStage[] = [
-    { status: "Applied", count: 23 },
-    { status: "Screening", count: 4 },
-    { status: "Assessment", count: 0 },
-    { status: "Interview", count: 2 },
-    { status: "Offer", count: 1 },
-  ];
-
-  it("shows every stage with its count, zeros included", () => {
-    render(<PipelineSnapshot stages={stages} />);
-
-    for (const stage of stages) {
-      expect(
-        screen.getByRole("link", {
-          name: new RegExp(`${stage.status}\\s*${stage.count}`),
-        }),
-      ).toBeInTheDocument();
-    }
-  });
-
-  it("links each stage through the existing status filter", () => {
-    render(<PipelineSnapshot stages={stages} />);
+describe("saved opportunities", () => {
+  it("shows the role, company, placement, and deadline", () => {
+    render(<SavedOpportunities opportunities={[savedOpportunity()]} />);
 
     expect(
-      screen.getByRole("link", { name: /Applied/ }).getAttribute("href"),
-    ).toBe("/applications?status=Applied");
+      screen.getByRole("link", {
+        name: "Business Operations Intern at Shopify",
+      }),
+    ).toHaveAttribute("href", "/applications/saved-1");
+    expect(screen.getByText("Shopify")).toBeInTheDocument();
+    expect(screen.getByText("Winter 2027 · Toronto, ON")).toBeInTheDocument();
+    expect(screen.getByText("Apply by Sep 3, 2026")).toBeInTheDocument();
+  });
+
+  it("uses the truthful saved date when there is no deadline", () => {
+    render(
+      <SavedOpportunities
+        opportunities={[savedOpportunity({ deadline: null })]}
+      />,
+    );
+
+    expect(screen.getByText("Saved Aug 20, 2026")).toBeInTheDocument();
+  });
+
+  it("uses the existing saved-summary Applications URL", () => {
+    render(<SavedOpportunities opportunities={[savedOpportunity()]} />);
+
     expect(
-      screen.getByRole("link", { name: /Interview/ }).getAttribute("href"),
-    ).toBe("/applications?status=Interview");
+      screen.getByRole("link", { name: /View saved applications/ }),
+    ).toHaveAttribute("href", "/applications?status=summary%3Asaved");
   });
 
-  it("makes each count understandable to a screen reader", () => {
-    render(<PipelineSnapshot stages={[{ status: "Offer", count: 1 }]} />);
+  it("keeps demo links inside the read-only demo", () => {
+    render(
+      <SavedOpportunities
+        basePath="/demo"
+        opportunities={[savedOpportunity()]}
+      />,
+    );
 
     expect(
-      screen.getByRole("link", { name: /Offer\s*1\s*application/ }),
-    ).toBeInTheDocument();
-  });
-
-  it("claims no total of its own", () => {
-    render(<PipelineSnapshot stages={stages} />);
-
-    // These five stages are not Interndex's ACTIVE_STATUSES vocabulary, so
-    // summing them and calling the result "active" would invent a definition.
-    // The counts already say what there is.
-    expect(screen.queryByText(/active application/i)).toBeNull();
-    expect(screen.queryByText(/^\d+ applications?$/)).toBeNull();
-  });
-
-  it("adds no tab stop for the distribution bar", () => {
-    const { container } = render(<PipelineSnapshot stages={stages} />);
-
-    // Five stage links and nothing else focusable: the bar restates counts
-    // that are already text, so it is hidden and not interactive.
-    expect(container.querySelectorAll("a")).toHaveLength(5);
-    expect(container.querySelectorAll('[aria-hidden="true"]')).toHaveLength(1);
-  });
-
-  it("draws an empty track when every stage is zero", () => {
-    const empty = stages.map((stage) => ({ ...stage, count: 0 }));
-    const { container } = render(<PipelineSnapshot stages={empty} />);
-
-    const track = container.querySelector('[aria-hidden="true"]');
-    expect(track?.children).toHaveLength(1);
-    // One full-width placeholder rather than five zero-width segments, and
-    // nothing divided by a zero total.
-    expect(track?.firstElementChild).toHaveClass("w-full");
-  });
-
-  describe("the distribution bar divides the track by ratio", () => {
-    const segments = (stages: PipelineStage[]) => {
-      const { container } = render(<PipelineSnapshot stages={stages} />);
-      const track = container.querySelector('[aria-hidden="true"]');
-      return [...(track?.children ?? [])] as HTMLElement[];
-    };
-
-    it("gives equal stages equal shares", () => {
-      const grown = segments([
-        { status: "Applied", count: 1 },
-        { status: "Screening", count: 1 },
-        { status: "Assessment", count: 1 },
-      ]).map((segment) => segment.style.flexGrow);
-
-      expect(grown).toEqual(["1", "1", "1"]);
-    });
-
-    it("splits eight and two in that proportion", () => {
-      const grown = segments([
-        { status: "Applied", count: 8 },
-        { status: "Screening", count: 2 },
-      ]).map((segment) => segment.style.flexGrow);
-
-      expect(grown).toEqual(["8", "2"]);
-    });
-
-    it("grows from a zero basis, so gaps cannot push the row past the track", () => {
-      // A percentage width would be a share of the whole track and the gaps
-      // would be added on top of it, squeezing or clipping the last stage.
-      for (const segment of segments(stages)) {
-        expect(segment.style.flexBasis).toBe("0px");
-        expect(segment.style.width).toBe("");
-      }
-    });
-
-    it("draws nothing for a stage with no applications", () => {
-      const grown = segments(stages);
-
-      // Five stages, one of them empty.
-      expect(grown).toHaveLength(4);
-    });
-  });
-
-  it("draws no connectors between stages", () => {
-    render(<PipelineSnapshot stages={stages} />);
-
-    // An aggregate distribution, not one application's journey. Nothing here
-    // should read as a path from Applied to Offer.
-    expect(screen.queryByText("→")).toBeNull();
+      screen.getByRole("link", {
+        name: "Business Operations Intern at Shopify",
+      }),
+    ).toHaveAttribute("href", "/demo/applications/saved-1");
+    expect(
+      screen.getByRole("link", { name: /View saved applications/ }),
+    ).toHaveAttribute("href", "/demo/applications?status=summary%3Asaved");
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });
 
@@ -322,69 +451,6 @@ describe("recent activity", () => {
     render(<RecentActivity entries={[]} today="2026-08-26" />);
 
     expect(screen.getByText(/nothing has changed yet/i)).toBeInTheDocument();
-  });
-});
-
-describe("this week", () => {
-  const week = {
-    weekStart: "2026-08-24",
-    submitted: 6,
-    statusChanges: 3,
-    interviews: 1,
-  };
-
-  it("reports the three metrics the data supports honestly", () => {
-    render(<ThisWeek week={week} weekStartLabel="Aug 24, 2026" />);
-
-    expect(screen.getByText("submitted")).toBeInTheDocument();
-    expect(screen.getByText("status changes")).toBeInTheDocument();
-    expect(screen.getByText("interview reached")).toBeInTheDocument();
-    expect(screen.getByText("Since Aug 24, 2026")).toBeInTheDocument();
-  });
-
-  it("agrees its nouns with its numbers", () => {
-    render(
-      <ThisWeek
-        week={{ ...week, statusChanges: 1, interviews: 1 }}
-        weekStartLabel="Aug 24, 2026"
-      />,
-    );
-
-    expect(screen.getByText("status change")).toBeInTheDocument();
-    expect(screen.getByText("interview reached")).toBeInTheDocument();
-    expect(screen.queryByText("interviews reached")).toBeNull();
-  });
-
-  it("uses plural nouns beyond one", () => {
-    render(
-      <ThisWeek
-        week={{ ...week, statusChanges: 3, interviews: 4 }}
-        weekStartLabel="Aug 24, 2026"
-      />,
-    );
-
-    expect(screen.getByText("status changes")).toBeInTheDocument();
-    expect(screen.getByText("interviews reached")).toBeInTheDocument();
-  });
-
-  it("offers the quiet analytics link", () => {
-    render(<ThisWeek week={week} weekStartLabel="Aug 24, 2026" />);
-
-    expect(
-      screen.getByRole("link", { name: /view analytics/i }).getAttribute("href"),
-    ).toBe("/analytics");
-  });
-
-  it("shows honest zeros for a quiet week, with nothing to beat", () => {
-    render(
-      <ThisWeek
-        week={{ ...week, submitted: 0, statusChanges: 0, interviews: 0 }}
-        weekStartLabel="Aug 24, 2026"
-      />,
-    );
-
-    expect(screen.getAllByText("0")).toHaveLength(3);
-    expect(screen.queryByText(/streak|goal|target|last week|score/i)).toBeNull();
   });
 });
 

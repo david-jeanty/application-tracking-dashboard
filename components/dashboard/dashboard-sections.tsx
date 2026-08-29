@@ -2,18 +2,18 @@ import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { CompanyLogo } from "@/components/branding/company-logo";
-import { STATUS_PARAM } from "@/lib/applications/search-params";
+import { APPLICATION_STATUS_SUMMARIES } from "@/lib/applications/constants";
+import { displayOptionalText } from "@/lib/applications/mapper";
+import { toApplicationStatusSummaryUrl } from "@/lib/applications/search-params";
 import type { AttentionItem, AttentionReason } from "@/lib/dashboard/attention";
 import {
   activityDayLabel,
   groupActivityByDay,
   type ActivityEntry,
-  type PipelineStage,
-  type WeekSummary,
 } from "@/lib/dashboard/calculate";
+import type { SavedOpportunity } from "@/lib/dashboard/saved-opportunities";
 import { formatDateOnly } from "@/lib/dates/date-only";
 import {
-  analyticsPath,
   applicationPath,
   applicationsPath,
   type WorkspaceBasePath,
@@ -75,115 +75,160 @@ export function SectionLink({
  * hold its shape when it does.
  */
 export function SearchSummaryMetrics({
+  analyticsHref,
   metrics,
+  statusChanges,
 }: {
-  metrics: { label: string; value: number }[];
+  analyticsHref?: string;
+  metrics: { label: string; value: number; weeklyChange?: string }[];
+  statusChanges?: number;
 }) {
+  const dividers = [
+    "border-b border-r sm:border-b-0",
+    "border-b sm:border-b-0 sm:border-r",
+    "border-r",
+    "",
+  ];
+
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-6 pt-5 sm:flex sm:flex-wrap sm:gap-x-16">
-      {metrics.map((metric) => (
-        /*
-          The term precedes its description in the DOM, which is what a
-          description list means and what a screen reader reads. The visual
-          order — number first, label under it — is produced by reversing the
-          column, so the markup and the design can each be right.
-        */
-        <div className="flex flex-col-reverse gap-2" key={metric.label}>
-          <dt className="text-[13px] text-foreground-secondary">
-            {metric.label}
-          </dt>
-          <dd className="text-[30px] font-medium leading-none tabular-nums tracking-tight text-foreground">
-            {metric.value}
-          </dd>
+    <div>
+      <dl className="grid grid-cols-2 sm:grid-cols-4">
+        {metrics.map((metric, index) => (
+          /*
+            The term precedes its description in the DOM, which is what a
+            description list means and what a screen reader reads. CSS order
+            gives the number visual priority without reversing that meaning.
+          */
+          <div
+            className={`flex min-h-24 flex-col justify-center gap-1 border-border px-4 py-3.5 sm:min-h-28 sm:px-5 ${dividers[index] ?? ""}`}
+            key={metric.label}
+          >
+            <dt className="order-2 text-[12px] font-medium text-foreground-secondary sm:text-[13px]">
+              {metric.label}
+            </dt>
+            <dd className="order-1 text-[25px] font-medium leading-none tabular-nums tracking-tight text-foreground sm:text-[28px]">
+              {metric.value}
+            </dd>
+            {metric.weeklyChange ? (
+              <p
+                aria-label={`${metric.label}: ${metric.weeklyChange}`}
+                className="order-3 mt-0.5 text-[11px] leading-4 text-foreground-muted sm:text-[12px]"
+              >
+                {metric.weeklyChange}
+              </p>
+            ) : null}
+          </div>
+        ))}
+      </dl>
+
+      {analyticsHref ? (
+        <div
+          className={`flex min-h-10 items-center px-4 py-2 sm:px-5 ${
+            statusChanges ? "justify-between gap-4" : "justify-end"
+          } border-t border-border`}
+        >
+          {statusChanges ? (
+            <p
+              aria-label={`${statusChanges} ${
+                statusChanges === 1 ? "progress update" : "progress updates"
+              } this week`}
+              className="text-[12px] text-foreground-secondary"
+            >
+              {statusChanges} {statusChanges === 1 ? "progress update" : "progress updates"}
+              <span aria-hidden="true"> this week ·</span>
+            </p>
+          ) : null}
+          <SectionLink href={analyticsHref}>View analytics</SectionLink>
         </div>
-      ))}
-    </dl>
+      ) : null}
+    </div>
   );
 }
 
-/**
- * Where active applications sit right now.
- *
- * An aggregate distribution, deliberately not a journey. The stages are laid
- * out as equal columns with no arrows and no connectors between them, because
- * connected nodes would read as one application moving along a path — which is
- * what the lifecycle rail on a record means, and this is a different claim
- * about a different population.
- *
- * Each stage stays a link, because filtering the applications list by status
- * is genuinely useful and the URL parameter already exists.
- */
-export function PipelineSnapshot({
+/** Jobs that were saved but still have not been submitted. */
+export function SavedOpportunities({
   basePath = "",
-  stages,
+  opportunities,
 }: {
   basePath?: WorkspaceBasePath;
-  stages: PipelineStage[];
+  opportunities: SavedOpportunity[];
 }) {
-  const total = stages.reduce((sum, stage) => sum + stage.count, 0);
+  const savedStatusSummary = APPLICATION_STATUS_SUMMARIES.find(
+    (summary) => summary.key === "saved",
+  );
 
   return (
-    <section aria-labelledby="dashboard-pipeline">
-      <SectionHeading id="dashboard-pipeline">Pipeline</SectionHeading>
+    <section
+      aria-labelledby="dashboard-saved-opportunities"
+      className="rounded-surface border border-border bg-surface p-5 sm:p-6"
+    >
+      <SectionHeading
+        action={
+          <SectionLink
+            href={toApplicationStatusSummaryUrl(
+              applicationsPath(basePath),
+              {},
+              savedStatusSummary,
+            )}
+          >
+            View saved applications
+          </SectionLink>
+        }
+        id="dashboard-saved-opportunities"
+      >
+        Saved opportunities
+      </SectionHeading>
 
-      <ul className="grid grid-cols-5 gap-x-2 pt-5 sm:gap-x-6">
-        {stages.map((stage) => (
-          <li key={stage.status}>
-            <Link
-              className="group block rounded-control focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
-              href={`${applicationsPath(basePath)}?${STATUS_PARAM}=${encodeURIComponent(stage.status)}`}
+      <p className="pt-3 text-[13px] leading-5 text-foreground-secondary">
+        Jobs you saved but have not submitted.
+      </p>
+
+      <ul className="mt-2 divide-y divide-border/70">
+        {opportunities.map((opportunity) => {
+          const context = [
+            displayOptionalText(opportunity.workTerm),
+            displayOptionalText(opportunity.location),
+          ]
+            .filter(Boolean)
+            .join(" · ");
+
+          return (
+            <li
+              className="relative flex items-start gap-3 py-3 first:pt-2.5 last:pb-0"
+              key={opportunity.applicationId}
             >
-              <span className="block text-[11px] leading-tight text-foreground-secondary group-hover:text-accent sm:text-[13px]">
-                {stage.status}
-              </span>
-              <span className="mt-1.5 block text-[22px] font-medium tabular-nums leading-none text-foreground sm:text-[26px]">
-                {stage.count}
-                <span className="sr-only">
-                  {" "}
-                  {stage.count === 1 ? "application" : "applications"}
-                </span>
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-
-      {/*
-        The same counts again as relative width. Every number above is already
-        readable text, so this adds impression rather than information and is
-        hidden from assistive technology — and it is one element, so it adds no
-        tab stop. The opacity step follows pipeline order, which is what lets a
-        segment be matched to the stage above it.
-
-        Segments divide the track by ratio — `flexGrow` on a zero basis —
-        rather than each claiming a percentage of it. A percentage width would
-        be a share of the *whole* track, so the gaps between segments would push
-        the row past 100% and the last stage would be squeezed or clipped. Grow
-        factors are shares of whatever space is left after the gaps, which is
-        the quantity actually being divided.
-
-        A student with nothing active divides by nothing, so the track is drawn
-        empty rather than guarded against after the fact.
-      */}
-      <div aria-hidden="true" className="mt-5 flex h-1.5 gap-0.5">
-        {total === 0 ? (
-          <span className="h-full w-full bg-border" />
-        ) : (
-          stages.map((stage, index) =>
-            stage.count === 0 ? null : (
-              <span
-                className="h-full bg-accent"
-                key={stage.status}
-                style={{
-                  flexBasis: 0,
-                  flexGrow: stage.count,
-                  opacity: 1 - index * 0.15,
-                }}
+              <CompanyLogo
+                companyName={opportunity.companyName}
+                domain={opportunity.companyDomain}
               />
-            ),
-          )
-        )}
-      </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[14px] font-medium leading-snug text-foreground">
+                  <Link
+                    aria-label={`${opportunity.jobTitle} at ${opportunity.companyName}`}
+                    className="after:absolute after:inset-0 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    href={applicationPath(opportunity.applicationId, basePath)}
+                  >
+                    {opportunity.jobTitle}
+                  </Link>
+                </p>
+                <p className="mt-0.5 truncate text-[13px] text-foreground-secondary">
+                  {opportunity.companyName}
+                </p>
+                {context ? (
+                  <p className="mt-1 truncate text-[12px] text-foreground-muted">
+                    {context}
+                  </p>
+                ) : null}
+                <p className="mt-1 text-[12px] font-medium text-foreground-secondary">
+                  {opportunity.deadline
+                    ? `Apply by ${formatDateOnly(opportunity.deadline)}`
+                    : `Saved ${formatDateOnly(opportunity.savedOn)}`}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
@@ -206,7 +251,10 @@ export function RecentActivity({
   today: string;
 }) {
   return (
-    <section aria-labelledby="dashboard-activity">
+    <section
+      aria-labelledby="dashboard-activity"
+      className="rounded-surface border border-border bg-surface p-5 sm:p-6"
+    >
       <SectionHeading id="dashboard-activity">Recent activity</SectionHeading>
 
       {entries.length === 0 ? (
@@ -215,16 +263,16 @@ export function RecentActivity({
           will show up here.
         </p>
       ) : (
-        <div className="pt-5">
+        <div className="pt-3">
           {groupActivityByDay(entries).map((group) => (
-            <section className="mb-5 last:mb-0" key={group.day}>
+            <section className="mb-3 last:mb-0" key={group.day}>
               <h3 className="text-[12px] text-foreground-muted">
                 {activityDayLabel(group.day, today, formatDateOnly)}
               </h3>
-              <ul className="mt-2.5">
+              <ul className="mt-1 divide-y divide-border/70">
                 {group.entries.map((entry) => (
                   <li
-                    className="relative flex items-start gap-3 py-2.5"
+                    className="relative flex items-start gap-3 py-2.5 first:pt-2"
                     key={`${entry.applicationId}-${entry.changedAt}`}
                   >
                     {/*
@@ -269,67 +317,6 @@ export function RecentActivity({
 }
 
 /**
- * The week so far, stated and not scored.
- *
- * One flat row. No target, no streak, no comparison with last week: a quiet
- * week in a job search is usually a fact about employers, and turning it into
- * a number a student is failing to hit would make this the section they avoid.
- */
-export function ThisWeek({
-  basePath = "",
-  week,
-  weekStartLabel,
-}: {
-  basePath?: WorkspaceBasePath;
-  week: WeekSummary;
-  weekStartLabel: string;
-}) {
-  // The noun agrees with the number. "1 interviews reached" is the kind of
-  // seam that makes a page read as generated rather than written.
-  const metrics = [
-    { label: "submitted", value: week.submitted },
-    {
-      label: week.statusChanges === 1 ? "status change" : "status changes",
-      value: week.statusChanges,
-    },
-    {
-      label: week.interviews === 1 ? "interview reached" : "interviews reached",
-      value: week.interviews,
-    },
-  ];
-
-  return (
-    <section aria-labelledby="dashboard-week">
-      <SectionHeading
-        action={
-          <SectionLink href={analyticsPath(basePath)}>View analytics</SectionLink>
-        }
-        id="dashboard-week"
-      >
-        This week
-      </SectionHeading>
-
-      <dl className="flex flex-wrap gap-x-8 gap-y-3 pt-5">
-        {metrics.map((metric) => (
-          <div className="flex items-baseline gap-1.5" key={metric.label}>
-            <dd className="text-[20px] font-medium tabular-nums leading-none text-foreground">
-              {metric.value}
-            </dd>
-            <dt className="text-[14px] text-foreground-secondary">
-              {metric.label}
-            </dt>
-          </div>
-        ))}
-      </dl>
-
-      <p className="mt-3 text-[12px] text-foreground-muted">
-        Since {weekStartLabel}
-      </p>
-    </section>
-  );
-}
-
-/**
  * Which reasons are urgent enough to say so in colour.
  *
  * Only the two that describe something already missed or landing within a day.
@@ -361,16 +348,26 @@ export function Upcoming({
   items: AttentionItem[];
 }) {
   return (
-    <section aria-labelledby="dashboard-upcoming">
-      <SectionHeading id="dashboard-upcoming">Upcoming</SectionHeading>
+    <section
+      aria-labelledby="dashboard-upcoming"
+      className="overflow-hidden rounded-surface border border-border bg-surface"
+    >
+      <div className="border-l-4 border-accent bg-accent-soft/65 px-4 py-3 sm:px-5">
+        <h2 className="text-[17px] font-medium text-foreground" id="dashboard-upcoming">
+          Upcoming
+        </h2>
+        <p className="mt-0.5 text-[12px] text-foreground-secondary">
+          Follow-ups, interviews, and deadlines that need attention
+        </p>
+      </div>
 
-      <ul className="pt-2">
+      <ul className="grid px-4 sm:px-5 md:grid-cols-2 md:px-0 md:[&>li:nth-child(odd)]:border-r md:[&>li:nth-last-child(-n+2)]:border-b-0">
         {items.map((item) => {
           const urgent = URGENT_REASONS.includes(item.reason);
 
           return (
             <li
-              className="relative flex items-start gap-3 border-b border-border py-4 last:border-b-0"
+              className={`relative flex items-start gap-3 border-b border-border py-3.5 last:border-b-0 md:px-5 ${urgent ? "bg-danger-soft/25" : ""}`}
               key={item.applicationId}
             >
               <CompanyLogo
@@ -378,12 +375,11 @@ export function Upcoming({
                 domain={item.companyDomain}
               />
               {/*
-                No wrapping. The date column is the one fixed landmark in this
-                list, so it stays at the top right of every row at every width
-                — a row whose date drops underneath because its text happened
-                to be shorter makes the column impossible to scan.
+                At comfortable widths, the date stays at the top right of every
+                row as a fixed scanning landmark. On a phone it moves below the
+                text instead of squeezing or hiding the action itself.
               */}
-              <div className="flex min-w-0 flex-1 items-start justify-between gap-x-4">
+              <div className="flex min-w-0 flex-1 flex-col gap-y-2 sm:flex-row sm:items-start sm:justify-between sm:gap-x-4">
                 <div className="min-w-0">
                   <p className="text-[14px] font-medium leading-snug text-foreground">
                     <Link
@@ -396,7 +392,7 @@ export function Upcoming({
                   <p className="mt-0.5 truncate text-[13px] text-foreground-secondary">
                     {item.jobTitle}
                   </p>
-                  <p className="mt-0.5 truncate text-[13px] text-foreground">
+                  <p className="mt-0.5 text-[13px] leading-5 text-foreground">
                     {item.detail}
                   </p>
                   {/*
@@ -405,7 +401,7 @@ export function Upcoming({
                     it has not been submitted. Stated, never advised.
                   */}
                   {item.note ? (
-                    <p className="mt-0.5 truncate text-[12px] text-foreground-muted">
+                    <p className="mt-0.5 text-[12px] leading-4 text-foreground-muted">
                       {item.note}
                     </p>
                   ) : null}
@@ -416,7 +412,7 @@ export function Upcoming({
                   within a day, and it carries the urgency in words — the
                   colour repeats it rather than being the only signal.
                 */}
-                <div className="shrink-0 text-right">
+                <div className="shrink-0 text-left sm:text-right">
                   <p className="text-[13px] tabular-nums text-foreground">
                     {item.date ? formatDateOnly(item.date) : null}
                   </p>

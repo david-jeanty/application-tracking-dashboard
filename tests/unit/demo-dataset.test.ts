@@ -458,9 +458,8 @@ describe("what the production calculations make of it", () => {
     expect(
       dashboard.attention.some((item) => item.reason.includes("deadline")),
     ).toBe(true);
-    // Several live stages, so the snapshot is a distribution rather than a spike.
-    expect(dashboard.pipeline.filter((stage) => stage.count > 0).length)
-      .toBeGreaterThanOrEqual(4);
+    // Real saved records feed the same shortlist the production dashboard uses.
+    expect(dashboard.savedOpportunities.length).toBeGreaterThanOrEqual(3);
   });
 
   it("invents no attention entry the production rules would not produce", () => {

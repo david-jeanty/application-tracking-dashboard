@@ -45,6 +45,71 @@ test("the demo workspace is reachable with no account", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("the dashboard composition expands on desktop and stacks cleanly below it", async ({
+  page,
+}) => {
+  const grid = page.locator("[data-dashboard-secondary-grid]");
+  const savedOpportunities = page.locator(
+    'section[aria-labelledby="dashboard-saved-opportunities"]',
+  );
+  const activity = page.locator(
+    'section[aria-labelledby="dashboard-activity"]',
+  );
+  const upcoming = page.locator(
+    'section[aria-labelledby="dashboard-upcoming"] > ul',
+  );
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/demo");
+  await expect(grid).toBeVisible();
+  await expect(upcoming).toBeVisible();
+  await expect
+    .poll(() => grid.evaluate((node) => getComputedStyle(node).gridTemplateColumns))
+    .toMatch(/\S+\s+\S+/);
+  await expect
+    .poll(() =>
+      upcoming.evaluate((node) => getComputedStyle(node).gridTemplateColumns),
+    )
+    .toMatch(/\S+\s+\S+/);
+  expect(
+    await savedOpportunities.evaluate(
+      (node) => node.getBoundingClientRect().height,
+    ),
+  ).toBeLessThan(
+    await activity.evaluate((node) => node.getBoundingClientRect().height),
+  );
+
+  await page.setViewportSize({ width: 900, height: 1000 });
+  await expect
+    .poll(() => grid.evaluate((node) => getComputedStyle(node).gridTemplateColumns))
+    .not.toMatch(/\S+\s+\S+/);
+  await expect
+    .poll(() =>
+      upcoming.evaluate((node) => getComputedStyle(node).gridTemplateColumns),
+    )
+    .toMatch(/\S+\s+\S+/);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(grid).toBeVisible();
+  await expect(upcoming).toBeVisible();
+  await expect
+    .poll(() =>
+      upcoming.evaluate((node) => getComputedStyle(node).gridTemplateColumns),
+    )
+    .not.toMatch(/\S+\s+\S+/);
+  await expect(
+    savedOpportunities.getByRole("link", {
+      name: "View saved applications",
+    }),
+  ).toHaveAttribute("href", "/demo/applications?status=summary%3Asaved");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await expect(page.getByRole("link", { name: /View analytics/ })).toBeVisible();
+});
+
 test("a visitor can walk the whole demo without signing in", async ({ page }) => {
   await page.goto("/demo");
 
@@ -52,10 +117,12 @@ test("a visitor can walk the whole demo without signing in", async ({ page }) =>
   await expect(page).toHaveURL(/\/demo\/applications$/);
   await expect(records(page).first()).toBeVisible();
 
-  // Open the first record, then come back.
-  await records(page).first().getByRole("link").first().click();
-  await expect(page).toHaveURL(/\/demo\/applications\/[a-z0-9-]+$/);
-  await page.getByRole("link", { name: "Back to applications" }).click();
+  // Demo records reveal read-only context without leaving the sample index.
+  const firstRecord = records(page)
+    .first()
+    .getByRole("button", { name: /details for/ });
+  await firstRecord.click();
+  await expect(firstRecord).toHaveAttribute("aria-expanded", "true");
   await expect(page).toHaveURL(/\/demo\/applications$/);
 
   await navigateTo(page, "Pipeline");
