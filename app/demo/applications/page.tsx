@@ -32,7 +32,12 @@ export default async function DemoApplicationsPage({
 }: {
   searchParams: Promise<RawSearchParams>;
 }) {
-  const filters = parseApplicationFilters(await searchParams);
+  const rawSearchParams = await searchParams;
+  const filters = parseApplicationFilters(rawSearchParams);
+  const selectedId =
+    typeof rawSearchParams.selected === "string"
+      ? rawSearchParams.selected
+      : undefined;
   const demo = buildDemoDataset(demoToday());
   // The active population, as `listActiveApplications` returns in production:
   // this page is a worklist, and an application the student filed away is not
@@ -63,6 +68,8 @@ export default async function DemoApplicationsPage({
           applications={applications}
           basePath={DEMO_BASE_PATH}
           history={demo.statusEvents}
+          filters={filters}
+          selectedId={selectedId}
         />
       ) : (
         <ApplicationsEmptyState

@@ -115,9 +115,10 @@ describe("company branding across the product", () => {
       const { container } = render(await ApplicationList({}));
 
       // One record per application, at every width: the three regions reflow
-      // rather than a second markup being rendered for phones.
+      // The index and the selected-record context each identify the company;
+      // responsive variants do not create any further duplicate markup.
       const sources = logoSources(container);
-      expect(sources).toHaveLength(1);
+      expect(sources).toHaveLength(2);
       expect(sources[0]).toContain(`https://${LOGO_DEV_HOST}/shopify.com?`);
       // The role is what links to the record; the company sits beneath it.
       expect(

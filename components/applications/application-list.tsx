@@ -1,4 +1,11 @@
-import { AlertCircle, CalendarDays, ChevronRight, MapPin } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowUpRight,
+  CalendarDays,
+  ChevronRight,
+  MapPin,
+  Tag,
+} from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ApplicationStatusLabel } from "@/components/applications/application-status";
@@ -27,6 +34,13 @@ import {
   applicationsPath,
   type WorkspaceBasePath,
 } from "@/lib/demo/paths";
+import {
+  CATEGORY_PARAM,
+  SEARCH_PARAM,
+  STATUS_PARAM,
+  WORK_TERM_PARAM,
+} from "@/lib/applications/search-params";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 
 /** Employer mark, role, company, and the two facts that place the role. */
@@ -59,7 +73,7 @@ function Identity({
         */}
         <h3 className="text-[16px] font-medium leading-snug text-foreground">
           <Link
-            className="after:absolute after:inset-0 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            className="relative z-20 hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             href={applicationPath(application.id, basePath)}
           >
             {application.original_job_title}
@@ -86,6 +100,94 @@ function Identity({
         </p>
       </div>
     </div>
+  );
+}
+
+function selectionPath(
+  applicationId: string,
+  basePath: WorkspaceBasePath,
+  filters: ActiveApplicationFilters,
+) {
+  const query = new URLSearchParams({ selected: applicationId });
+  if (filters.search) query.set(SEARCH_PARAM, filters.search);
+  if (filters.status) query.set(STATUS_PARAM, filters.status);
+  if (filters.workTermSeason) query.set(WORK_TERM_PARAM, filters.workTermSeason);
+  if (filters.category) query.set(CATEGORY_PARAM, filters.category);
+  return `${applicationsPath(basePath)}?${query.toString()}`;
+}
+
+function SelectedRecordPreview({
+  application,
+  basePath,
+}: {
+  application: ApplicationListItem;
+  basePath: WorkspaceBasePath;
+}) {
+  const location = displayOptionalText(application.location);
+  const date = contextDate(application);
+
+  return (
+    <aside
+      aria-label={`Selected application: ${application.original_job_title}`}
+      className="sticky top-6 border-l border-border pl-6"
+    >
+      <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-foreground-muted">
+        Selected record
+      </p>
+      <div className="mt-4 flex items-start gap-3">
+        <CompanyLogo
+          companyName={application.company_name}
+          domain={application.company_domain}
+          size="md"
+        />
+        <div className="min-w-0">
+          <h2 className="break-words text-[17px] font-medium leading-snug text-foreground">
+            {application.original_job_title}
+          </h2>
+          <p className="mt-1 text-[13px] text-foreground-secondary">
+            {application.company_name}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 border-y border-border py-1">
+        <div className="flex items-center justify-between gap-4 py-2.5 text-[13px]">
+          <span className="text-foreground-muted">Status</span>
+          <ApplicationStatusLabel status={application.current_status} variant="text" />
+        </div>
+        <div className="flex items-center justify-between gap-4 border-t border-border/70 py-2.5 text-[13px]">
+          <span className="inline-flex items-center gap-1.5 text-foreground-muted">
+            <MapPin aria-hidden="true" className="size-3.5" /> Location
+          </span>
+          <span className="text-right text-foreground">{location ?? "Not set"}</span>
+        </div>
+        <div className="flex items-center justify-between gap-4 border-t border-border/70 py-2.5 text-[13px]">
+          <span className="inline-flex items-center gap-1.5 text-foreground-muted">
+            <CalendarDays aria-hidden="true" className="size-3.5" /> Work term
+          </span>
+          <span className="text-right text-foreground">{application.work_term_season}</span>
+        </div>
+        <div className="flex items-center justify-between gap-4 border-t border-border/70 py-2.5 text-[13px]">
+          <span className="inline-flex items-center gap-1.5 text-foreground-muted">
+            <Tag aria-hidden="true" className="size-3.5" /> Category
+          </span>
+          <span className="text-right text-foreground">{application.normalized_job_category}</span>
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <p className="text-[12px] text-foreground-muted">Next</p>
+        <div className="mt-2"><Next date={date} /></div>
+      </div>
+
+      <Link
+        className="mt-6 inline-flex items-center gap-1.5 text-[13px] font-medium text-accent hover:text-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        href={applicationPath(application.id, basePath)}
+      >
+        Open full record
+        <ArrowUpRight aria-hidden="true" className="size-3.5" />
+      </Link>
+    </aside>
   );
 }
 
@@ -166,13 +268,17 @@ export function ApplicationsListLoading() {
 export function ApplicationRecords({
   applications,
   basePath = "",
+  filters = {},
   history,
+  selectedId,
   showSummary = true,
 }: {
   applications: readonly ApplicationListItem[];
   basePath?: WorkspaceBasePath;
+  filters?: ActiveApplicationFilters;
   /** Null when the history read failed: every rail is dropped rather than guessed. */
   history: readonly ApplicationStatusEvent[] | null;
+  selectedId?: string;
   /**
    * The count and the column headings above the records.
    *
@@ -184,6 +290,9 @@ export function ApplicationRecords({
   showSummary?: boolean;
 }) {
   const lifecycles = buildLifecycles(applications, history);
+  const selected =
+    applications.find((application) => application.id === selectedId) ??
+    applications[0];
 
   return (
     <div>
@@ -206,6 +315,12 @@ export function ApplicationRecords({
         </div>
       ) : null}
 
+      <div
+        className={cn(
+          showSummary &&
+            "xl:grid xl:grid-cols-[minmax(0,7fr)_minmax(260px,3fr)] xl:gap-6",
+        )}
+      >
       <ul aria-label="Applications">
         {applications.map((application) => {
           const date = contextDate(application);
@@ -213,9 +328,29 @@ export function ApplicationRecords({
 
           return (
             <li
-              className="relative border-b border-border transition-colors hover:bg-surface-muted/60"
+              className={cn(
+                "relative border-b border-border transition-colors hover:bg-surface-muted/60",
+                selected.id === application.id &&
+                  "xl:border-l-2 xl:border-l-accent xl:bg-accent-soft/40 xl:pl-3",
+              )}
               key={application.id}
             >
+              <Link
+                aria-label={`Open ${application.original_job_title}`}
+                className={cn(
+                  "absolute inset-0 z-10",
+                  showSummary && "xl:hidden",
+                )}
+                href={applicationPath(application.id, basePath)}
+              />
+              {showSummary ? (
+                <Link
+                  aria-label={`Preview ${application.original_job_title}`}
+                  className="absolute inset-0 z-10 hidden xl:block"
+                  href={selectionPath(application.id, basePath, filters)}
+                  scroll={false}
+                />
+              ) : null}
               {/*
                 One composition for every width. The three regions sit side by
                 side when there is room and stack into the phone's reading
@@ -238,6 +373,12 @@ export function ApplicationRecords({
           );
         })}
       </ul>
+      {showSummary ? (
+        <div className="hidden xl:block">
+          <SelectedRecordPreview application={selected} basePath={basePath} />
+        </div>
+      ) : null}
+      </div>
     </div>
   );
 }
@@ -284,8 +425,10 @@ export function ApplicationsEmptyState({
 
 export async function ApplicationList({
   filters = {},
+  selectedId,
 }: {
   filters?: ActiveApplicationFilters;
+  selectedId?: string;
 }) {
   const supabase = await createClient();
   const {
@@ -339,7 +482,9 @@ export async function ApplicationList({
   return (
     <ApplicationRecords
       applications={data}
+      filters={filters}
       history={history.error ? null : history.data}
+      selectedId={selectedId}
     />
   );
 }
