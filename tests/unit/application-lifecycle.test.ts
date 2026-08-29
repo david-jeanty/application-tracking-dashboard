@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { APPLICATION_STATUSES } from "@/lib/applications/constants";
 import type { ApplicationStatus } from "@/lib/applications/constants";
 import {
+  APPLICATION_INDEX_STAGES,
   LIFECYCLE_STAGES,
+  buildApplicationIndexLifecycle,
+  buildApplicationIndexLifecycles,
   buildLifecycle,
   buildLifecycles,
   describeLifecycle,
@@ -55,6 +58,49 @@ describe("mapping the ten exact statuses onto five stages", () => {
     expect(stageForStatus("Accepted")).toBe("outcome");
     expect(stageForStatus("Rejected")).toBe("outcome");
     expect(stageForStatus("Withdrawn")).toBe("outcome");
+  });
+});
+
+describe("the four visible milestones used by the Applications index", () => {
+  it("names exactly Saved, Applied, Interview and Outcome", () => {
+    expect(APPLICATION_INDEX_STAGES.map((stage) => stage.label)).toEqual([
+      "Saved",
+      "Applied",
+      "Interview",
+      "Outcome",
+    ]);
+  });
+
+  it("folds screening and assessment into Applied without changing their exact status", () => {
+    for (const status of ["Screening", "Assessment"] as const) {
+      const lifecycle = buildApplicationIndexLifecycle(status);
+      expect(lifecycle.stages.find((stage) => stage.current)?.label).toBe(
+        "Applied",
+      );
+    }
+  });
+
+  it("labels every terminal result Outcome rather than calling rejection an offer", () => {
+    for (const status of ["Offer", "Accepted", "Rejected", "Withdrawn"] as const) {
+      const lifecycle = buildApplicationIndexLifecycle(status);
+      expect(lifecycle.stages.find((stage) => stage.current)?.label).toBe(
+        "Outcome",
+      );
+    }
+  });
+
+  it("builds every index rail from the same truthful history pass", () => {
+    const lifecycles = buildApplicationIndexLifecycles(
+      [{ id: "a", current_status: "Rejected" }],
+      [
+        { application_id: "a", new_status: "Applied" },
+        { application_id: "a", new_status: "Interview" },
+        { application_id: "a", new_status: "Rejected" },
+      ],
+    );
+
+    expect(lifecycles?.get("a")?.stages).toHaveLength(4);
+    expect(lifecycles?.get("a")?.connectors).toEqual([true, true, true]);
   });
 });
 

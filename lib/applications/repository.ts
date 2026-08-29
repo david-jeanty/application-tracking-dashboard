@@ -5,8 +5,10 @@ import { classifyMissingConditionalUpdate } from "@/lib/applications/concurrency
 import { UNSPECIFIED_DATABASE_VALUE } from "@/lib/applications/constants";
 import type {
   ApplicationStatus,
+  ApplicationStatusSummary,
   JobCategory,
 } from "@/lib/applications/constants";
+import { APPLICATION_STATUS_SUMMARIES } from "@/lib/applications/constants";
 import {
   toApplicationInsert,
   toApplicationUpdate,
@@ -18,6 +20,7 @@ import {
 import type {
   ApplicationAnalyticsRow,
   ApplicationListItem,
+  ApplicationPreviewContent,
   ApplicationRecord,
   ApplicationStatusEvent,
   ApplicationTimelineEvent,
@@ -183,6 +186,8 @@ export type ArchiveState = "active" | "archived" | "all";
 
 export type ApplicationListFilters = {
   status?: ApplicationStatus;
+  /** A broad Applications-index status group; exact `status` takes precedence. */
+  statusSummary?: ApplicationStatusSummary;
   category?: JobCategory;
   /**
    * Case-insensitive substring matched against any searchable column —
@@ -236,7 +241,14 @@ export async function listApplications(
   if (archiveState === "active") query = query.is("archived_at", null);
   if (archiveState === "archived") query = query.not("archived_at", "is", null);
 
-  if (filters.status) query = query.eq("current_status", filters.status);
+  if (filters.status) {
+    query = query.eq("current_status", filters.status);
+  } else if (filters.statusSummary) {
+    const summary = APPLICATION_STATUS_SUMMARIES.find(
+      (candidate) => candidate.key === filters.statusSummary,
+    );
+    if (summary) query = query.in("current_status", [...summary.statuses]);
+  }
   if (filters.category) {
     query = query.eq("normalized_job_category", filters.category);
   }
@@ -273,6 +285,64 @@ export async function listActiveApplications(
     ...filters,
     archiveState: "active",
   });
+}
+
+/**
+ * Loads optional detail content for explicitly opened Applications previews.
+ *
+ * This stays separate from the shared list projection: dashboards, archives,
+ * and MCP list results never receive long notes. One owner-scoped batched read
+ * covers the current filtered result set, with the active-record guard applied
+ * again so a stale id cannot widen the worklist.
+ */
+export async function listApplicationPreviewContent(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+  applicationIds: readonly string[],
+): Promise<{
+  data: ApplicationPreviewContent[] | null;
+  error: { code?: string } | null;
+}> {
+  if (applicationIds.length === 0) return { data: [], error: null };
+
+  return supabase
+    .from("applications")
+    .select("id,job_description,salary,notes")
+    .eq("user_id", authenticatedUserId)
+    .is("archived_at", null)
+    .in("id", [...applicationIds])
+    .returns<ApplicationPreviewContent[]>();
+}
+
+/**
+ * Reads only the statuses needed by the Applications summary strip.
+ *
+ * Search, work-term and category still narrow the counts, while status itself
+ * is deliberately removed so every segment remains a useful destination.
+ */
+export async function listActiveApplicationSummaryStatuses(
+  supabase: SupabaseClient,
+  authenticatedUserId: string,
+  filters: ActiveApplicationFilters = {},
+) {
+  let query = supabase
+    .from("applications")
+    .select("current_status")
+    .eq("user_id", authenticatedUserId)
+    .is("archived_at", null);
+
+  if (filters.category) {
+    query = query.eq("normalized_job_category", filters.category);
+  }
+  if (filters.search) query = query.or(toSearchFilter(filters.search));
+  if (filters.workTermSeason) {
+    query = query.ilike(
+      "work_term_season",
+      toContainsPattern(filters.workTermSeason),
+    );
+  }
+
+  return query.returns<{ current_status: ApplicationStatus }[]>();
 }
 
 /**

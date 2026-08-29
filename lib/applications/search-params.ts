@@ -1,5 +1,6 @@
 import {
   APPLICATION_STATUSES,
+  APPLICATION_STATUS_SUMMARIES,
   JOB_CATEGORIES,
   type ApplicationStatus,
   type JobCategory,
@@ -74,6 +75,11 @@ export function parseApplicationFilters(
     STATUS_PARAM,
     APPLICATION_STATUSES,
   );
+  const statusSummary = APPLICATION_STATUS_SUMMARIES.find(
+    (summary) =>
+      summary.queryValue.toLowerCase() ===
+      readParam(params, STATUS_PARAM, 80)?.toLowerCase(),
+  )?.key;
   const workTermSeason = readParam(
     params,
     WORK_TERM_PARAM,
@@ -88,6 +94,7 @@ export function parseApplicationFilters(
   return {
     ...(search ? { search } : {}),
     ...(status ? { status } : {}),
+    ...(!status && statusSummary ? { statusSummary } : {}),
     ...(workTermSeason ? { workTermSeason } : {}),
     ...(category ? { category } : {}),
   };
@@ -98,6 +105,7 @@ export function hasActiveFilters(filters: ActiveApplicationFilters): boolean {
   return Boolean(
     filters.search ||
       filters.status ||
+      filters.statusSummary ||
       filters.workTermSeason ||
       filters.category,
   );
@@ -114,6 +122,12 @@ export function describeActiveFilters(
 
   if (filters.search) described.push(`matching "${filters.search}"`);
   if (filters.status) described.push(`with status ${filters.status}`);
+  if (filters.statusSummary) {
+    const label = APPLICATION_STATUS_SUMMARIES.find(
+      (summary) => summary.key === filters.statusSummary,
+    )?.label;
+    if (label) described.push(`in the ${label} summary`);
+  }
   if (filters.workTermSeason) described.push(`for ${filters.workTermSeason}`);
   if (filters.category) described.push(`in ${filters.category}`);
 
@@ -174,4 +188,23 @@ export function toPipelineUrl(
 
   const query = params.toString();
   return query ? `/pipeline?${query}` : "/pipeline";
+}
+
+/** Rebuilds an Applications URL while changing only its status summary. */
+export function toApplicationStatusSummaryUrl(
+  path: string,
+  filters: ActiveApplicationFilters,
+  statusSummary?: (typeof APPLICATION_STATUS_SUMMARIES)[number],
+): string {
+  const params = new URLSearchParams();
+
+  if (filters.search) params.set(SEARCH_PARAM, filters.search);
+  if (statusSummary) params.set(STATUS_PARAM, statusSummary.queryValue);
+  if (filters.workTermSeason) {
+    params.set(WORK_TERM_PARAM, filters.workTermSeason);
+  }
+  if (filters.category) params.set(CATEGORY_PARAM, filters.category);
+
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
 }

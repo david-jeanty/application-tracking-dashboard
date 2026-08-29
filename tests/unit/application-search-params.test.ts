@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { APPLICATION_STATUS_SUMMARIES } from "@/lib/applications/constants";
 import {
   CATEGORY_PARAM,
   describeActiveFilters,
@@ -6,6 +7,7 @@ import {
   parseApplicationFilters,
   SEARCH_PARAM,
   STATUS_PARAM,
+  toApplicationStatusSummaryUrl,
   WORK_TERM_PARAM,
 } from "@/lib/applications/search-params";
 
@@ -56,6 +58,15 @@ describe("reading filters from the URL", () => {
     expect(
       parseApplicationFilters({ [CATEGORY_PARAM]: "finance" }).category,
     ).toBe("Finance");
+  });
+
+  it("reads an explicit broad summary without confusing it with an exact status", () => {
+    expect(
+      parseApplicationFilters({ [STATUS_PARAM]: "summary:applied" }),
+    ).toEqual({ statusSummary: "applied" });
+    expect(parseApplicationFilters({ [STATUS_PARAM]: "Applied" })).toEqual({
+      status: "Applied",
+    });
   });
 });
 
@@ -146,5 +157,46 @@ describe("describing the applied filters", () => {
       "for Winter 2027",
       "in Finance",
     ]);
+  });
+});
+
+describe("building status-summary URLs", () => {
+  const preserved = {
+    search: "data analyst",
+    status: "Interview" as const,
+    workTermSeason: "Winter 2027",
+    category: "Finance" as const,
+  };
+
+  it.each([
+    ["saved", "summary:saved"],
+    ["applied", "summary:applied"],
+    ["interview", "summary:interview"],
+    ["offer", "summary:offer"],
+  ] as const)("applies the %s summary and preserves the other filters", (key, value) => {
+    const summary = APPLICATION_STATUS_SUMMARIES.find(
+      (candidate) => candidate.key === key,
+    );
+    const url = new URL(
+      toApplicationStatusSummaryUrl("/demo/applications", preserved, summary),
+      "https://example.test",
+    );
+
+    expect(url.searchParams.get(STATUS_PARAM)).toBe(value);
+    expect(url.searchParams.get(SEARCH_PARAM)).toBe("data analyst");
+    expect(url.searchParams.get(WORK_TERM_PARAM)).toBe("Winter 2027");
+    expect(url.searchParams.get(CATEGORY_PARAM)).toBe("Finance");
+  });
+
+  it("clears only status when All is selected", () => {
+    const url = new URL(
+      toApplicationStatusSummaryUrl("/applications", preserved),
+      "https://example.test",
+    );
+
+    expect(url.searchParams.has(STATUS_PARAM)).toBe(false);
+    expect(url.searchParams.get(SEARCH_PARAM)).toBe("data analyst");
+    expect(url.searchParams.get(WORK_TERM_PARAM)).toBe("Winter 2027");
+    expect(url.searchParams.get(CATEGORY_PARAM)).toBe("Finance");
   });
 });

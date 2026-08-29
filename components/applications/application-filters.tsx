@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   APPLICATION_STATUSES,
+  APPLICATION_STATUS_SUMMARIES,
   JOB_CATEGORIES,
 } from "@/lib/applications/constants";
 import type { ActiveApplicationFilters } from "@/lib/applications/repository";
@@ -89,16 +90,31 @@ export function ApplicationFilters({
           </label>
           <select
             className={selectClassName}
-            defaultValue={filters.status ?? ""}
+            defaultValue={
+              filters.statusSummary
+                ? APPLICATION_STATUS_SUMMARIES.find(
+                    (summary) => summary.key === filters.statusSummary,
+                  )?.queryValue
+                : filters.status ?? ""
+            }
             id="applications-status"
             name={STATUS_PARAM}
           >
             <option value="">All statuses</option>
+            <optgroup label="Summary groups">
+              {APPLICATION_STATUS_SUMMARIES.map((summary) => (
+                <option key={summary.key} value={summary.queryValue}>
+                  {summary.label} stages
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Exact statuses">
             {APPLICATION_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {status}
               </option>
             ))}
+            </optgroup>
           </select>
         </div>
 

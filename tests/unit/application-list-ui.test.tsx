@@ -14,11 +14,17 @@ const supabase = {
   },
 };
 const listActiveApplications = vi.fn();
+const listActiveApplicationSummaryStatuses = vi.fn();
+const listApplicationPreviewContent = vi.fn();
 const listStatusHistory = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => supabase }));
 vi.mock("@/lib/applications/repository", () => ({
   listActiveApplications: (...args: unknown[]) => listActiveApplications(...args),
+  listActiveApplicationSummaryStatuses: (...args: unknown[]) =>
+    listActiveApplicationSummaryStatuses(...args),
+  listApplicationPreviewContent: (...args: unknown[]) =>
+    listApplicationPreviewContent(...args),
   listStatusHistory: (...args: unknown[]) => listStatusHistory(...args),
 }));
 
@@ -67,12 +73,20 @@ async function renderList(options: {
       ? { data: null, error: { code: "PGRST500" } }
       : { data: options.history ?? [], error: null },
   );
+  const rows = options.rows ?? [application()];
+  listActiveApplicationSummaryStatuses.mockResolvedValue({
+    data: rows.map((row) => ({ current_status: row.current_status })),
+    error: null,
+  });
+  listApplicationPreviewContent.mockResolvedValue({ data: [], error: null });
 
   return render(await ApplicationList({ filters: options.filters ?? {} }));
 }
 
 beforeEach(() => {
   listActiveApplications.mockReset();
+  listActiveApplicationSummaryStatuses.mockReset();
+  listApplicationPreviewContent.mockReset();
   listStatusHistory.mockReset();
   setDesktopViewport(true);
 });
@@ -138,42 +152,144 @@ describe("what a record shows", () => {
     expect(records()).toHaveLength(1);
   });
 
-  it("counts what it is showing", async () => {
-    await renderList({ rows: [application(), application({ id: "22222222-2222-4222-8222-222222222222" })] });
+  it("summarises only the filtered records it is showing", async () => {
+    await renderList({
+      rows: [
+        application({ current_status: "Interested" }),
+        application({
+          id: "22222222-2222-4222-8222-222222222222",
+          current_status: "Screening",
+        }),
+        application({
+          id: "33333333-3333-4333-8333-333333333333",
+          current_status: "Interview",
+        }),
+        application({
+          id: "44444444-4444-4444-8444-444444444444",
+          current_status: "Accepted",
+        }),
+        application({
+          id: "55555555-5555-4555-8555-555555555555",
+          current_status: "Rejected",
+        }),
+      ],
+    });
 
-    expect(screen.getByText("2 applications")).toBeInTheDocument();
+    const summary = within(
+      screen.getByRole("list", { name: "Application status summary" }),
+    );
+    const count = (label: string) =>
+      within(summary.getByText(label).closest("li") as HTMLElement).getByText(
+        /^\d+$/,
+      );
+
+    expect(count("All")).toHaveTextContent("5");
+    expect(count("Saved")).toHaveTextContent("1");
+    expect(count("Applied")).toHaveTextContent("1");
+    expect(count("Interview")).toHaveTextContent("1");
+    expect(count("Offer")).toHaveTextContent("1");
   });
 
-  it("says one application in the singular", async () => {
-    await renderList();
+  it("renders every summary segment as an accessible URL-backed filter", () => {
+    render(
+      <ApplicationRecords
+        applications={[application()]}
+        basePath="/demo"
+        filters={{
+          search: "analyst",
+          statusSummary: "applied",
+          workTermSeason: "Winter 2027",
+          category: "Finance",
+        }}
+        history={[]}
+        summaryStatuses={["Interested", "Applied", "Rejected", "Accepted"]}
+      />,
+    );
 
-    expect(screen.getByText("1 application")).toBeInTheDocument();
+    const summary = screen.getByRole("list", {
+      name: "Application status summary",
+    });
+    const linkFor = (label: string) =>
+      within(summary).getByText(label).closest("a") as HTMLAnchorElement;
+
+    expect(linkFor("Applied")).toHaveAttribute("aria-current", "page");
+    expect(linkFor("All").href).toContain("q=analyst");
+    expect(linkFor("All").href).toContain("work_term=Winter+2027");
+    expect(linkFor("All").href).toContain("category=Finance");
+    expect(linkFor("All").href).not.toContain("status=");
+    expect(linkFor("Saved").href).toContain("status=summary%3Asaved");
+    expect(linkFor("Applied").href).toContain("status=summary%3Aapplied");
+    expect(linkFor("Interview").href).toContain("status=summary%3Ainterview");
+    expect(linkFor("Offer").href).toContain("status=summary%3Aoffer");
   });
 });
 
 describe("the desktop selected-record workspace", () => {
-  it("starts with exactly one selected record preview", () => {
-    render(
+  it("starts full-width with no selected preview", () => {
+    const { container } = render(
       <ApplicationRecords
         applications={[application({ application_deadline: "2026-09-03" })]}
         history={[]}
       />,
     );
 
-    const previews = screen.getAllByRole("complementary", {
+    expect(container.querySelector('[data-layout="full"]')).toBeInTheDocument();
+    expect(
+      screen.queryByRole("complementary", {
+        name: "Selected application preview",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens one useful preview and closes back to the full-width list", () => {
+    const { container } = render(
+      <ApplicationRecords
+        applications={[application({ application_deadline: "2026-09-03" })]}
+        history={[]}
+        previewContent={[
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            job_description: "Build financial models and prepare recommendations.",
+            salary: "$24/hour",
+            notes: "Recruiter asked for a writing sample.",
+          },
+        ]}
+      />,
+    );
+
+    const row = screen.getByRole("link", { name: "Business Analyst Intern" });
+    expect(fireEvent.click(row)).toBe(false);
+
+    const preview = screen.getByRole("complementary", {
       name: "Selected application preview",
     });
-    expect(previews).toHaveLength(1);
-    expect(previews[0]).toHaveTextContent("Business Analyst Intern");
-    expect(previews[0]).toHaveTextContent("Business Analysis");
-    expect(previews[0]).toHaveTextContent("Hybrid");
-    expect(screen.getByRole("link", { name: "Open full record" })).toHaveAttribute(
+    expect(screen.getAllByRole("complementary")).toHaveLength(1);
+    expect(container.querySelector('[data-layout="preview"]')).toBeInTheDocument();
+    expect(preview).toHaveTextContent("Business Analyst Intern");
+    const jobDescription = within(preview).getByText("Job description").closest("details");
+    const notes = within(preview).getByText("Notes").closest("details");
+    expect(jobDescription).not.toHaveAttribute("open");
+    expect(notes).not.toHaveAttribute("open");
+    expect(preview).toHaveTextContent("$24/hour");
+    expect(preview).not.toHaveTextContent("Not recorded");
+    expect(
+      within(preview).getByRole("link", { name: "Open full application" }),
+    ).toHaveAttribute(
       "href",
       "/applications/11111111-1111-4111-8111-111111111111",
     );
+
+    fireEvent.click(
+      within(preview).getByRole("button", {
+        name: "Close application preview",
+      }),
+    );
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    expect(container.querySelector('[data-layout="full"]')).toBeInTheDocument();
+    expect(row).toHaveFocus();
   });
 
-  it("updates the one preview when another row is selected", () => {
+  it("updates the one preview and resets its internal scroll position", () => {
     render(
       <ApplicationRecords
         applications={[
@@ -187,19 +303,28 @@ describe("the desktop selected-record workspace", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("link", { name: "Business Analyst Intern" }));
+    const firstPreview = screen.getByRole("complementary", {
+      name: "Selected application preview",
+    });
+    expect(firstPreview).toHaveAttribute("data-sticky-preview");
+    expect(firstPreview).toHaveClass("sticky", "overflow-y-auto");
+    firstPreview.scrollTop = 240;
+
     const strategyRow = screen.getByRole("link", { name: "Strategy Intern" });
     expect(fireEvent.click(strategyRow)).toBe(false);
 
     const preview = screen.getByRole("complementary", {
       name: "Selected application preview",
     });
+    expect(preview.scrollTop).toBe(0);
     expect(within(preview).getByRole("heading", { name: "Strategy Intern" })).toBeInTheDocument();
     expect(within(preview).queryByRole("heading", { name: "Business Analyst Intern" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("complementary")).toHaveLength(1);
-    expect(strategyRow).toHaveAttribute("aria-current", "true");
+    expect(strategyRow).toHaveAttribute("aria-expanded", "true");
   });
 
-  it("falls back to a valid selected preview when filtering removes the selection", () => {
+  it("returns to the full-width list when filtering removes the selection", () => {
     const first = application();
     const second = application({
       id: "22222222-2222-4222-8222-222222222222",
@@ -212,10 +337,8 @@ describe("the desktop selected-record workspace", () => {
     fireEvent.click(screen.getByRole("link", { name: "Strategy Intern" }));
     view.rerender(<ApplicationRecords applications={[first]} history={[]} />);
 
-    const preview = screen.getByRole("complementary", {
-      name: "Selected application preview",
-    });
-    expect(within(preview).getByRole("heading", { name: "Business Analyst Intern" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
+    expect(view.container.querySelector('[data-layout="full"]')).toBeInTheDocument();
     expect(records()).toHaveLength(1);
   });
 
@@ -236,7 +359,7 @@ describe("the desktop selected-record workspace", () => {
 
     expect(screen.queryByRole("link", { name: "Edit" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /archive|restore|delete/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Open full record" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open full application" })).not.toBeInTheDocument();
     expect(
       container.querySelector('a[href^="/demo/applications/"]'),
     ).toBeNull();
@@ -250,6 +373,9 @@ describe("the desktop selected-record workspace", () => {
           name: "Selected application preview",
         }),
       ).getByRole("heading", { name: "Strategy Intern" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Close application preview" }),
     ).toBeInTheDocument();
   });
 
@@ -302,9 +428,7 @@ describe("the desktop selected-record workspace", () => {
       "/applications/11111111-1111-4111-8111-111111111111",
     );
     expect(fireEvent.click(row)).toBe(true);
-    expect(
-      screen.getByRole("complementary", { name: "Selected application preview" }),
-    ).toHaveClass("hidden", "xl:block");
+    expect(screen.queryByRole("complementary")).not.toBeInTheDocument();
   });
 
   it("makes every row a labelled keyboard-focusable record control", () => {
@@ -365,7 +489,8 @@ describe("what one record carries at any width", () => {
     const record = records()[0];
 
     expect(record.textContent).not.toContain("Application deadline");
-    expect(record.textContent).toContain("—");
+    expect(record.querySelector("[data-next-context]")).toBeNull();
+    expect(screen.queryByText("Next")).not.toBeInTheDocument();
   });
 
   it("names the action itself, so the record reads without a column heading", async () => {
@@ -479,10 +604,33 @@ describe("the date a row surfaces", () => {
     expect(nextColumn()).toContain("Ask for a referral");
   });
 
-  it("shows a dash when the record carries neither", async () => {
+  it("removes the Next column when no record carries useful context", async () => {
     await renderList({ rows: [application({ application_deadline: null })] });
 
-    expect(nextColumn()).toContain("—");
+    expect(records()[0].querySelector("[data-next-context]")).toBeNull();
+    expect(screen.queryByText("Next")).not.toBeInTheDocument();
+  });
+
+  it("keeps next metadata inline without a permanent column or placeholders", async () => {
+    await renderList({
+      rows: [
+        application({
+          next_action: "Follow up with recruiter",
+          next_action_due_date: "2026-08-28",
+        }),
+        application({
+          id: "22222222-2222-4222-8222-222222222222",
+          original_job_title: "Strategy Intern",
+        }),
+      ],
+    });
+
+    expect(screen.queryByText("Next")).not.toBeInTheDocument();
+    expect(records()[0]).toHaveTextContent("Follow up with recruiter");
+    expect(records()[1].querySelector("[data-next-context]")).toBeNull();
+    expect(
+      records()[0].querySelector("[data-next-context]"),
+    ).not.toHaveTextContent(/^—$/);
   });
 });
 
@@ -517,7 +665,8 @@ describe("a deadline stops being a next date once the application is out", () =>
         ],
       });
 
-      expect(nextColumn()).toContain("—");
+      expect(records()[0].querySelector("[data-next-context]")).toBeNull();
+      expect(screen.queryByText("Next")).not.toBeInTheDocument();
     });
   }
 
@@ -534,7 +683,8 @@ describe("a deadline stops being a next date once the application is out", () =>
       ],
     });
 
-    expect(nextColumn()).toContain("—");
+    expect(records()[0].querySelector("[data-next-context]")).toBeNull();
+    expect(screen.queryByText("Next")).not.toBeInTheDocument();
   });
 
   it("still shows a next action once submitted", async () => {
@@ -574,6 +724,22 @@ describe("when status history cannot be read", () => {
 });
 
 describe("reading history for the whole list", () => {
+  it("loads preview content once for only the filtered application ids", async () => {
+    const first = application();
+    const second = application({
+      id: "22222222-2222-4222-8222-222222222222",
+    });
+
+    await renderList({ rows: [first, second] });
+
+    expect(listApplicationPreviewContent).toHaveBeenCalledTimes(1);
+    expect(listApplicationPreviewContent).toHaveBeenCalledWith(
+      supabase,
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      [first.id, second.id],
+    );
+  });
+
   it("asks for the student's history once, not once per row", async () => {
     await renderList({
       rows: [
@@ -612,9 +778,10 @@ describe("reading history for the whole list", () => {
       .getAllByRole("list", { name: /lifecycle progress/i })
       .map((rail) => rail.getAttribute("aria-label"));
 
-    // The rejected one never went through In process, and does not claim to.
+    // The index rail uses four milestones and never calls a rejection an offer.
     expect(rails.some((label) => label?.includes("Outcome current stage"))).toBe(true);
-    expect(rails.every((label) => label?.includes("In process not reached"))).toBe(true);
+    expect(rails.every((label) => !label?.includes("In process"))).toBe(true);
+    expect(rails.every((label) => !label?.includes("Offer current stage"))).toBe(true);
   });
 });
 
@@ -640,6 +807,10 @@ describe("the empty states", () => {
       error: { code: "PGRST500" },
     });
     listStatusHistory.mockResolvedValue({ data: [], error: null });
+    listActiveApplicationSummaryStatuses.mockResolvedValue({
+      data: [],
+      error: null,
+    });
 
     render(await ApplicationList({ filters: {} }));
 
