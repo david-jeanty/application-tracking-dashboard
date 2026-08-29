@@ -20,7 +20,7 @@ export function PublicHeader() {
       <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-4 px-5 py-4 sm:px-8">
         <Link
           aria-label="Interndex"
-          className="inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+          className="-ml-2 inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
           href="/"
         >
           <InterndexLogo size="medium" />

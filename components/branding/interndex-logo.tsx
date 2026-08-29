@@ -8,9 +8,9 @@ type InterndexLogoProps = {
 };
 
 const sizes = {
-  small: "h-9",
-  medium: "h-12",
-  large: "h-16",
+  small: "h-8",
+  medium: "h-10",
+  large: "h-14",
 } as const;
 
 /**
