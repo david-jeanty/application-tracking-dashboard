@@ -4,6 +4,8 @@ import { ApplicationRecords } from "@/components/applications/application-record
 import { ButtonLink } from "@/components/ui/button";
 import {
   listActiveApplications,
+  listActiveApplicationSummaryStatuses,
+  listApplicationPreviewContent,
   listStatusHistory,
   type ActiveApplicationFilters,
 } from "@/lib/applications/repository";
@@ -16,15 +18,14 @@ export function ApplicationsListLoading() {
   return (
     <div
       aria-label="Loading applications"
-      className="xl:grid xl:grid-cols-[minmax(0,7fr)_minmax(17rem,3fr)] xl:items-start xl:gap-6"
       role="status"
     >
-      <div>
-        <div className="h-6 animate-pulse border-b border-border bg-surface-muted/70" />
-        <div className="hidden h-8 border-b border-border md:block" />
+      <div className="h-16 animate-pulse rounded-surface bg-surface-muted/70" />
+      <div className="mt-4 overflow-hidden rounded-surface border border-border/70 bg-surface">
+        <div className="hidden h-9 bg-surface-muted/45 md:block" />
         {[0, 1, 2, 3, 4].map((item) => (
           <div
-            className="grid min-h-[84px] animate-pulse items-center gap-5 border-b border-border px-3 py-3 md:grid-cols-[minmax(0,42fr)_minmax(13rem,36fr)_minmax(7rem,22fr)]"
+            className="grid min-h-[96px] animate-pulse items-center gap-7 border-t border-border/60 px-5 py-4 md:grid-cols-[minmax(0,42fr)_minmax(18rem,58fr)]"
             key={item}
           >
             <div className="flex items-center gap-3">
@@ -35,11 +36,9 @@ export function ApplicationsListLoading() {
               </div>
             </div>
             <div className="hidden h-7 rounded-control bg-surface-muted md:block" />
-            <div className="hidden h-7 rounded-control bg-surface-muted md:block" />
           </div>
         ))}
       </div>
-      <div className="hidden h-[430px] animate-pulse rounded-surface border border-border bg-surface-muted xl:block" />
       <span className="sr-only">Loading applications…</span>
     </div>
   );
@@ -98,15 +97,17 @@ export async function ApplicationList({
 
   if (!user) redirect("/login");
 
-  // Two owner-scoped reads for the whole page, however many applications come
-  // back. The history read is not per row: it returns every event the student
-  // owns once, and each row's rail is built from that single result in memory.
+  // The list, status summary and history remain one owner-scoped read each,
+  // however many applications come back. Optional preview content is fetched
+  // once more, in a bounded batch, only for the filtered ids an explicitly
+  // opened preview can reveal.
   //
   // Archive state is applied inside the list read, not passed in, so a filter
   // built from the URL cannot reach archived records.
-  const [applications, history] = await Promise.all([
+  const [applications, history, summaryStatuses] = await Promise.all([
     listActiveApplications(supabase, user.id, filters),
     listStatusHistory(supabase, user.id),
+    listActiveApplicationSummaryStatuses(supabase, user.id, filters),
   ]);
 
   if (applications.error) {
@@ -138,12 +139,25 @@ export async function ApplicationList({
     );
   }
 
+  const previewContent = await listApplicationPreviewContent(
+    supabase,
+    user.id,
+    data.map((application) => application.id),
+  );
+
   // A failed history read leaves every rail off rather than taking the list
   // down: the exact status still says where each application stands.
   return (
     <ApplicationRecords
       applications={data}
+      filters={filters}
       history={history.error ? null : history.data}
+      previewContent={previewContent.error ? [] : previewContent.data ?? []}
+      summaryStatuses={
+        summaryStatuses.error
+          ? data.map((application) => application.current_status)
+          : (summaryStatuses.data ?? []).map((row) => row.current_status)
+      }
     />
   );
 }

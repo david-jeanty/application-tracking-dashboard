@@ -1,4 +1,5 @@
 import type { ActiveApplicationFilters } from "@/lib/applications/repository";
+import { APPLICATION_STATUS_SUMMARIES } from "@/lib/applications/constants";
 import { SEARCHABLE_COLUMNS } from "@/lib/applications/search";
 import type { ApplicationListItem } from "@/lib/applications/types";
 
@@ -10,7 +11,8 @@ import type { ApplicationListItem } from "@/lib/applications/types";
  * filter behaviour the real product does not have. Each clause mirrors exactly
  * one clause of `listApplications`:
  *
- * - `status` and `category` are equality matches, as `eq` is.
+ * - exact `status` and `category` are equality matches, as `eq` is; a status
+ *   summary is membership in the same explicit group production sends to `in`.
  * - `search` is a case-insensitive substring across the searchable columns,
  *   read from `SEARCHABLE_COLUMNS` rather than restated, so the two cannot
  *   drift about which fields a search looks at.
@@ -34,6 +36,19 @@ export function filterDemoApplications(
   return applications.filter((application) => {
     if (filters.status && application.current_status !== filters.status) {
       return false;
+    }
+    if (filters.statusSummary) {
+      const summary = APPLICATION_STATUS_SUMMARIES.find(
+        (candidate) => candidate.key === filters.statusSummary,
+      );
+      if (
+        summary &&
+        !(summary.statuses as readonly string[]).includes(
+          application.current_status,
+        )
+      ) {
+        return false;
+      }
     }
     if (
       filters.category &&

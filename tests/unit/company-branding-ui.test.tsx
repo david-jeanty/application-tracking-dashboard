@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArchivedApplicationsList } from "@/components/applications/archived-list";
 import {
@@ -47,6 +47,8 @@ vi.mock("@/lib/applications/repository", () => ({
   getApplicationById: (...args: unknown[]) => getApplicationById(...args),
   listActiveApplications: (...args: unknown[]) =>
     listActiveApplications(...args),
+  listActiveApplicationSummaryStatuses: async () => ({ data: [], error: null }),
+  listApplicationPreviewContent: async () => ({ data: [], error: null }),
   // The lifecycle rail reads status history. These tests are about the mark
   // beside each company, so an empty history is enough: the rail still draws
   // from the current status.
@@ -99,6 +101,10 @@ describe("company branding across the product", () => {
     process.env.NEXT_PUBLIC_LOGO_DEV_TOKEN = TOKEN;
     listActiveApplications.mockReset();
     getApplicationById.mockReset();
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: vi.fn().mockReturnValue({ matches: true }),
+    });
   });
 
   afterEach(() => {
@@ -114,19 +120,21 @@ describe("company branding across the product", () => {
 
       const { container } = render(await ApplicationList({}));
 
-      // One logo belongs to the record row and one to the selected-record
-      // preview. The preview is desktop context, not a second mobile row.
-      const sources = logoSources(container);
-      expect(sources).toHaveLength(2);
-      expect(sources).toEqual(
-        expect.arrayContaining([
-          expect.stringContaining(`https://${LOGO_DEV_HOST}/shopify.com?`),
-          expect.stringContaining(`https://${LOGO_DEV_HOST}/shopify.com?`),
-        ]),
-      );
+      // Full-width by default: only the record row exists until selection.
+      expect(logoSources(container)).toHaveLength(1);
       expect(
         logoSources(screen.getByRole("list", { name: "Applications" })),
       ).toHaveLength(1);
+
+      fireEvent.click(screen.getByRole("link", { name: "Data Analyst Intern" }));
+
+      const sources = logoSources(container);
+      expect(sources).toHaveLength(2);
+      expect(
+        sources.every((source) =>
+          source.includes(`https://${LOGO_DEV_HOST}/shopify.com?`),
+        ),
+      ).toBe(true);
       expect(
         logoSources(
           screen.getByRole("complementary", {

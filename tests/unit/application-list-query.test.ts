@@ -4,9 +4,11 @@ import {
   findApplicationByExactUrl,
   getApplicationById,
   listActiveApplications,
+  listActiveApplicationSummaryStatuses,
   listApplicationsForAnalytics,
   listActiveWorkTermSeasons,
   listApplications,
+  listApplicationPreviewContent,
   listApplicationStatusHistory,
   listStatusHistory,
   listStatusTimeline,
@@ -35,7 +37,7 @@ function recordingClient(rows: unknown[] = []) {
     return builder;
   };
 
-  for (const method of ["select", "eq", "is", "not", "or", "ilike", "order", "limit"]) {
+  for (const method of ["select", "eq", "is", "in", "not", "or", "ilike", "order", "limit"]) {
     builder[method] = record(method);
   }
   builder.returns = () => Promise.resolve({ data: rows, error: null });
@@ -116,6 +118,31 @@ describe("every list read is owner-scoped and excludes archived rows", () => {
     const columns = String(recorder.find("select")[0].args[0]);
     expect(columns).not.toContain("job_description");
     expect(columns).not.toContain("notes");
+  });
+
+  it("loads preview content through a separate bounded owner-scoped projection", async () => {
+    const recorder = recordingClient();
+
+    await listApplicationPreviewContent(recorder.client, USER, [APPLICATION]);
+
+    expect(recorder.find("select")[0].args[0]).toBe(
+      "id,job_description,salary,notes",
+    );
+    expect(recorder.argsFor("eq", "user_id")).toEqual(["user_id", USER]);
+    expect(recorder.argsFor("is", "archived_at")).toEqual([
+      "archived_at",
+      null,
+    ]);
+    expect(recorder.argsFor("in", "id")).toEqual(["id", [APPLICATION]]);
+  });
+
+  it("does not query preview content when the filtered list is empty", async () => {
+    const recorder = recordingClient();
+
+    await expect(
+      listApplicationPreviewContent(recorder.client, USER, []),
+    ).resolves.toEqual({ data: [], error: null });
+    expect(recorder.find("from")).toHaveLength(0);
   });
 
   it("carries the company domain in the list projection", async () => {
@@ -203,6 +230,42 @@ describe("filters reach the query", () => {
       "current_status",
       "Applied",
     ]);
+  });
+
+  it("filters broad summary groups with the real statuses they contain", async () => {
+    const recorder = recordingClient();
+
+    await listActiveApplications(recorder.client, USER, {
+      statusSummary: "applied",
+    });
+
+    expect(recorder.argsFor("in", "current_status")).toEqual([
+      "current_status",
+      ["Applied", "Screening", "Assessment"],
+    ]);
+    expect(recorder.argsFor("eq", "current_status")).toBeUndefined();
+  });
+
+  it("reads summary counts without applying the active status filter", async () => {
+    const recorder = recordingClient();
+
+    await listActiveApplicationSummaryStatuses(recorder.client, USER, {
+      search: "analyst",
+      status: "Interview",
+      workTermSeason: "Winter 2027",
+      category: "Finance",
+    });
+
+    expect(recorder.find("select")[0].args[0]).toBe("current_status");
+    expect(recorder.argsFor("eq", "current_status")).toBeUndefined();
+    expect(recorder.argsFor("in", "current_status")).toBeUndefined();
+    expect(recorder.find("or")).toHaveLength(1);
+    expect(recorder.argsFor("eq", "normalized_job_category")?.[1]).toBe(
+      "Finance",
+    );
+    expect(recorder.argsFor("ilike", "work_term_season")?.[1]).toBe(
+      "%Winter 2027%",
+    );
   });
 
   it("filters by category", async () => {
