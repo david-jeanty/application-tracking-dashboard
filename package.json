@@ -21,6 +21,7 @@
     "extension:test": "vitest run --config extension/vitest.config.ts",
     "extension:build": "tsc -p extension/tsconfig.json",
     "extension:check": "npm run extension:typecheck && npm run extension:test && npm run extension:build",
+    "extension:package": "npm run extension:build && node extension/scripts/package.mjs",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run extension:check"
   },
   "dependencies": {
