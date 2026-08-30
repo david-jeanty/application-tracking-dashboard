@@ -13,6 +13,12 @@ import { ButtonLink } from "@/components/ui/button";
  * the product, then sign in if you already have a workspace, then make one.
  * Try demo carries the filled button because seeing Interndex is the thing this
  * page most wants to happen; Create account follows it as the quieter outline.
+ *
+ * At a phone width there is only room for the wordmark and one action without
+ * wrapping, so Sign in and Create account step out — both remain one scroll
+ * away in the hero — and the demo button shortens to a single word. Its
+ * accessible name stays the full sentence regardless of width, so the label
+ * never becomes the only thing a screen reader announces.
  */
 export function PublicHeader() {
   return (
@@ -20,7 +26,7 @@ export function PublicHeader() {
       <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-4 px-5 py-4 sm:px-8">
         <Link
           aria-label="Interndex"
-          className="-ml-2 inline-flex rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+          className="-ml-2 inline-flex shrink-0 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
           href="/"
         >
           <InterndexLogo size="medium" />
@@ -37,9 +43,15 @@ export function PublicHeader() {
               </Link>
             </li>
             <li>
-              <ButtonLink href="/demo">Try demo</ButtonLink>
+              <ButtonLink className="whitespace-nowrap" href="/demo">
+                <span aria-hidden="true">
+                  <span className="sm:hidden">Demo</span>
+                  <span className="hidden sm:inline">Try demo</span>
+                </span>
+                <span className="sr-only">Try the demo</span>
+              </ButtonLink>
             </li>
-            <li>
+            <li className="hidden sm:block">
               <ButtonLink href="/signup" variant="secondary">
                 Create account
               </ButtonLink>

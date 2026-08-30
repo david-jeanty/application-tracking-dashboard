@@ -73,9 +73,51 @@ test("the public homepage is the front door for a signed-out visitor", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Keep your search organized and know what needs attention next.",
+      name: "Find the role. Give it one place. Always know what’s next.",
     }),
   ).toBeVisible();
+});
+
+test("the homepage's primary CTA and 'no account required' are reachable without scrolling on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const hero = page.getByRole("heading", { level: 1 }).locator("..");
+  await expect(
+    hero.getByRole("link", { name: "Try the demo" }),
+  ).toBeInViewport();
+  await expect(page.getByText(/No account required/)).toBeInViewport();
+});
+
+test("the homepage header stays a single compact line on mobile", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const header = page.getByRole("banner");
+  const demoLink = header.getByRole("link", { name: "Try the demo" });
+  await expect(demoLink).toBeInViewport();
+  await expect(header.getByText("Demo", { exact: true })).toBeVisible();
+
+  // Sign in and Create account step out at this width — both stay reachable
+  // from the hero just below — so only the wordmark and the demo link share
+  // the header row.
+  await expect(header.getByRole("link", { name: "Create account" })).toBeHidden();
+  await expect(header.getByRole("link", { name: "Sign in" })).toBeHidden();
+
+  // A wrapped button would stand taller than a single line of its own text;
+  // this is the concrete "did it wrap" check rather than an eyeballed one.
+  const [headerBox, demoBox] = await Promise.all([
+    header.boundingBox(),
+    demoLink.boundingBox(),
+  ]);
+  expect(headerBox).not.toBeNull();
+  expect(demoBox).not.toBeNull();
+  expect(demoBox!.height).toBeLessThan(48);
+  expect(headerBox!.height).toBeLessThan(80);
 });
 
 test("the privacy page is public and linked from the homepage footer", async ({
@@ -109,7 +151,7 @@ test("a visitor can reach the demo from the homepage and the auth pages", async 
   await page.goto("/");
   await page
     .getByRole("navigation", { name: "Public navigation" })
-    .getByRole("link", { name: "Try demo" })
+    .getByRole("link", { name: "Try the demo" })
     .click();
   await expect(page).toHaveURL(/\/demo$/);
 
@@ -129,6 +171,6 @@ test("the demo offers the way back to the homepage", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "Keep your search organized",
+    "Find the role",
   );
 });
