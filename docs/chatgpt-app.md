@@ -158,9 +158,15 @@ connector, sign in through the consent screen, then ask for your applications.
 
 ## Dependencies
 
-**None added.** The Apps SDK contract is metadata plus an HTML resource, and
-both are expressible with the `registerTool` and `registerResource` this
-repository's `@modelcontextprotocol/server` v2 already has.
+**No runtime dependencies were added.** `@types/jsdom@30.0.0` was added as a dev
+dependency for the widget tests — `tests/unit/mcp-app-view.test.ts` constructs
+its own JSDOM document so the view's script actually runs, and `jsdom` itself
+ships no types.
+
+Nothing was needed at runtime: the Apps SDK contract is metadata plus an HTML
+resource, and both are expressible with the `registerTool` and
+`registerResource` this repository's `@modelcontextprotocol/server` v2 already
+has.
 
 `@modelcontextprotocol/ext-apps` was inspected and deliberately not installed:
 its `registerAppTool` / `registerAppResource` helpers are typed against the MCP
