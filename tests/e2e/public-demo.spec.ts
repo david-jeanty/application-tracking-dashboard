@@ -134,6 +134,72 @@ test("a visitor can walk the whole demo without signing in", async ({ page }) =>
   await expect(page.getByRole("heading", { level: 1, name: "Analytics" })).toBeVisible();
 });
 
+test("analytics reflows without overflow across desktop, tablet and mobile", async ({
+  page,
+}) => {
+  const workspace = page.locator("[data-analytics-conversion-workspace]");
+  const matrix = page.locator("[data-outcome-matrix]");
+  const plot = page.locator("[data-activity-plot]");
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/demo/analytics");
+  await expect(
+    page.getByRole("region", { name: "Your funnel", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Where your funnel narrows" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Outcome comparison" }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Search activity" })).toBeVisible();
+  await expect
+    .poll(() =>
+      workspace.evaluate((node) => getComputedStyle(node).gridTemplateColumns),
+    )
+    .toMatch(/\S+\s+\S+/);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+
+  await page.setViewportSize({ width: 900, height: 1000 });
+  await expect
+    .poll(() =>
+      workspace.evaluate((node) => getComputedStyle(node).gridTemplateColumns),
+    )
+    .not.toMatch(/\S+\s+\S+/);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(matrix).toBeVisible();
+  await expect(plot).toBeVisible();
+  expect(await plot.evaluate((node) => node.getBoundingClientRect().height))
+    .toBeGreaterThanOrEqual(220);
+  expect(
+    await matrix.evaluate(
+      (node) => node.getBoundingClientRect().right <= window.innerWidth,
+    ),
+  ).toBe(true);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await expect(page.getByRole("list", { name: "Weekly application counts" }))
+    .toBeVisible();
+  await expect(
+    page
+      .getByRole("list", { name: "Weekly application counts" })
+      .getByRole("listitem"),
+  ).toHaveCount(12);
+});
+
 test("the demo filters narrow the sample search", async ({ page }) => {
   await page.goto("/demo/applications");
   await expect(records(page).first()).toBeVisible();
