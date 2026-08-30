@@ -126,6 +126,79 @@ by shipping client-id-aware policies or by making an explicit, documented
 risk-acceptance decision — before any public Chrome Web Store distribution,
 which is unchanged and still pending as of this review.
 
+### Chrome Web Store release review (this review)
+
+This is the gate named above, revisited now that public distribution is
+actually being prepared (`docs/chrome-web-store-release.md`).
+
+**Is there a trustworthy signal to key a policy on?** Yes, in principle.
+`docs/mcp.md` already identifies it: when Supabase issues an access token
+through its OAuth 2.1 authorization server — which is how both the MCP
+client and the extension's dedicated public client obtain tokens — the
+issued JWT carries `client_id` as a token claim distinct from an ordinary
+password/session login, which carries none. Postgres verifies the JWT
+signature before RLS ever evaluates `auth.jwt() ->> 'client_id'`, so a caller
+cannot forge that value the way it could forge a request header or a body
+field. This is not the same question as "does OAuth `scope` limit access" —
+it does not, and no code here pretends otherwise — it is "does the token
+itself carry a claim the extension's holder cannot rewrite," and the answer
+is yes.
+
+**Why it is not implemented in this PR.** Being trustworthy in principle is
+not the same as being safe to ship blind. Three concrete gaps make writing
+the policy now the wrong call rather than the cautious one:
+
+1. **The extension's real `client_id` does not exist yet.** It is issued when
+   the dedicated OAuth client is registered against a real Supabase project
+   (see `docs/chrome-web-store-release.md`, OAuth section), which itself
+   depends on the Chrome Web Store item existing. A policy authored today
+   would have to reference a value nobody has yet, hardcoded or otherwise.
+2. **No environment in this review can execute the pgTAP suite.** Docker is
+   unavailable here, as in the prior audit, and RLS is exactly the kind of
+   change where "the SQL parses" is not evidence it is correct: a
+   `client_id`-restricted policy that fails closed for the wrong role, or
+   fails open because of `NULL` comparison semantics on an ordinary
+   session's absent `client_id` claim, is a materially worse outcome than
+   today's status quo — a bug here can break every user's access, not just
+   the extension's.
+3. **The design has real decisions still open**, not just an SQL predicate:
+   whether a capture-only client should be blocked from `UPDATE`/`DELETE`
+   entirely (matching the product's stated single purpose) or only from
+   specific columns, how the policy behaves for tokens with no `client_id`
+   claim at all (every existing web-session and password-login token), and
+   how it composes with the existing owner-scoped policies rather than
+   replacing them.
+
+**Recommended follow-up design**, for the PR that does implement this against
+a real Postgres project: store the extension's registered `client_id` in a
+small server-side settings table (not hardcoded into a migration, since the
+value is assigned at OAuth-client-registration time and must remain
+changeable without a schema change), and add a policy that permits `INSERT`
+unconditionally for `authenticated` (capture's only operation) while
+restricting `UPDATE`/`DELETE` on `applications` to rows where
+`auth.jwt() ->> 'client_id'` is either absent or does not equal the stored
+extension client id. That policy, and the settings table it reads, need
+their own pgTAP coverage proving both the restriction and that an ordinary
+web/MCP session is unaffected, run against a real Postgres before merge —
+not asserted from this review.
+
+**What is unchanged from the prior audit's classification, and what is new.**
+Cross-user isolation is still absolute and unaffected by any of this: RLS
+authorizes strictly by `auth.uid()`, so a leaked or malicious extension
+token still grants no access to another student's rows regardless of
+`client_id`. No service-role key or elevated path is reachable from a bearer
+token of any kind. What changes with a public Chrome Web Store release is
+exposure, not blast radius: more installations mean more chances for a
+tampered build or a stolen `chrome.storage.local` refresh token, but each
+compromised grant still reaches only that one user's own data — never more
+than an ordinary authenticated session already could.
+
+**Recommendation:** accept this as a documented residual risk for this
+release rather than block on an RLS change this review cannot safely test.
+This is an explicit human risk-acceptance decision, not a default — see
+`docs/chrome-web-store-release.md` for the recommendation in the context of
+the overall Store-readiness GO/CONDITIONAL GO/NO-GO call.
+
 ## Validation and defaults
 
 `lib/applications/external-record.ts` owns the caller-neutral record schema and
