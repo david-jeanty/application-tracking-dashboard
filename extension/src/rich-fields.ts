@@ -121,6 +121,12 @@ const ARRANGEMENT_WORDS: Readonly<Record<string, CaptureWorkArrangement>> = {
   onsite: "On-site",
   "on-site": "On-site",
   "on site": "On-site",
+  // Indeed's own wording for on-site work, observed alongside "Remote" and
+  // "Hybrid" in the same metadata region. It names the same fact, not a
+  // fourth arrangement.
+  "in-person": "On-site",
+  "in person": "On-site",
+  inperson: "On-site",
 };
 
 /** Only `jobLocationType` values that stand for remote work, per schema.org. */
@@ -147,7 +153,15 @@ const TITLE_BRACKETED_PATTERN =
 /** `Analyst Intern — Remote` — the same statement, made with a separator. */
 const TITLE_SUFFIX_PATTERN = /[-–—|·,]\s*(remote|hybrid|on[\s-]?site)\s*$/i;
 
-function arrangementWord(raw: string): CaptureWorkArrangement | undefined {
+/**
+ * Whether one bounded piece of text names an arrangement, and nothing else.
+ *
+ * Exported so a site's own text-splitting logic (Indeed states location and
+ * arrangement in one string) can ask "is this segment an arrangement word?"
+ * against the same one table `extractWorkArrangement` itself uses, rather
+ * than keeping a second list that could quietly drift from this one.
+ */
+export function arrangementWord(raw: string): CaptureWorkArrangement | undefined {
   const normalized = raw.trim().toLowerCase().replace(/\s+/g, " ");
 
   return ARRANGEMENT_WORDS[normalized];
@@ -617,16 +631,45 @@ export function extractDuration(input: {
  * this. The label has to be there — a bare dollar figure floating in prose is
  * as likely to be a fee, a budget, or someone else's example as a pay rate.
  *
- * Only the figure and its unit are captured — never trailing prose such as
- * "paid biweekly" or a payment-frequency note, and never a currency code this
- * file has no evidence for: `$` alone does not say USD or CAD, and guessing
- * one would be inventing a fact the posting never stated. A tight capture
- * also means this cannot run on into whatever the description says next: a
- * label with no line break before the following sentence is common enough in
- * text converted out of HTML that this cannot be assumed away.
+ * Only the figure (or figures, for a range) and its unit are captured — never
+ * trailing prose such as "paid biweekly" or a payment-frequency note, and
+ * never a currency code this file has no evidence for: `$` alone does not say
+ * USD or CAD, and guessing one would be inventing a fact the posting never
+ * stated. A tight capture also means this cannot run on into whatever the
+ * description says next: a label with no line break before the following
+ * sentence is common enough in text converted out of HTML that this cannot be
+ * assumed away.
+ *
+ * A statement does not have to be a colon-labelled line. `Salary range:
+ * $60,000-$70,000`, `The expected annual salary for this position is between
+ * $45,000 to $85,000`, and `Pay range is $22–$27 per hour` are all explicit
+ * compensation statements a real posting writes in prose, and the context
+ * word, an optional short filler ("for this position"), and a small closed
+ * set of connecting phrases ("is", "is between", "ranges from") are what
+ * stand between the label and the figure in each of them. What keeps this
+ * from drifting into free-text salary guessing is that every one of those
+ * connectors is a specific, enumerated phrase — never "any nearby text" —
+ * so a sentence that merely mentions "pay" or "wage" near an unrelated dollar
+ * figure ("the department's pay structure includes a $500 signing bonus")
+ * does not match: nothing here reads as one of the enumerated connectors.
  */
-const SALARY_LABEL_PATTERN =
-  /\b(?:compensation|salary|pay rate|hourly rate|hourly wage|base pay|wage|pay)\s*[:\-–—]\s*(\$\s?\d[\d,]*(?:\.\d{1,2})?(?:\s*(?:\/|per)\s*(?:hour|hr|year|yr|annum|month|week|day)\b)?)/gi;
+const SALARY_MONEY = String.raw`\$\s?\d[\d,]*(?:\.\d{1,2})?`;
+/** The second figure of a range may omit its own currency sign. */
+const SALARY_SECOND_MONEY = String.raw`\$?\s?\d[\d,]*(?:\.\d{1,2})?`;
+const SALARY_RANGE_SEPARATOR = String.raw`\s*(?:-|–|—|to)\s*`;
+const SALARY_UNIT = String.raw`(?:\s*(?:\/|per)\s*(?:hour|hr|year|yr|annum|month|week|day)\b)?`;
+
+/** Every labelled or verbosely-worded way a posting names its own pay. */
+const SALARY_CONTEXT = String.raw`(?:annual\s+salary|starting\s+salary|base\s+salary|hourly\s+rate|hourly\s+wage|pay\s+rate|base\s+pay|salary\s+range|pay\s+range|compensation\s+range|salary|compensation|pay|wage)`;
+/** Noise a sentence may put between the context word and the connector. */
+const SALARY_FILLER = String.raw`(?:\s+for\s+(?:this|the)\s+(?:position|role|job))?`;
+/** A closed set of phrases — never arbitrary nearby text — introducing a figure. */
+const SALARY_CONNECTOR = String.raw`(?:\s*[:\-–—]\s*|\s+(?:is|are)\s+(?:expected\s+to\s+be\s+)?(?:between\s+|from\s+)?|\s+ranges?\s+from\s+)`;
+
+const SALARY_STATEMENT_PATTERN = new RegExp(
+  String.raw`\b${SALARY_CONTEXT}${SALARY_FILLER}${SALARY_CONNECTOR}(${SALARY_MONEY}(?:${SALARY_RANGE_SEPARATOR}${SALARY_SECOND_MONEY})?${SALARY_UNIT})`,
+  "gi",
+);
 
 /** Whether a labelled figure states nothing but zeroes — a template left in. */
 function statesOnlyZero(text: string): boolean {
@@ -649,7 +692,7 @@ export function extractSalary(input: { description?: string }): RichResult<strin
   const description = scannable(input.description);
 
   if (description) {
-    for (const match of description.matchAll(SALARY_LABEL_PATTERN)) {
+    for (const match of description.matchAll(SALARY_STATEMENT_PATTERN)) {
       const raw = match[1]?.trim().replace(/[,;\s]+$/, "");
       if (raw && !statesOnlyZero(raw)) {
         candidates.push({ value: raw, confidence: "exact", origin: "description" });

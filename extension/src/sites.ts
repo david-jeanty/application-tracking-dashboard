@@ -1,5 +1,6 @@
 import { htmlToPlainText } from "./html-text.js";
 import type { UnresolvedFallback } from "./linkedin-frames.js";
+import { arrangementWord } from "./rich-fields.js";
 import type { ExtractedJob, PageSignals } from "./types.js";
 
 /**
@@ -430,6 +431,59 @@ function tidyIndeedTitle(value: string): string {
 }
 
 /**
+ * Indeed's own bullet, separating one location line into as many facts as it
+ * states: `Toronto, ON M5R 3V5 • Hybrid work`, `Ottawa, ON • Remote`.
+ */
+const INDEED_LOCATION_SEPARATOR = /\s*[•·]\s*/;
+
+/**
+ * Splits Indeed's combined location line into geography and arrangement.
+ *
+ * The geographic `location` field must contain only geographic information,
+ * and Indeed frequently states the work arrangement in the same rendered
+ * string. Every piece the bullet separates is checked on its own against the
+ * one arrangement vocabulary `extractWorkArrangement` itself uses — Indeed
+ * appends "work" to some of them ("Hybrid work"), which is stripped before
+ * the check — and only a piece that *is* one of those words is pulled out.
+ * Anything else stays exactly where it was, because a bullet is Indeed's
+ * general punctuation for "here is another fact," not a promise that
+ * whatever follows it is always work-model metadata: employment type
+ * ("Full-time", "Contract"), a pay rate, or anything else Indeed renders the
+ * same way must survive untouched in the location string rather than being
+ * silently dropped.
+ *
+ * `Remote` on its own — no bullet, no geography — becomes arrangement
+ * evidence and no location at all, rather than a location that just happens
+ * to read "Remote".
+ */
+export function splitIndeedLocation(raw: string): {
+  location?: string;
+  workplaceType?: string;
+} {
+  const segments = raw
+    .split(INDEED_LOCATION_SEPARATOR)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (segments.length === 0) return {};
+
+  const geography: string[] = [];
+  const arrangements: string[] = [];
+
+  for (const segment of segments) {
+    const withoutWorkSuffix = segment.replace(/\s+work$/i, "").trim();
+    const arrangement = arrangementWord(withoutWorkSuffix);
+
+    if (arrangement) arrangements.push(arrangement);
+    else geography.push(segment);
+  }
+
+  return {
+    ...(geography.length > 0 ? { location: geography.join(" • ") } : {}),
+    ...(arrangements.length > 0 ? { workplaceType: arrangements.join(",") } : {}),
+  };
+}
+
+/**
  * What one recognized site says about the posting on screen.
  *
  * The caller has already taken everything the page states in structured form;
@@ -460,12 +514,18 @@ export function readSiteFields(
   const title =
     rawTitle && site === "indeed" ? tidyIndeedTitle(rawTitle) : rawTitle;
 
+  const rawLocation = text("location");
+  const indeedLocation =
+    rawLocation && site === "indeed" ? splitIndeedLocation(rawLocation) : undefined;
+  const location = indeedLocation ? indeedLocation.location : rawLocation;
+  const workplaceType = indeedLocation?.workplaceType ?? text("workplaceType");
+
   return {
     ...(text("company") ? { company: text("company") } : {}),
     ...(title ? { jobTitle: title } : {}),
-    ...(text("location") ? { location: text("location") } : {}),
+    ...(location ? { location } : {}),
     ...(text("description") ? { jobDescription: text("description") } : {}),
-    ...(text("workplaceType") ? { workplaceType: text("workplaceType") } : {}),
+    ...(workplaceType ? { workplaceType } : {}),
   };
 }
 

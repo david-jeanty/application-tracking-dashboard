@@ -1281,6 +1281,62 @@ describe("salary stated in plain text", () => {
       }
     }
   });
+
+  it("reads a compact salary range stated after a range label", () => {
+    expect(
+      extractSalary({ description: "Salary range: $60,000-$70,000" }),
+    ).toMatchObject({
+      state: "established",
+      value: "$60,000-$70,000",
+      confidence: "exact",
+    });
+  });
+
+  it("reads an annual salary range stated in prose, not just a colon label", () => {
+    expect(
+      extractSalary({
+        description:
+          "The expected annual salary for this position is between $45,000 to $85,000.",
+      }),
+    ).toMatchObject({
+      state: "established",
+      value: "$45,000 to $85,000",
+    });
+  });
+
+  it("reads a range label phrased as \"range is\", with a per-hour unit", () => {
+    expect(extractSalary({ description: "Pay range is $22–$27 per hour" })).toMatchObject(
+      {
+        state: "established",
+        value: "$22–$27 per hour",
+      },
+    );
+  });
+
+  it("reads a range introduced by \"ranges from\"", () => {
+    expect(
+      extractSalary({ description: "Compensation ranges from $50,000 to $60,000." }),
+    ).toMatchObject({
+      state: "established",
+      value: "$50,000 to $60,000",
+    });
+  });
+
+  it("does not treat a merely nearby mention of pay or wage as a salary statement", () => {
+    for (const description of [
+      "The department's pay structure includes a $500 signing bonus for eligible new hires.",
+      "Minimum wage requirements do not apply; total funding of $10,000 supports the cohort.",
+    ]) {
+      expect(extractSalary({ description }).state).toBe("absent");
+    }
+  });
+
+  it("refuses two explicit ranges that materially disagree", () => {
+    const description =
+      "Salary range: $60,000-$70,000\nCompensation ranges from $80,000 to $90,000.";
+
+    expect(extractSalary({ description })).toMatchObject({ state: "conflict" });
+  });
 });
 
 describe("the CARAS LinkedIn posting found in production QA", () => {

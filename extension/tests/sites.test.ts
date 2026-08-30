@@ -1159,6 +1159,291 @@ describe("Indeed", () => {
   });
 });
 
+/**
+ * General Indeed location/work-arrangement normalization.
+ *
+ * Indeed frequently states location and work-model metadata in one rendered
+ * string, separated by a bullet: `Toronto, ON M5R 3V5 • Hybrid work`. The
+ * geographic `location` field must contain only geographic information, and
+ * this must generalize across any city, province, postal code, or country —
+ * nothing here is anchored to one geography, and nothing strips a bullet
+ * segment merely for appearing after one.
+ */
+describe("Indeed's combined location and arrangement line", () => {
+  const posting = (location: string) => `<body>
+     <h2 data-testid="jobsearch-JobInfoHeader-title">Analyst Intern</h2>
+     <div data-testid="inlineHeader-companyName">Northfield Analytics</div>
+     <div data-testid="inlineHeader-companyLocation">${location}</div>
+     <div id="jobDescriptionText"><p>Join the analytics team.</p></div>
+   </body>`;
+
+  it("separates a postal code and Hybrid work from the geographic location", () => {
+    const job = extractJob(
+      readSitePage(posting("Toronto, ON M5R 3V5 • Hybrid work"), INDEED_JOB),
+    );
+
+    expect(job.location).toBe("Toronto, ON M5R 3V5");
+    expect(job.workArrangement).toBe("Hybrid");
+  });
+
+  it("separates a city from a Remote statement", () => {
+    const job = extractJob(readSitePage(posting("Ottawa, ON • Remote"), INDEED_JOB));
+
+    expect(job.location).toBe("Ottawa, ON");
+    expect(job.workArrangement).toBe("Remote");
+  });
+
+  it("separates a city from an On-site statement, in either wording Indeed uses", () => {
+    for (const location of ["Vancouver, BC • On-site", "Vancouver, BC • In-person"]) {
+      const job = extractJob(readSitePage(posting(location), INDEED_JOB));
+
+      expect(job.location).toBe("Vancouver, BC");
+      expect(job.workArrangement).toBe("On-site");
+    }
+  });
+
+  it("leaves a city-only location untouched, with no arrangement manufactured", () => {
+    const job = extractJob(readSitePage(posting("Ottawa, ON"), INDEED_JOB));
+
+    expect(job.location).toBe("Ottawa, ON");
+    expect(job.workArrangement).toBeUndefined();
+  });
+
+  it("reads a bare arrangement as arrangement evidence, never as a location", () => {
+    const job = extractJob(readSitePage(posting("Remote"), INDEED_JOB));
+
+    expect(job.location).toBeUndefined();
+    expect(job.workArrangement).toBe("Remote");
+  });
+
+  it("never treats an employment-type word as a work arrangement", () => {
+    for (const location of [
+      "Toronto, ON • Full-time",
+      "Toronto, ON • Part-time",
+      "Toronto, ON • Contract",
+      "Toronto, ON • Internship",
+    ]) {
+      const job = extractJob(readSitePage(posting(location), INDEED_JOB));
+
+      // Not a recognized arrangement word, so it is not stripped out at all —
+      // a bullet is not a promise that what follows it is work-model metadata.
+      expect(job.location).toBe(location);
+      expect(job.workArrangement).toBeUndefined();
+    }
+  });
+
+  it("does not strip arbitrary text merely because it follows a bullet", () => {
+    const job = extractJob(
+      readSitePage(posting("Toronto, ON • Downtown office"), INDEED_JOB),
+    );
+
+    expect(job.location).toBe("Toronto, ON • Downtown office");
+    expect(job.workArrangement).toBeUndefined();
+  });
+});
+
+/**
+ * General employer-domain extraction for Indeed.
+ *
+ * This exercises `selectedCompanyDomain`/`employerDomainFromUrl`, which are
+ * already site-agnostic: any site whose "description" selector matches a
+ * container gets its links collected the same way. Nothing Indeed-specific
+ * was added for this — these tests exist to prove the general mechanism
+ * already covers Indeed, and to catch a regression if that ever stops being
+ * true.
+ */
+describe("Indeed employer domain from description-link evidence", () => {
+  const posting = (descriptionHtml: string) => `<body>
+     <h2 data-testid="jobsearch-JobInfoHeader-title">Analyst Intern</h2>
+     <div data-testid="inlineHeader-companyName">Northfield Analytics</div>
+     <div data-testid="inlineHeader-companyLocation">Toronto, ON</div>
+     <div id="jobDescriptionText">${descriptionHtml}</div>
+   </body>`;
+
+  it("accepts an explicit employer-owned URL", () => {
+    const job = extractJob(
+      readSitePage(
+        posting(
+          '<p>Learn more at <a href="https://www.northfieldanalytics.example/careers">our careers page</a>.</p>',
+        ),
+        INDEED_JOB,
+      ),
+    );
+
+    expect(job.companyDomain).toBe("northfieldanalytics.example");
+  });
+
+  it("rejects Indeed's own company-page URL", () => {
+    const job = extractJob(
+      readSitePage(
+        posting(
+          '<p>See our <a href="https://www.indeed.com/cmp/Northfield-Analytics">company profile</a>.</p>',
+        ),
+        INDEED_JOB,
+      ),
+    );
+
+    expect(job.companyDomain).toBeUndefined();
+  });
+
+  it("rejects a redirect/tracking URL hosted on Indeed itself", () => {
+    const job = extractJob(
+      readSitePage(
+        posting(
+          '<p><a href="https://ca.indeed.com/rc/clk?jk=a1b2c3d4e5f6a7b8&from=jobsearch">Apply</a></p>',
+        ),
+        INDEED_JOB,
+      ),
+    );
+
+    expect(job.companyDomain).toBeUndefined();
+  });
+
+  it("leaves company domain unset with no URL evidence at all", () => {
+    const job = extractJob(readSitePage(posting("<p>Join the analytics team.</p>"), INDEED_JOB));
+
+    expect(job.companyDomain).toBeUndefined();
+  });
+});
+
+/**
+ * A structured street address is promoted to the front of `location` only
+ * when the publisher's own JobPosting data supplies it alongside a real
+ * city — never inferred from description text. This is a general
+ * `readLocation` improvement, not an Indeed-specific one: Indeed's own pages
+ * publish no structured JobPosting data at all (see the Indeed describe
+ * blocks above, which never carry a `jsonLd(...)` fixture), so this is
+ * exercised against a generic structured posting the way the rest of this
+ * file already does for other structured-data behavior.
+ */
+describe("a structured street address, promoted only with high confidence", () => {
+  it("includes a street address when the structured data also states a city", () => {
+    const html = `<head>${jsonLd({
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: "Finance Intern",
+      description: "Support the finance team.",
+      hiringOrganization: { "@type": "Organization", name: "Northfield Analytics" },
+      jobLocation: {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: "100 King Street West",
+          addressLocality: "Toronto",
+          addressRegion: "ON",
+        },
+      },
+    })}</head><body><h1>Job posting</h1></body>`;
+
+    const job = extractJob(readSitePage(html, "https://careers.example.com/jobs/1"));
+
+    expect(job.location).toBe("100 King Street West, Toronto, ON");
+  });
+
+  it("stays at city level when no street address is stated", () => {
+    const html = `<head>${jsonLd({
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: "Finance Intern",
+      description: "Support the finance team.",
+      hiringOrganization: { "@type": "Organization", name: "Northfield Analytics" },
+      jobLocation: {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "Toronto",
+          addressRegion: "ON",
+        },
+      },
+    })}</head><body><h1>Job posting</h1></body>`;
+
+    const job = extractJob(readSitePage(html, "https://careers.example.com/jobs/1"));
+
+    expect(job.location).toBe("Toronto, ON");
+  });
+
+  it("never reads a description number as a street address", () => {
+    // A misleading numeric statement that looks street-address-shaped but is
+    // not one — this must never leak into location, and no address-shaped
+    // heuristic exists over description text at all.
+    const html = `<head>${jsonLd({
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: "Finance Intern",
+      description:
+        "This posting has received 123 Main Street applications so far this week.",
+      hiringOrganization: { "@type": "Organization", name: "Northfield Analytics" },
+      jobLocation: {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "Toronto",
+          addressRegion: "ON",
+        },
+      },
+    })}</head><body><h1>Job posting</h1></body>`;
+
+    const job = extractJob(readSitePage(html, "https://careers.example.com/jobs/1"));
+
+    expect(job.location).toBe("Toronto, ON");
+    expect(job.jobDescription).toContain("123 Main Street");
+  });
+});
+
+/**
+ * Regression fixture: a real Capital One Indeed posting found in production
+ * manual QA. This is one integration fixture that reproduced the bug, not a
+ * template — every behavior it asserts is a general rule proven independently
+ * above, and no production code anywhere checks for Capital One, this job
+ * title, this Indeed job id, "161 Bay Street", "$45,000" or "$85,000".
+ */
+describe("the Capital One Indeed posting found in production QA", () => {
+  const html = `<body>
+     <h2 data-testid="jobsearch-JobInfoHeader-title">Summer 2027 Intern, Technology - job post</h2>
+     <div data-testid="inlineHeader-companyName">Capital One</div>
+     <div data-testid="inlineHeader-companyLocation">161 Bay Street, Toronto, ON M5R 3V5 • Hybrid work</div>
+     <div id="jobDescriptionText"><p>${[
+       "Summer 2027 Internship - Technology",
+       "The expected annual salary for this position is between $45,000 to $85,000.",
+       "This role follows a hybrid schedule based out of our Toronto office.",
+     ].join(" ")}</p></div>
+   </body>`;
+
+  const captured = () =>
+    toExtractedJob(
+      extractJobReport(
+        readSitePage(html, "https://ca.indeed.com/viewjob?jk=f4e3d2c1b0a99887"),
+      ),
+    );
+
+  it("keeps company and title correct", () => {
+    const job = captured();
+
+    expect(job.company).toBe("Capital One");
+    expect(job.jobTitle).toBe("Summer 2027 Intern, Technology");
+  });
+
+  it("separates the geographic location from the Hybrid arrangement", () => {
+    const job = captured();
+
+    expect(job.location).toBe("161 Bay Street, Toronto, ON M5R 3V5");
+    expect(job.location).not.toContain("Hybrid");
+    expect(job.workArrangement).toBe("Hybrid");
+  });
+
+  it("reads the work term from the title", () => {
+    expect(captured().workTerm).toBe("Summer 2027");
+  });
+
+  it("captures the explicit annual salary range", () => {
+    expect(captured().salary).toBe("$45,000 to $85,000");
+  });
+
+  it("leaves company domain unset — the page carries no employer-owned URL", () => {
+    expect(captured().companyDomain).toBeUndefined();
+  });
+});
+
 describe("Workday", () => {
   const posting = `<body>
      <h1>Search for Jobs</h1>

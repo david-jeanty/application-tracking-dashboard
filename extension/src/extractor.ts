@@ -148,14 +148,31 @@ function postingUrl(signals: PageSignals): string | undefined {
   return usable.length <= LIMITS.jobUrl ? usable : undefined;
 }
 
-/** `Ottawa, ON` from whichever parts of a postal address the posting supplies. */
+/**
+ * `Ottawa, ON` from whichever parts of a postal address the posting supplies,
+ * with a street address promoted to the front only when the publisher's own
+ * structured data corroborates it with a real city.
+ *
+ * A `streetAddress` on its own, with no `addressLocality`, is not included:
+ * a lone street name and number is not a high-confidence physical address
+ * without something to anchor it, and this file does not go looking in the
+ * page for a city to pair it with. This is the only source street-address
+ * evidence comes from — no description text is ever read for one, because
+ * "the job's own address" and "a number that appears somewhere in the
+ * description" are not the same claim, and only the publisher's own
+ * structured statement backs the first.
+ */
 function readLocation(posting: JsonLdNode): string | undefined {
   const place = firstRecord(posting["jobLocation"]);
   const address = place ? firstRecord(place["address"]) : undefined;
 
   if (address) {
+    const locality = firstString(address["addressLocality"]);
+    const street = locality ? firstString(address["streetAddress"]) : undefined;
+
     const parts = [
-      firstString(address["addressLocality"]),
+      street,
+      locality,
       firstString(address["addressRegion"]),
       firstString(address["addressCountry"]) ??
         firstString(firstRecord(address["addressCountry"])?.["name"]),
