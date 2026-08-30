@@ -8,6 +8,11 @@ import type {
   ApplicationListItem,
   ApplicationRecord,
 } from "@/lib/applications/types";
+import {
+  APPLICATION_LIST_VIEW_URI,
+  appViewToolMeta,
+  registerInterndexAppViews,
+} from "@/lib/mcp/app-views";
 import { runGetJob } from "@/lib/mcp/get-job";
 import { runImportJobs } from "@/lib/mcp/import-jobs";
 import { runListJobs } from "@/lib/mcp/list-jobs";
@@ -110,6 +115,12 @@ export function registerJobTrackTools(
   server: McpServer,
   repositoryFor: JobTrackRepositoryFactory,
 ): void {
+  // The ChatGPT Apps SDK views. Registered from here rather than beside them
+  // in the route because a tool's `_meta` points at a resource: if the two
+  // could be registered separately, a deployment could advertise a view that
+  // does not resolve. One function registers both, and the tests drive it.
+  registerInterndexAppViews(server);
+
   server.registerTool(
     "save_job",
     {
@@ -229,6 +240,12 @@ export function registerJobTrackTools(
         "Lists the student's saved job applications, newest first, so you can find the one they mean and read its id. Records are short: use get_job for the full posting and notes. Filter by status, employer, work term, or archive state, then choose the application yourself rather than asking the student for an id.",
       inputSchema: listJobsInputSchema,
       outputSchema: listJobsOutputSchema,
+      // The only change this tool needed to gain a ChatGPT app: a pointer to
+      // the view that renders its result. The arguments, the repository call,
+      // the text block and the structured content below are all untouched, so
+      // a client that ignores this key — or a host whose view failed to load —
+      // still gets exactly the tool it had before.
+      _meta: appViewToolMeta(APPLICATION_LIST_VIEW_URI),
     },
     async (args, ctx) => {
       const authInfo = ctx.http?.authInfo;

@@ -55,6 +55,7 @@ Claude ──1── POST /api/mcp  (no token)
 | `lib/mcp/user.ts` | Reads the verified user id off a request |
 | `lib/supabase/bearer.ts` | Token-scoped Supabase client (no cookies) |
 | `lib/validation/mcp.ts` | Every tool's wire contract and field mapping |
+| `lib/mcp/app-views.ts` | The ChatGPT Apps SDK UI resource — see `docs/chatgpt-app.md` |
 | `app/api/oauth-protected-resource/route.ts` | RFC 9728 discovery document |
 | `app/oauth/consent/page.tsx` | Consent screen Supabase redirects users to |
 | `lib/oauth/actions.ts` | Approve / deny decision |
@@ -292,6 +293,12 @@ projection, not filtered out afterwards, so a list response cannot carry a
 The result also reports `returned` and `has_more`. `has_more` comes from
 fetching one row past the limit and dropping it, so Claude knows to narrow the
 filters without paying for a second counting query.
+
+`list_jobs` also carries a `_meta` pointer to a ChatGPT Apps SDK UI resource, so
+a ChatGPT host renders these records as a native Interndex list rather than as
+text. That is metadata only: the arguments, the repository call, the plain-text
+block and the structured content are unchanged, and a client that ignores
+`_meta` sees exactly the tool described here. See `docs/chatgpt-app.md`.
 
 Filters are literal, not fuzzy. `company: "RBC"` matches stored text
 containing `RBC`, with `%` and `_` escaped so a name matches itself; it does

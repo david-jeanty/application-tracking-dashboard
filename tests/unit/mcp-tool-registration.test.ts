@@ -12,6 +12,12 @@ import type {
   ApplicationListItem,
   ApplicationRecord,
 } from "@/lib/applications/types";
+import { APPLICATION_LIST_VIEW_HTML } from "@/lib/mcp/app-views/application-list-html";
+import {
+  APP_VIEW_MIME_TYPE,
+  APPLICATION_LIST_VIEW_URI,
+  LEGACY_APP_VIEW_MIME_TYPE,
+} from "@/lib/mcp/app-views";
 import {
   registerJobTrackTools,
   type JobTrackRepositoryFactory,
@@ -211,10 +217,22 @@ type ToolResult = {
 type ToolDefinition = {
   name: string;
   description?: string;
+  _meta?: Record<string, unknown>;
   inputSchema: {
     properties: Record<string, Record<string, unknown>>;
     required?: string[];
   };
+};
+
+type ResourceDefinition = {
+  uri: string;
+  name: string;
+  mimeType?: string;
+  _meta?: Record<string, unknown>;
+};
+
+type ResourceContents = {
+  contents: { uri: string; mimeType?: string; text?: string }[];
 };
 
 function authFor(userId: string): AuthInfo {
@@ -281,6 +299,12 @@ async function connectServer(repositoryFactory = fakeRepositoryFactory()) {
       request<{ tools: ToolDefinition[] }>("tools/list", {}).then(
         (result) => result.tools,
       ),
+    listResources: () =>
+      request<{ resources: ResourceDefinition[] }>("resources/list", {}).then(
+        (result) => result.resources,
+      ),
+    readResource: (uri: string) =>
+      request<ResourceContents>("resources/read", { uri }),
     callTool: (
       name: string,
       args: Record<string, unknown>,
@@ -1208,6 +1232,118 @@ describe("save_job reports what it created", () => {
 
     expect(saved.isError).toBeUndefined();
     expect(saved.structuredContent!.company).toBe("Telus");
+    await connection.close();
+  });
+});
+
+/*
+ * The ChatGPT Apps SDK contract.
+ *
+ * These drive the same `registerJobTrackTools` the route serves, over a real
+ * MCP server, so what is asserted here is what a host actually reads: a tool
+ * that names a view, and a view that resolves. The rest of this file is the
+ * other half of the guarantee — `list_jobs` keeps its arguments, its text
+ * block, its structured content and its ownership behaviour with the metadata
+ * attached.
+ */
+describe("Apps SDK view served by the real server", () => {
+  it("advertises the application-list view on list_jobs", async () => {
+    const connection = await connectServer();
+
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "list_jobs",
+    );
+
+    // The nested key of the MCP Apps extension, and the two aliases older
+    // hosts read. All three must name the same resource.
+    expect(tool!._meta).toMatchObject({
+      ui: { resourceUri: APPLICATION_LIST_VIEW_URI },
+      "ui/resourceUri": APPLICATION_LIST_VIEW_URI,
+      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+    });
+    // The view renders a result; it may not call back into the tracker.
+    expect(tool!._meta!["openai/widgetAccessible"]).toBe(false);
+    await connection.close();
+  });
+
+  it("leaves every other tool without a view", async () => {
+    const connection = await connectServer();
+
+    const withViews = (await connection.listTools())
+      .filter((tool) => tool._meta && "ui" in tool._meta)
+      .map((tool) => tool.name);
+
+    expect(withViews).toEqual(["list_jobs"]);
+    await connection.close();
+  });
+
+  it("resolves the view list_jobs names", async () => {
+    const connection = await connectServer();
+
+    const resource = (await connection.listResources()).find(
+      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
+    );
+
+    expect(resource).toBeDefined();
+    expect(resource!.mimeType).toBe(APP_VIEW_MIME_TYPE);
+    // A resource's `_meta.ui` describes how to render the document, and has no
+    // `resourceUri` in it — that spelling belongs to the tool.
+    expect(resource!._meta).toMatchObject({
+      ui: { prefersBorder: false },
+      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+    });
+    expect(resource!._meta!.ui).not.toHaveProperty("resourceUri");
+    await connection.close();
+  });
+
+  it("serves the view as HTML under both app MIME types", async () => {
+    const connection = await connectServer();
+
+    const read = await connection.readResource(APPLICATION_LIST_VIEW_URI);
+    const byType = new Map(
+      read.contents.map((item) => [item.mimeType, item.text]),
+    );
+
+    expect([...byType.keys()]).toEqual([
+      APP_VIEW_MIME_TYPE,
+      LEGACY_APP_VIEW_MIME_TYPE,
+    ]);
+    // One document, offered twice — not two views that could drift apart.
+    expect(byType.get(APP_VIEW_MIME_TYPE)).toBe(APPLICATION_LIST_VIEW_HTML);
+    expect(byType.get(LEGACY_APP_VIEW_MIME_TYPE)).toBe(
+      APPLICATION_LIST_VIEW_HTML,
+    );
+    expect(byType.get(APP_VIEW_MIME_TYPE)).toContain("<!doctype html>");
+    await connection.close();
+  });
+
+  it("still answers list_jobs with text and structured content", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool("list_jobs", {});
+
+    // The view is metadata, not a replacement: a client that never reads a
+    // resource is served exactly what it was served before.
+    expect(result.content[0].type).toBe("text");
+    expect(result.content[0].text).toContain("RBC");
+    expect(result.structuredContent).toHaveProperty("applications");
+    expect(result.structuredContent).toHaveProperty("has_more");
+    await connection.close();
+  });
+
+  it("serves the view without ever reading a student's applications", async () => {
+    // No auth is passed to `resources/read` here. The document is static, so
+    // it resolves; nothing student-owned can be in it, and the assertion is
+    // that no application text ever appears in the view's body.
+    const connection = await connectServer();
+
+    const read = await connection.readResource(APPLICATION_LIST_VIEW_URI);
+
+    for (const item of read.contents) {
+      expect(item.text).not.toContain("RBC");
+      expect(item.text).not.toContain("Shopify");
+      expect(item.text).not.toContain(STUDENT);
+    }
     await connection.close();
   });
 });
