@@ -20,13 +20,13 @@ describe("the public privacy route", () => {
     ).toBeInTheDocument();
   });
 
-  it("describes the extension as built but not distributed through a store", () => {
+  it("covers the extension across both its Chrome Web Store and unpacked forms", () => {
     render(<PrivacyPage />);
 
     expect(
-      screen.getByText(/installed locally as an unpacked extension/i),
+      screen.getByText(/chrome web store or loaded locally as/i),
     ).toBeInTheDocument();
-    // The page must not imply a review it has not had.
+    // The page must not imply a review or approval it has not had.
     expect(screen.queryByText(/approved by the chrome web store/i)).toBeNull();
   });
 
