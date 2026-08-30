@@ -73,6 +73,59 @@ review must decide whether client-id-aware RLS/policies are required to limit
 the extension client to capture rather than the full privileges of an ordinary
 authenticated session.
 
+### Least-privilege review (launch hardening, completed)
+
+The extension already registers as its own OAuth client (`lib/auth/bearer-identity.ts`
+resolves `app_metadata.client_id` per token, distinct from the MCP client), so
+its grant is independently visible and revocable in Settings without affecting
+a connected assistant. That client id is read into `BearerIdentity` but is not
+currently used to gate anything: `lib/mcp/identity.ts` forwards it for
+observability only, and no route or RLS policy branches on it. `grep` across
+`app/`, `lib/mcp`, and `lib/auth` confirms no `client_id`-keyed authorization
+check exists anywhere in this codebase today.
+
+**Threat model.** An extension access token is an ordinary Supabase JWT
+(`sub` = the user, `role` = `authenticated`) exchanged through
+`createBearerClient`, identical in shape and privilege to a web-session token
+or an MCP token for the same user. Whoever holds a valid extension token can
+therefore do anything RLS permits that user to do directly against
+PostgREST/`supabase-js` — not only call `POST /api/browser-capture` — because
+RLS authorizes by `user_id`, never by which OAuth client obtained the token.
+Two things bound the actual blast radius:
+
+- **Cross-user isolation is unaffected.** RLS still authorizes strictly by
+  `auth.uid()`; a leaked or malicious extension token grants no access to any
+  other student's rows, regardless of "scope."
+- **No privilege escalation exists.** There is no service-role key or elevated
+  path reachable from a bearer token of any kind (`lib/supabase/bearer.ts`), so
+  the ceiling is "everything this one user could already do to their own data,"
+  never more.
+
+What is *not* bounded: the consent screen's "will be able to / will not be
+able to" list (`lib/mcp/capabilities.ts`) describes the extension's intended
+behavior, not an enforced ceiling. A compromised extension build, a stolen
+`chrome.storage.local` refresh token (unencrypted on disk, a documented
+tradeoff — see the extension's OAuth section), or a rogue client registered
+under the extension's flow could use that one grant to read, edit, or delete
+any of that single user's applications — a materially larger capability than
+"capture jobs" — without RLS or the API layer objecting.
+
+**Classification: acceptable with residual risk for the current state, not a
+launch blocker for the web/MCP launch this audit covers.** The extension is
+distributed only as an unpacked local install (see "Explicitly deferred"
+below) with a small, trusted user base — not the Chrome Web Store — so the
+realistic exposure is a single user's own data under attacker conditions
+(disk access, a tampered build) that already carry a comparable blast radius
+through other vectors on that user's own machine. Client-id-aware RLS is not
+implemented here, deliberately: it would need a real design (a policy
+predicate on `app_metadata.client_id`, decisions about which mutations a
+capture-only client may perform, and its own test suite) that this audit's
+narrow-fix mandate does not justify inventing speculatively. This remains
+exactly the gate `docs/browser-capture.md` already named: resolve it — either
+by shipping client-id-aware policies or by making an explicit, documented
+risk-acceptance decision — before any public Chrome Web Store distribution,
+which is unchanged and still pending as of this review.
+
 ## Validation and defaults
 
 `lib/applications/external-record.ts` owns the caller-neutral record schema and
@@ -753,7 +806,7 @@ never a wrong one.
 A site that still extracts nothing is a finding for PR #29. A site that extracts
 something **wrong** is a bug in this one.
 
-### The open least-privilege question
+### The least-privilege question
 
 Supabase OAuth scopes affect what an identity token contains, not what Postgres
 will accept. An authorized client therefore holds the authority of an ordinary
@@ -763,10 +816,12 @@ than merely convenient.
 
 The extension confines itself to capture by construction: it calls one endpoint
 and has no code that does anything else. That is a property of this client, not
-a boundary the server enforces. Before any public distribution, decide whether
-client-id-aware policies are required so that a token issued to the capture
-client cannot do more than capture. That work is deferred to PR #29 along with
-Chrome Web Store submission.
+a boundary the server enforces. See "Least-privilege review (launch hardening,
+completed)" under "Trust and authentication boundaries" above for the full
+threat model and classification: acceptable with residual risk for the current
+unpacked/local-install distribution, not a launch blocker for the web/MCP
+launch. Client-id-aware policies, if a review ever concludes they are
+warranted, remain deferred to PR #29 along with Chrome Web Store submission.
 
 ## Explicitly deferred
 
