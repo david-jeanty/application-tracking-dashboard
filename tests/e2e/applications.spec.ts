@@ -284,8 +284,22 @@ test.describe("applications ticket 2.2", () => {
     await expect(
       page.getByRole("heading", { name: updatedCompany }),
     ).toBeVisible();
+
+    // Notes sit behind a native <details> disclosure that starts collapsed
+    // (ApplicationDetail's DisclosureSection), so the record opens showing
+    // status and next action first rather than a wall of saved text. Confirm
+    // the save actually reached Notes — "View notes" only renders once a
+    // note exists — before opening the disclosure the same way a real
+    // reader would, and only then assert the exact saved text.
+    const notesDisclosure = page.locator("details", {
+      has: page.getByRole("heading", { level: 2, name: "Notes" }),
+    });
+    await expect(notesDisclosure.getByText("View notes")).toBeVisible();
+    await notesDisclosure.locator("summary").click();
     await expect(
-      page.getByText("Updated without changing application status."),
+      notesDisclosure.getByText(
+        "Updated without changing application status.",
+      ),
     ).toBeVisible();
 
     await page.getByRole("link", { name: "Edit", exact: true }).click();
