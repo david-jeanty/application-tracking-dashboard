@@ -269,8 +269,18 @@ and not part of this launch.
 
 ## Email findings
 
-`signupAction` and `forgotPasswordAction` (`lib/auth/actions.ts`) build
-`emailRedirectTo`/`redirectTo` only from the server-side
+Email confirmation is intentionally disabled for Interndex signup (a
+product decision — `supabase/config.toml`'s `enable_confirmations = false`
+reflects the intended production setting, not a dev-only shortcut to
+reconcile). A new account is authenticated immediately on signup; there is
+no confirmation email to deliver or verify for that flow, and it is not a
+launch requirement. `signupAction`'s `emailRedirectTo` call still exists in
+code for the eventuality that confirmation is enabled, but no signup email
+is expected to send under the current, intended configuration.
+
+Password recovery is the one email flow this app actually relies on in
+production. `signupAction` and `forgotPasswordAction` (`lib/auth/actions.ts`)
+both build `emailRedirectTo`/`redirectTo` only from the server-side
 `NEXT_PUBLIC_SITE_URL` environment variable — never from request headers or
 client-supplied input — so no open-redirect is reachable through either
 call. `app/auth/callback/route.ts` allowlists its own `next` destination
@@ -280,9 +290,9 @@ enumeration. `resetPasswordAction` requires an active session
 (`supabase.auth.getUser()`) before it will call `updateUser`, so a bare
 knowledge of an email address cannot reset a password.
 
-None of this proves mail is actually delivered in production — that lives
-entirely in Supabase project configuration, which this session had no
-access to. See "Manual verification required."
+None of this proves password-recovery mail is actually delivered in
+production — that lives entirely in Supabase project configuration, which
+this session had no access to. See "Manual verification required."
 
 ## Deployment findings
 
@@ -303,9 +313,12 @@ access to. See "Manual verification required."
   substitution before packaging a real build, not a code defect.
 - `supabase/config.toml` is local-CLI-only configuration (`site_url =
   "http://localhost:3000"`, `enable_confirmations = false`, a 1-minute email
-  rate limit) and does not describe the hosted project; every value in it
-  must be independently confirmed against the actual Supabase Dashboard
-  settings for production (see below).
+  rate limit) and does not describe the hosted project on its own; `site_url`
+  and the rate limit must be independently confirmed against the actual
+  Supabase Dashboard settings for production (see below).
+  `enable_confirmations = false` is not a dev-only value to reconcile: email
+  confirmation is intentionally disabled for Interndex signup as a product
+  decision, and that is also the intended production setting, not a gap.
 
 ## Tests and commands run
 
@@ -499,26 +512,40 @@ deployment.
 1. **SMTP**: Supabase Dashboard → Auth → Settings → SMTP Settings — confirm a
    production SMTP provider is configured (not Supabase's shared/rate-limited
    default), with a correct sender address and verified SPF/DKIM for that
-   domain.
-2. **Email templates**: Auth → Templates — confirm "Confirm signup" and
-   "Reset password" use `{{ .ConfirmationURL }}` and current Interndex
-   branding/copy (dashboard templates are edited separately from this repo
-   and were not inspected).
+   domain. This gates password recovery, the one email flow this app relies
+   on in production — signup does not send a confirmation email (see item 5).
+2. **Email templates**: Auth → Templates — confirm "Reset password" uses
+   `{{ .ConfirmationURL }}` and current Interndex branding/copy (dashboard
+   templates are edited separately from this repo and were not inspected).
+   The "Confirm signup" template is not relevant to verify: email
+   confirmation is intentionally disabled for signup (see item 5), so that
+   template is not sent.
 3. **Redirect URL allowlist**: Auth → URL Configuration → Redirect URLs —
    confirm the production `https://<production-site-url>/auth/callback`
    is present and matches `NEXT_PUBLIC_SITE_URL` exactly (scheme and host),
-   and that stale/dev entries are removed.
+   and that stale/dev entries are removed. This is used by the
+   password-recovery flow (and by OAuth callbacks); it is not gating a
+   signup confirmation email, since none is sent.
 4. **Site URL**: Auth → URL Configuration → Site URL — must match the
    production `NEXT_PUBLIC_SITE_URL` used at build/deploy time.
-5. **Confirm-email is enabled for production.** `supabase/config.toml`'s
-   `enable_confirmations = false` is local-dev-only; verify the hosted
-   project has email confirmation enabled.
+5. ~~Confirm-email must be enabled for production~~ — **NOT APPLICABLE, not
+   a launch requirement.** Email confirmation is intentionally disabled for
+   Interndex signup — a product decision, not a missing configuration step.
+   `supabase/config.toml`'s `enable_confirmations = false` is the intended
+   production setting, not a dev-only value to reconcile: a new account is
+   authenticated immediately on signup, with no confirmation email in the
+   flow. Do not enable email confirmation in the hosted project to "fix"
+   this; there is nothing to fix.
 6. **Auth rate limits**: Auth → Rate Limits — confirm the email-send limit
-   is sufficient for expected signup volume (shared-SMTP defaults are very
-   low).
-7. **Send one real signup and one real password-reset** to a real inbox
-   from the deployed production URL, end to end, and confirm both links land
-   on the correct production domain and complete.
+   is sufficient for expected password-reset volume (shared-SMTP defaults
+   are very low). Signup does not send an email under the current
+   configuration, so it does not count against this limit.
+7. **Send one real password-reset** to a real inbox from the deployed
+   production URL, end to end, and confirm the link lands on the correct
+   production domain and completes. A real signup should still be
+   exercised as part of item 11's release journey below, but it reaches
+   the authenticated app directly — there is no confirmation email in that
+   step to verify.
 8. **Run `npm run test:db`** against a real local Postgres (`supabase
    start`, which needs a working Docker daemon) to execute
    `supabase/tests/001_foundation_rls.test.sql` and the other four pgTAP
@@ -545,15 +572,17 @@ deployment.
     `jobtrackOrigin`, `supabaseUrl`, and `oauthClientId` and the matching
     `host_permissions` in `extension/manifest.json`, then re-run `npm run
     extension:check`.
-11. **Full release journey**: signed-out homepage/demo → account signup with
-    a real inbox → confirm → sign in → create/edit an application, change
-    its status, set a next action → walk Dashboard/Applications/Pipeline/
-    Analytics → archive → restore → connect an MCP client and exercise
-    `save_job`/`list_jobs`/`get_job`/`update_job` → load the extension and
-    capture a real posting → disconnect it from Settings → request and
-    complete a password reset. None of this was exercised end-to-end in
-    this session (see "Blocked" above); it requires a deployed environment
-    and real credentials.
+11. **Full release journey**: signed-out homepage/demo → account signup →
+    authenticated app (signup authenticates immediately; there is no
+    confirmation email to act on first) → create/edit an application,
+    change its status, set a next action → walk Dashboard/Applications/
+    Pipeline/Analytics → archive → restore → connect an MCP client and
+    exercise `save_job`/`list_jobs`/`get_job`/`update_job` → load the
+    extension and capture a real posting → disconnect it from Settings →
+    request and complete a password reset with a real inbox — this is the
+    one email step in the journey. None of this was exercised end-to-end
+    in this session (see "Blocked" above); it requires a deployed
+    environment and real credentials.
 
 ## Residual risks
 
@@ -594,9 +623,13 @@ testing (ticket 2.1, ticket 2.2's edit flow, authenticated-shell) are now
 also confirmed passing live on both projects, as of final commit
 `22c8710` — the full credentialed E2E gate (all 8 specs) is green. Before
 launch, these must still pass: SMTP/email template/redirect-URL/site-URL/
-confirm-email/rate-limit configuration in the live Supabase project (items
-1–6 above), one real end-to-end signup and password-reset test against the
-production domain (item 7), execution of the pgTAP RLS suite against a
+rate-limit configuration for password recovery in the live Supabase
+project (items 1, 2, 3, 4, and 6 above — item 5, confirm-email, is not
+applicable and is not a launch requirement: email confirmation is
+intentionally disabled for signup, a product decision, not a gap), one
+real password-reset test against the production domain (item 7 — signup
+itself reaches the authenticated app directly and has no confirmation
+email to verify), execution of the pgTAP RLS suite against a
 real Postgres (item 8 — **still BLOCKED / NOT RUN**, no Docker available
 to either this session or the repository owner, who has confirmed they are
 not using Docker; this remains genuinely unverified and is not implied to
