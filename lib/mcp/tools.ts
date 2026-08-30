@@ -10,6 +10,7 @@ import type {
 } from "@/lib/applications/types";
 import {
   APPLICATION_LIST_VIEW_URI,
+  appViewResultMeta,
   appViewToolMeta,
   registerInterndexAppViews,
 } from "@/lib/mcp/app-views";
@@ -276,6 +277,10 @@ export function registerJobTrackTools(
       return {
         content: [{ type: "text" as const, text }],
         structuredContent: structured,
+        // The view association again, travelling with the payload the host is
+        // about to render. Purely additive: the text block and the structured
+        // content above are what every other client reads, unchanged.
+        _meta: appViewResultMeta(APPLICATION_LIST_VIEW_URI),
       };
     },
   );

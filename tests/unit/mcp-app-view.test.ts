@@ -22,10 +22,37 @@ type Message = Record<string, unknown>;
 
 let dom: JSDOM | null = null;
 
-function mountView() {
+type OpenAiGlobals = { toolOutput: unknown; theme?: string };
+
+function mountView(openai?: OpenAiGlobals) {
+  // The document's globals poll runs on window.setInterval. Driving it by the
+  // clock would mean an eleven-second test, so the window gets a controllable
+  // interval instead and `tick()` below runs the callback exactly as often as
+  // the real one would have.
+  const intervals = new Map<number, () => void>();
+  let nextIntervalId = 0;
+
   dom = new JSDOM(APPLICATION_LIST_VIEW_HTML, {
     runScripts: "dangerously",
     pretendToBeVisual: true,
+    // The globals must exist before the document's script runs, which is the
+    // order a ChatGPT host injects them in.
+    beforeParse: (win) => {
+      if (openai) (win as unknown as { openai: OpenAiGlobals }).openai = openai;
+
+      const scope = win as unknown as {
+        setInterval: (callback: () => void) => number;
+        clearInterval: (id: number) => void;
+      };
+      scope.setInterval = (callback) => {
+        const id = (nextIntervalId += 1);
+        intervals.set(id, callback);
+        return id;
+      };
+      scope.clearInterval = (id) => {
+        intervals.delete(id);
+      };
+    },
   });
 
   const { window } = dom;
@@ -65,6 +92,26 @@ function mountView() {
       }),
     root: () => window.document.getElementById("ix-root")!,
     text: () => window.document.getElementById("ix-root")!.textContent ?? "",
+    /** Announces a globals change the way a ChatGPT host does. */
+    setGlobals: (next: Partial<OpenAiGlobals>) => {
+      Object.assign(
+        (window as unknown as { openai: OpenAiGlobals }).openai,
+        next,
+      );
+      window.dispatchEvent(
+        new window.CustomEvent("openai:set_globals", {
+          detail: { globals: next },
+        }),
+      );
+    },
+    /** Fires every live interval `times` over, as the clock would have. */
+    tick: (times = 1) => {
+      for (let round = 0; round < times; round += 1) {
+        for (const callback of [...intervals.values()]) callback();
+      }
+    },
+    /** How many polls are still scheduled. */
+    liveIntervals: () => intervals.size,
   };
 }
 
@@ -321,6 +368,81 @@ describe("Interndex application-list view: rendering list_jobs results", () => {
     view.toolResult({ applications: [RBC, SHOPIFY], returned: 2, has_more: false });
     view.toolResult({ applications: [RBC], returned: 1, has_more: false });
 
+    expect(view.root().querySelectorAll(".ix-row")).toHaveLength(1);
+  });
+});
+
+describe("Interndex application-list view: the ChatGPT globals path", () => {
+  it("renders tool output the host injected before the script ran", () => {
+    const view = mountView({
+      toolOutput: { applications: [RBC], returned: 1, has_more: false },
+      theme: "dark",
+    });
+
+    expect(view.root().querySelectorAll(".ix-row")).toHaveLength(1);
+    expect(view.text()).toContain("RBC");
+    expect(view.window.document.documentElement.dataset.theme).toBe("dark");
+  });
+
+  it("renders when the host announces globals with its event", () => {
+    const view = mountView({ toolOutput: null });
+
+    expect(view.text()).toContain("No applications match.");
+
+    view.setGlobals({
+      toolOutput: { applications: [RBC, SHOPIFY], returned: 2, has_more: false },
+    });
+
+    expect(view.root().querySelectorAll(".ix-row")).toHaveLength(2);
+  });
+
+  it("polls for globals that appear with no event to announce them", () => {
+    // The host may inject window.openai around the time this script runs, and
+    // which side wins is not ours to decide, so a first result is polled for.
+    const view = mountView({ toolOutput: null });
+
+    expect(view.text()).toContain("No applications match.");
+    expect(view.liveIntervals()).toBe(1);
+
+    view.window.openai.toolOutput = {
+      applications: [RBC],
+      returned: 1,
+      has_more: false,
+    };
+    view.tick();
+
+    expect(view.root().querySelectorAll(".ix-row")).toHaveLength(1);
+    expect(view.text()).toContain("RBC");
+    // Found it, so it stops rather than polling for the rest of the session.
+    expect(view.liveIntervals()).toBe(0);
+  });
+
+  it("does not poll at all when the result was already there", () => {
+    const view = mountView({
+      toolOutput: { applications: [RBC], returned: 1, has_more: false },
+    });
+
+    expect(view.liveIntervals()).toBe(0);
+  });
+
+  it("gives up polling rather than spinning forever", () => {
+    const view = mountView({ toolOutput: null });
+
+    // Forty rounds — ten seconds at the Apps SDK's own 250ms interval.
+    view.tick(40);
+    expect(view.liveIntervals()).toBe(0);
+
+    view.window.openai.toolOutput = {
+      applications: [RBC],
+      returned: 1,
+      has_more: false,
+    };
+    view.tick(10);
+    expect(view.root().querySelectorAll(".ix-row")).toHaveLength(0);
+
+    // An event still works after the poll has stopped, which is the path a
+    // real host uses for every update after the first.
+    view.setGlobals({});
     expect(view.root().querySelectorAll(".ix-row")).toHaveLength(1);
   });
 });

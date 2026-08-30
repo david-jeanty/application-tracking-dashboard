@@ -526,11 +526,9 @@ export const APPLICATION_LIST_VIEW_HTML = `<!doctype html>
         }
 
         /*
-          The other contract a ChatGPT host may use: tool output as a window
-          global, refreshed through an "openai:set_globals" event. Supported
-          because it costs a dozen lines and is what a host on the earlier
-          Apps SDK surface hands a widget; the postMessage path above is the
-          one this view is built around.
+          The contract ChatGPT uses: the tool result arrives as
+          window.openai.toolOutput rather than over postMessage, refreshed
+          through an "openai:set_globals" event.
         */
         function readOpenAiGlobals() {
           var globals = window.openai;
@@ -549,7 +547,26 @@ export const APPLICATION_LIST_VIEW_HTML = `<!doctype html>
 
         // Render something immediately rather than an empty frame: either the
         // globals a host already injected, or the empty state.
-        if (!readOpenAiGlobals()) render(null);
+        var gotGlobals = readOpenAiGlobals();
+        if (!gotGlobals) render(null);
+
+        /*
+          The globals can also appear with no event to announce them — the host
+          injects them around the time this script runs, and which side wins is
+          not ours to decide. So poll briefly for a first result, and stop the
+          moment one arrives. Ten seconds at the same 250ms interval the Apps
+          SDK's own useOpenAiGlobal hook uses, then give up rather than spin
+          for the life of the conversation.
+        */
+        if (!gotGlobals && typeof window.setInterval === "function") {
+          var remainingChecks = 40;
+          var pollId = window.setInterval(function () {
+            remainingChecks -= 1;
+            if (readOpenAiGlobals() || remainingChecks <= 0) {
+              window.clearInterval(pollId);
+            }
+          }, 250);
+        }
       })();
     </script>
   </body>

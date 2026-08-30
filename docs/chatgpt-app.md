@@ -20,7 +20,7 @@ calling `list_jobs` as an authenticated MCP client and nothing else.
 
 ```text
 ChatGPT ── tools/call list_jobs ──► /api/mcp ─► token ─► repository ─► Postgres (RLS)
-        ◄─ result: text + structuredContent + _meta.ui.resourceUri
+        ◄─ result: text + structuredContent + _meta[openai/outputTemplate]
         ── resources/read ui://interndex/application-list.html ──►
         ◄─ the view's HTML (static; no student data in it)
         ── renders the view in an iframe, hands it the structuredContent
@@ -46,15 +46,34 @@ asserts the document contains no fetch, no URL and no Supabase client.
 | | |
 |---|---|
 | URI | `ui://interndex/application-list.html` |
-| MIME type | `text/html;profile=mcp-app` (also served as `text/html+skybridge`) |
+| MIME type | `text/html+skybridge` (also served as `text/html;profile=mcp-app`) |
+| Advertised in | `resources/list`, `resources/templates/list`, `resources/read` |
 | Body | A complete HTML document — markup, styles and script in one string |
+
+**The MIME type is load-bearing.** ChatGPT resolves the tool's
+`openai/outputTemplate` to a resource and renders a custom component only when
+that resource is `text/html+skybridge`. A resource advertised as the newer MCP
+Apps type instead is not recognised as a widget, and the tool's result is shown
+with the host's default presentation — a plain table — with no error and with
+every other part of the integration working. The document is therefore
+advertised as `text/html+skybridge` and carries the MCP Apps type as a second
+content item on the read, ChatGPT's first. One document, two labels, no second
+view to drift.
+
+It is registered twice over: as a concrete resource, which is what
+`resources/list` and `resources/read` answer with, and as a resource template,
+because that is the third place OpenAI's own servers advertise a widget. The
+template lists nothing of its own, so `resources/list` still holds one entry.
 
 Its own `_meta` is a different shape from the tool's, and deliberately so: on a
 resource, `_meta.ui` describes how to *render* the document — CSP, sandbox
 permissions, border — and carries no `resourceUri`. Interndex declares
 `prefersBorder: false`, because the view draws its own hairline and rounded
 corners and a host frame around that is a border inside a border. No `csp`
-block is declared: the document loads nothing at all.
+block is declared: the document loads nothing at all. The Apps SDK keys
+(`openai/outputTemplate`, `openai/widgetAccessible`) are repeated on the
+resource listing, the template and each read content item, because that is what
+OpenAI's servers do and a host is entitled to look at any of the three.
 
 It is a TypeScript template literal rather than a file read at request time
 because the MCP route runs in the Next.js server bundle: a string is bundled
@@ -67,22 +86,28 @@ detail that a serverless build can lose.
 
 ```ts
 _meta: {
+  "openai/outputTemplate": "ui://interndex/application-list.html",
+  "openai/toolInvocation/invoking": "Reading your applications",
+  "openai/toolInvocation/invoked": "Showed your applications",
+  "openai/widgetAccessible": false,
   ui: { resourceUri: "ui://interndex/application-list.html" },
   "ui/resourceUri": "ui://interndex/application-list.html",
-  "openai/outputTemplate": "ui://interndex/application-list.html",
-  "openai/widgetAccessible": false,
 }
 ```
 
-Three spellings of one fact: the nested `ui.resourceUri` of the MCP Apps
-extension, its deprecated flat alias, and the Apps SDK's
-`openai/outputTemplate`. Both contracts are live in OpenAI's own examples
-repository, so both are advertised and the read result carries the document
-under each MIME type. They always name the same URI —
-`appViewToolMeta()` builds all of them from one argument.
+Three spellings of one fact: the Apps SDK's `openai/outputTemplate` — the key
+ChatGPT actually resolves — the nested `ui.resourceUri` of the MCP Apps
+extension, and its deprecated flat alias. Both contracts are live in OpenAI's
+own examples repository, so both are advertised. They always name the same
+URI — `appViewToolMeta()` builds all of them from one argument.
+
+The same association is repeated on the `list_jobs` **result** as well as on
+its descriptor, again matching OpenAI's servers: the descriptor is read once at
+connection time, while the result's `_meta` travels with the payload the host
+is about to render.
 
 `openai/widgetAccessible` is `false`: the view renders a result and may not call
-tools back.
+tools back. It gates what the view may *do*, not whether it renders.
 
 The tool's arguments, filters, authentication, repository call, plain-text block
 and `structuredContent` are untouched. A client that ignores `_meta` — Claude,
@@ -107,9 +132,13 @@ protocol (revision `2026-01-26`) to it over `postMessage`:
 `params.structuredContent` is the same object `list_jobs` returns:
 `{ applications, returned, has_more }`. The view renders it and nothing else.
 
-The earlier ChatGPT contract — tool output on `window.openai.toolOutput`,
-refreshed by an `openai:set_globals` event — is also read, because it costs a
-dozen lines and is what a host on that surface hands a widget.
+**ChatGPT uses the other contract**: the tool result arrives on
+`window.openai.toolOutput` rather than over `postMessage`, refreshed by an
+`openai:set_globals` event. The view reads it at boot, on that event, and — for
+a first result only — by polling every 250ms for ten seconds, because the host
+may inject the globals around the time the document's script runs and with no
+event to announce them. That is the same interval and bound the Apps SDK's own
+`useOpenAiGlobal` hook uses.
 
 ### Fields shown
 
@@ -187,10 +216,11 @@ The literals they would have supplied are pinned by tests instead.
   the wordmark and the Interndex palette instead.
 - **The view is read-only.** Nothing in it is clickable and it cannot call a
   tool; `openai/widgetAccessible` is `false`.
-- **Not yet verified inside ChatGPT itself.** Doing that needs a public
-  deployment and a ChatGPT developer-mode connector. What has been verified is
-  the wire contract over a real MCP server, and the document rendering and
-  handshaking correctly in a browser and in JSDOM.
+- **Only the wire contract is verified from this repository.** The tests drive
+  a real MCP server, and the document has been rendered in Chromium down all
+  three delivery paths — globals with an event, globals with none, and the MCP
+  Apps `postMessage` handshake. Whether a given ChatGPT build then chooses to
+  render it can only be confirmed against a live connector.
 - **Theme follows the host.** `hostContext.theme` and `prefers-color-scheme`
   are honoured; the student's chosen Interndex accent is not, because the view
   never reads their settings.

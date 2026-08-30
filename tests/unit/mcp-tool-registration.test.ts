@@ -16,7 +16,7 @@ import { APPLICATION_LIST_VIEW_HTML } from "@/lib/mcp/app-views/application-list
 import {
   APP_VIEW_MIME_TYPE,
   APPLICATION_LIST_VIEW_URI,
-  LEGACY_APP_VIEW_MIME_TYPE,
+  MCP_APPS_VIEW_MIME_TYPE,
 } from "@/lib/mcp/app-views";
 import {
   registerJobTrackTools,
@@ -211,6 +211,7 @@ function fakeRepositoryFactory(
 type ToolResult = {
   content: { type: string; text: string }[];
   structuredContent?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
   isError?: boolean;
 };
 
@@ -231,8 +232,20 @@ type ResourceDefinition = {
   _meta?: Record<string, unknown>;
 };
 
+type ResourceTemplateDefinition = {
+  uriTemplate: string;
+  name: string;
+  mimeType?: string;
+  _meta?: Record<string, unknown>;
+};
+
 type ResourceContents = {
-  contents: { uri: string; mimeType?: string; text?: string }[];
+  contents: {
+    uri: string;
+    mimeType?: string;
+    text?: string;
+    _meta?: Record<string, unknown>;
+  }[];
 };
 
 function authFor(userId: string): AuthInfo {
@@ -303,6 +316,11 @@ async function connectServer(repositoryFactory = fakeRepositoryFactory()) {
       request<{ resources: ResourceDefinition[] }>("resources/list", {}).then(
         (result) => result.resources,
       ),
+    listResourceTemplates: () =>
+      request<{ resourceTemplates: ResourceTemplateDefinition[] }>(
+        "resources/templates/list",
+        {},
+      ).then((result) => result.resourceTemplates),
     readResource: (uri: string) =>
       request<ResourceContents>("resources/read", { uri }),
     callTool: (
@@ -1247,22 +1265,34 @@ describe("save_job reports what it created", () => {
  * attached.
  */
 describe("Apps SDK view served by the real server", () => {
-  it("advertises the application-list view on list_jobs", async () => {
+  it("binds list_jobs to the view with the key ChatGPT reads", async () => {
     const connection = await connectServer();
 
     const tool = (await connection.listTools()).find(
       (candidate) => candidate.name === "list_jobs",
     );
 
-    // The nested key of the MCP Apps extension, and the two aliases older
-    // hosts read. All three must name the same resource.
+    // `openai/outputTemplate` is the association ChatGPT resolves. The MCP
+    // Apps spellings ride alongside; all three must name the same resource.
     expect(tool!._meta).toMatchObject({
+      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
       ui: { resourceUri: APPLICATION_LIST_VIEW_URI },
       "ui/resourceUri": APPLICATION_LIST_VIEW_URI,
-      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
     });
     // The view renders a result; it may not call back into the tracker.
     expect(tool!._meta!["openai/widgetAccessible"]).toBe(false);
+    await connection.close();
+  });
+
+  it("labels the tool invocation for the host to show", async () => {
+    const connection = await connectServer();
+
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "list_jobs",
+    );
+
+    expect(tool!._meta!["openai/toolInvocation/invoking"]).toBeTypeOf("string");
+    expect(tool!._meta!["openai/toolInvocation/invoked"]).toBeTypeOf("string");
     await connection.close();
   });
 
@@ -1270,14 +1300,19 @@ describe("Apps SDK view served by the real server", () => {
     const connection = await connectServer();
 
     const withViews = (await connection.listTools())
-      .filter((tool) => tool._meta && "ui" in tool._meta)
+      .filter((tool) => tool._meta?.["openai/outputTemplate"])
       .map((tool) => tool.name);
 
     expect(withViews).toEqual(["list_jobs"]);
     await connection.close();
   });
 
-  it("resolves the view list_jobs names", async () => {
+  it("lists the view as text/html+skybridge", async () => {
+    // The regression this pins: ChatGPT resolves the tool's outputTemplate to
+    // a resource and renders a custom component only when that resource is
+    // `text/html+skybridge`. Advertising the newer MCP Apps profile type here
+    // instead left ChatGPT rendering its default table, with every other part
+    // of the integration working.
     const connection = await connectServer();
 
     const resource = (await connection.listResources()).find(
@@ -1285,35 +1320,86 @@ describe("Apps SDK view served by the real server", () => {
     );
 
     expect(resource).toBeDefined();
+    expect(resource!.mimeType).toBe("text/html+skybridge");
     expect(resource!.mimeType).toBe(APP_VIEW_MIME_TYPE);
-    // A resource's `_meta.ui` describes how to render the document, and has no
-    // `resourceUri` in it — that spelling belongs to the tool.
+    await connection.close();
+  });
+
+  it("carries the view association on the resource listing too", async () => {
+    const connection = await connectServer();
+
+    const resource = (await connection.listResources()).find(
+      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
+    );
+
     expect(resource!._meta).toMatchObject({
-      ui: { prefersBorder: false },
       "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+      ui: { prefersBorder: false },
     });
+    // A resource's `ui` says how to render the document, not what points at
+    // it — `resourceUri` there would be the tool's spelling in the wrong place.
     expect(resource!._meta!.ui).not.toHaveProperty("resourceUri");
     await connection.close();
   });
 
-  it("serves the view as HTML under both app MIME types", async () => {
+  it("advertises the view as a resource template as well", async () => {
+    const connection = await connectServer();
+
+    const template = (await connection.listResourceTemplates()).find(
+      (candidate) => candidate.uriTemplate === APPLICATION_LIST_VIEW_URI,
+    );
+
+    expect(template).toBeDefined();
+    expect(template!.mimeType).toBe(APP_VIEW_MIME_TYPE);
+    expect(template!._meta).toMatchObject({
+      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+    });
+    await connection.close();
+  });
+
+  it("lists the view exactly once", async () => {
+    // The template lists nothing of its own, so registering the view twice
+    // does not put it in `resources/list` twice.
+    const connection = await connectServer();
+
+    const matches = (await connection.listResources()).filter(
+      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
+    );
+
+    expect(matches).toHaveLength(1);
+    await connection.close();
+  });
+
+  it("reads the view as skybridge first, MCP Apps second", async () => {
     const connection = await connectServer();
 
     const read = await connection.readResource(APPLICATION_LIST_VIEW_URI);
-    const byType = new Map(
-      read.contents.map((item) => [item.mimeType, item.text]),
-    );
 
-    expect([...byType.keys()]).toEqual([
+    // Order matters: a host that takes the first content item must get the
+    // type it asked for.
+    expect(read.contents.map((item) => item.mimeType)).toEqual([
       APP_VIEW_MIME_TYPE,
-      LEGACY_APP_VIEW_MIME_TYPE,
+      MCP_APPS_VIEW_MIME_TYPE,
     ]);
     // One document, offered twice — not two views that could drift apart.
-    expect(byType.get(APP_VIEW_MIME_TYPE)).toBe(APPLICATION_LIST_VIEW_HTML);
-    expect(byType.get(LEGACY_APP_VIEW_MIME_TYPE)).toBe(
-      APPLICATION_LIST_VIEW_HTML,
-    );
-    expect(byType.get(APP_VIEW_MIME_TYPE)).toContain("<!doctype html>");
+    for (const item of read.contents) {
+      expect(item.text).toBe(APPLICATION_LIST_VIEW_HTML);
+      expect(item.text).toContain("<!doctype html>");
+      expect(item._meta).toMatchObject({
+        "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+      });
+    }
+    await connection.close();
+  });
+
+  it("repeats the view association on the list_jobs result", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool("list_jobs", {});
+
+    expect(result._meta).toMatchObject({
+      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+    });
     await connection.close();
   });
 
