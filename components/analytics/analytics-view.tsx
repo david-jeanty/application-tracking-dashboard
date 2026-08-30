@@ -1,6 +1,6 @@
 import { SearchActivity } from "@/components/analytics/activity";
-import { Funnel, FunnelNarrowing } from "@/components/analytics/funnel";
-import { WhatWorks } from "@/components/analytics/performance";
+import { ConversionWorkspace } from "@/components/analytics/funnel";
+import { OutcomeComparison } from "@/components/analytics/performance";
 import { QuietNote } from "@/components/analytics/section";
 import { ButtonLink } from "@/components/ui/button";
 import { summarizeActivity } from "@/lib/analytics/activity";
@@ -35,7 +35,7 @@ import type { ApplicationAnalyticsRow } from "@/lib/applications/types";
  *
  * So each section owns its own threshold and none of them gates another:
  * `FunnelNarrowing` returns null unless a step is well enough observed,
- * `WhatWorks` needs two comparable groups in some lens, and `SearchActivity`
+ * `OutcomeComparison` needs two comparable groups in some lens, and `SearchActivity`
  * needs dated submissions in more than one week. Sections with nothing
  * meaningful to say are absent rather than empty — five bordered boxes each
  * announcing that they have no data is a worse page than a short one.
@@ -78,16 +78,14 @@ export function AnalyticsView({
     .filter((summary) => summary.comparableGroups >= MINIMUM_COMPARABLE_GROUPS);
 
   return (
-    <div className="space-y-14">
+    <div className="space-y-10 sm:space-y-12" data-analytics-page>
       <AnalyticsHeader />
 
-      <Funnel funnel={funnel} />
-
-      <FunnelNarrowing funnel={funnel} />
+      <ConversionWorkspace funnel={funnel} />
 
       {lenses.length > 0 ? (
         <section aria-labelledby="analytics-performance">
-          <WhatWorks
+          <OutcomeComparison
             headingId="analytics-performance"
             initialLens={lenses[0].lens}
             lenses={lenses}

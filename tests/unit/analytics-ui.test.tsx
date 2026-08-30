@@ -188,7 +188,7 @@ describe("the page's shape", () => {
     expect(headings).toEqual([
       "Your funnel",
       "Where your funnel narrows",
-      "What works",
+      "Outcome comparison",
       "Search activity",
     ]);
   });
@@ -215,7 +215,7 @@ describe("the page's shape", () => {
     for (const name of [
       "Your funnel",
       "Where your funnel narrows",
-      "What works",
+      "Outcome comparison",
       "Search activity",
     ]) {
       expect(screen.getByRole("region", { name })).toBeInTheDocument();
@@ -305,24 +305,28 @@ describe("your funnel", () => {
   it("shows an em dash rather than zero when a ratio is undefined", async () => {
     await renderAnalytics(many("n", 6, { path: ["Applied"] }));
 
-    const dashes = screen.getAllByText("—");
-    expect(dashes).toHaveLength(2);
+    const funnel = screen.getByRole("region", { name: "Your funnel" });
+    for (const ratio of within(funnel).getAllByRole("definition")) {
+      expect(within(ratio).getByText("—")).toBeInTheDocument();
+    }
     // The two answers this must never give.
     expect(screen.queryByText("∞")).toBeNull();
     expect(screen.queryByText("NaN")).toBeNull();
   });
 
-  it("omits a step's percentage when it has no denominator", async () => {
+  it("shows a step as unavailable when it has no denominator", async () => {
     await renderAnalytics(many("n", 6, { path: ["Applied"] }));
     const funnel = screen.getByRole("region", { name: "Your funnel" });
 
     // Six submitted, nothing came back: the first step is a real 0% and the two
-    // below have no answer at all.
+    // below have no answer at all, so the path exposes an em dash rather than
+    // silently removing either downstream transition.
     expect(within(funnel).getByText("0% continued")).toBeInTheDocument();
-    expect(within(funnel).getAllByText(/continued$/)).toHaveLength(1);
+    expect(within(funnel).getAllByText(/continued$/)).toHaveLength(3);
+    expect(within(funnel).getAllByText("—")).toHaveLength(4);
   });
 
-  it("keeps the bars decorative, because every number is already text", async () => {
+  it("keeps the path markers decorative, because every number is text", async () => {
     const { container } = await renderAnalytics(search());
     const funnel = screen.getByRole("region", { name: "Your funnel" });
 
@@ -351,6 +355,12 @@ describe("where your funnel narrows", () => {
     ).toBeInTheDocument();
     expect(within(narrowing).getByText("17%")).toBeInTheDocument();
     expect(within(narrowing).getByText("9 of 54 progressed")).toBeInTheDocument();
+
+    const workspace = narrowing.parentElement as HTMLElement;
+    expect(workspace).toHaveAttribute("data-has-narrowing", "true");
+    expect(
+      within(workspace).getByRole("region", { name: "Your funnel" }),
+    ).toBeInTheDocument();
   });
 
   it("says it describes what happened, not why", async () => {
@@ -373,6 +383,9 @@ describe("where your funnel narrows", () => {
     // not a reason to withhold the record it was drawn from.
     expect(screen.getByRole("region", { name: "Your funnel" })).toBeInTheDocument();
     expect(funnelRows()[0]).toContain("Submitted, 3 applications");
+    expect(
+      document.querySelector("[data-analytics-conversion-workspace]"),
+    ).toHaveAttribute("data-has-narrowing", "false");
   });
 
   it("appears at exactly five submitted applications", async () => {
@@ -412,43 +425,53 @@ describe("where your funnel narrows", () => {
   });
 });
 
-describe("what works", () => {
+describe("outcome comparison", () => {
   beforeEach(() => {
     listApplicationsForAnalytics.mockReset();
     listStatusHistory.mockReset();
   });
 
-  it("shows a composition per group with its sample size", async () => {
+  it("shows an exact matrix row per group with its sample size", async () => {
     await renderAnalytics(search());
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
 
     const linkedIn = within(works)
       .getByText("LinkedIn")
-      .closest("li") as HTMLElement;
+      .closest("tr") as HTMLElement;
     expect(within(linkedIn).getByText("n=45")).toBeInTheDocument();
 
     const website = within(works)
       .getByText("Company website")
-      .closest("li") as HTMLElement;
+      .closest("tr") as HTMLElement;
     expect(within(website).getByText("n=8")).toBeInTheDocument();
   });
 
   it("exposes every milestone count as text, with no hover needed", async () => {
     await renderAnalytics(search());
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
     const website = within(works)
       .getByText("Company website")
-      .closest("li") as HTMLElement;
+      .closest("tr") as HTMLElement;
 
     // 8 submitted: 5 rejected without an interview, 3 interviewed.
     expect(within(website).getByText("5")).toBeInTheDocument();
     expect(within(website).getByText("3")).toBeInTheDocument();
     expect(within(website).getAllByText("0").length).toBeGreaterThan(0);
+    expect(
+      within(website).getByRole("cell", {
+        name: "Response: 5 applications, 63%",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(website).getByRole("cell", {
+        name: "Interview: 3 applications, 37%",
+      }),
+    ).toBeInTheDocument();
   });
 
-  it("names the four segments in a legend", async () => {
+  it("names the four outcome columns", async () => {
     await renderAnalytics(search());
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
 
     for (const label of [
       "No recorded response",
@@ -474,7 +497,7 @@ describe("what works", () => {
       }),
     ]);
 
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
     expect(within(works).getByText("LinkedIn")).toBeInTheDocument();
     expect(within(works).queryByText("Finance")).toBeNull();
 
@@ -489,7 +512,7 @@ describe("what works", () => {
 
   it("communicates the selected lens programmatically, not only in colour", async () => {
     await renderAnalytics(search());
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
 
     const source = within(works).getByRole("radio", { name: "Source" });
     const role = within(works).getByRole("radio", { name: "Role type" });
@@ -505,7 +528,7 @@ describe("what works", () => {
 
   it("moves between lenses with the arrow keys", async () => {
     await renderAnalytics(search());
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
     const source = within(works).getByRole("radio", { name: "Source" });
     const role = within(works).getByRole("radio", { name: "Role type" });
 
@@ -537,7 +560,7 @@ describe("what works", () => {
 
   it("wraps at both ends rather than dead-ending", async () => {
     await renderAnalytics(search());
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
     const source = within(works).getByRole("radio", { name: "Source" });
     const role = within(works).getByRole("radio", { name: "Role type" });
 
@@ -554,7 +577,7 @@ describe("what works", () => {
 
   it("leaves keys it does not own to the page", async () => {
     await renderAnalytics(search());
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
     const source = within(works).getByRole("radio", { name: "Source" });
 
     source.focus();
@@ -578,7 +601,7 @@ describe("what works", () => {
       }),
     ]);
 
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
     // One named source and a residue bucket is one source, so the lens with an
     // actual comparison in it is the one that shows — and there is nothing to
     // switch to.
@@ -607,7 +630,7 @@ describe("what works", () => {
       }),
     ]);
 
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
     expect(within(works).getByText("LinkedIn")).toBeInTheDocument();
     expect(within(works).getByText("Referral")).toBeInTheDocument();
     // Residue is not a source, but once the comparison stands on its own it is
@@ -619,11 +642,11 @@ describe("what works", () => {
 
   it("marks a small sample without hiding it or warning about it", async () => {
     await renderAnalytics(search());
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
 
     const referral = within(works)
       .getByText("Referral")
-      .closest("li") as HTMLElement;
+      .closest("tr") as HTMLElement;
     expect(within(referral).getByText("small sample")).toBeInTheDocument();
     expect(within(referral).getByText("n=1")).toBeInTheDocument();
     // No alarm: the treatment is a muted label and nothing else.
@@ -645,7 +668,7 @@ describe("what works", () => {
       }),
     ]);
 
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
     expect(within(works).getByText("Finance")).toBeInTheDocument();
     // A single unspecified bucket is not a comparison, so the control has
     // nothing to switch between and is not drawn.
@@ -661,19 +684,21 @@ describe("what works", () => {
       }),
     );
 
-    expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Outcome comparison" }),
+    ).toBeNull();
     // And no empty panel stands in for it.
     expect(screen.queryByText(/no source data/i)).toBeNull();
   });
 
   it("orders groups by volume, never by rate", async () => {
     await renderAnalytics(search());
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
 
     const labels = within(works)
-      .getAllByRole("listitem")
-      .map((item) => item.textContent ?? "")
-      .filter((text) => text.includes("n="));
+      .getAllByRole("row")
+      .slice(1)
+      .map((item) => item.textContent ?? "");
 
     expect(labels[0]).toContain("LinkedIn");
     expect(labels.at(-1)).toContain("Referral");
@@ -772,7 +797,9 @@ describe("search activity", () => {
       ...many("c", 3, { source: "Company website", path: ["Applied"] }),
     ]);
 
-    expect(screen.getByRole("region", { name: "What works" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Outcome comparison" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
     expect(screen.queryByText(/^More breakdowns appear/)).toBeNull();
   });
@@ -866,13 +893,13 @@ describe("progressive disclosure", () => {
     expect(funnelRows()[0]).toContain("Submitted, 3 applications");
     expect(funnelRows()[1]).toContain("Employer response, 1 application");
 
-    const works = screen.getByRole("region", { name: "What works" });
+    const works = screen.getByRole("region", { name: "Outcome comparison" });
     const linkedIn = within(works)
       .getByText("LinkedIn")
-      .closest("li") as HTMLElement;
+      .closest("tr") as HTMLElement;
     const website = within(works)
       .getByText("Company website")
-      .closest("li") as HTMLElement;
+      .closest("tr") as HTMLElement;
 
     expect(within(linkedIn).getByText("n=2")).toBeInTheDocument();
     expect(within(website).getByText("n=1")).toBeInTheDocument();
@@ -931,16 +958,17 @@ describe("progressive disclosure", () => {
     expect(
       screen.queryByRole("region", { name: "Where your funnel narrows" }),
     ).toBeNull();
-    expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Outcome comparison" }),
+    ).toBeNull();
     expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
     // The one defined step is drawn — 0 of 1 is a fact whose denominator the
-    // student can see. The two below it have no denominator and are silent
-    // rather than reported as zero, and both ratios are em dashes rather than
-    // an invented 0 or ∞.
+    // student can see. The two below it have no denominator and are explicitly
+    // unavailable, and both ratios are em dashes rather than an invented 0 or ∞.
     const funnel = screen.getByRole("region", { name: "Your funnel" });
-    expect(within(funnel).getAllByText(/continued$/)).toHaveLength(1);
+    expect(within(funnel).getAllByText(/continued$/)).toHaveLength(3);
     expect(within(funnel).getByText("0% continued")).toBeInTheDocument();
-    expect(screen.getAllByText("—")).toHaveLength(2);
+    expect(within(funnel).getAllByText("—")).toHaveLength(4);
   });
 
   it("says nothing more will appear once a narrowing callout has", async () => {
@@ -961,12 +989,14 @@ describe("progressive disclosure", () => {
     expect(
       screen.getByRole("region", { name: "Where your funnel narrows" }),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Outcome comparison" }),
+    ).toBeNull();
     expect(screen.queryByRole("region", { name: "Search activity" })).toBeNull();
     expect(screen.queryByText(/^More breakdowns appear/)).toBeNull();
   });
 
-  it("omits What works at three submitted with nothing to compare", async () => {
+  it("omits Outcome comparison at three submitted with nothing to compare", async () => {
     // One named source, one role category: two rows of the same thing is not
     // a comparison, and the section is absent rather than drawn empty.
     await renderAnalytics(
@@ -977,7 +1007,9 @@ describe("progressive disclosure", () => {
       }),
     );
 
-    expect(screen.queryByRole("region", { name: "What works" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Outcome comparison" }),
+    ).toBeNull();
     expect(screen.getByRole("region", { name: "Your funnel" })).toBeInTheDocument();
     expect(funnelRows()[0]).toContain("Submitted, 3 applications");
   });
