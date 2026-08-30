@@ -14,21 +14,26 @@ no service-role bypass exists on any normal path. Findings below are Medium
 and below, plus a set of manual production checks that cannot be verified
 from a repository.
 
-**Update:** the credentialed two-account E2E specs were subsequently run
-locally by the repository owner, outside this session, against a real
-Supabase project — three times so far, each rerun after a fix — see
-"Two-account isolation results" for the isolation test's PASS on both
-`chromium` and `mobile-chromium`, unmodified and reconfirmed across all
-three runs. Those runs also surfaced three unrelated stale
-specs/assertions (`tests/e2e/applications.spec.ts`'s ticket 2.1 and ticket
-2.2 "opens, validates, and edits" tests, and
-`tests/e2e/authenticated-shell.spec.ts`) left behind by a UI redesign that
-landed after those specs were written. Ticket 2.1 and authenticated-shell
-are now confirmed passing live; ticket 2.2's edit-flow test has been fixed
-across three rounds as each real run found the next real gap, and the
-latest fix has not yet been re-run live — see "Tests and commands run" for
-the full history. No product UI was changed by any of it, and the passing
-isolation test was never touched.
+**Update — credentialed E2E gate is now fully green.** The credentialed
+two-account E2E specs were subsequently run locally by the repository
+owner, outside this session, against a real Supabase project — four times
+in total, each rerun after a fix. The first three runs progressively
+surfaced and fixed stale assertions in three specs
+(`tests/e2e/applications.spec.ts`'s ticket 2.1 and ticket 2.2 "opens,
+validates, and edits" tests, and `tests/e2e/authenticated-shell.spec.ts`)
+left behind by a UI redesign that landed after those specs were written.
+The fourth and final run, against commit `22c8710`, came back clean:
+
+```
+npx playwright test tests/e2e/applications.spec.ts tests/e2e/authenticated-shell.spec.ts --workers=1
+8 passed (40.8s)
+```
+
+All 8 credentialed specs now pass on both `chromium` and `mobile-chromium`,
+including the cross-user isolation test, which was never touched by any
+round of fixes and passed on every one of the four runs. See "Two-account
+isolation results" and "Tests and commands run" for the full history. No
+product UI was changed at any point.
 
 ## Scope and method
 
@@ -205,10 +210,11 @@ disposable test accounts:
 npx playwright test tests/e2e/applications.spec.ts tests/e2e/authenticated-shell.spec.ts --workers=1
 ```
 
-**Result: PASS on both `chromium` and `mobile-chromium`, three times** —
-this run and, unmodified, two further live runs after the round-1 and
-round-2 E2E fixes below. This test creates an application as User A, then
-as User B requests
+**Result: PASS on both `chromium` and `mobile-chromium`, all four times**
+this was run — this initial run and, unmodified, three further live runs
+after each round of E2E fixes below, the last against final commit
+`22c8710`. This test creates an application as User A, then as User B
+requests
 `/applications/:id` for that record, a nonexistent id, and
 `/applications/:id/edit`, asserting all three render the identical generic
 "Page not found" result (never distinguishing "doesn't exist" from "isn't
@@ -319,8 +325,9 @@ without having been run.
 | `npm run test:e2e` (Playwright, chromium + mobile-chromium) | **PASS** on 64 credential-free specs (public homepage, demo, auth pages, appearance, responsive layout); **SKIPPED** on 8 specs in `tests/e2e/applications.spec.ts` and `tests/e2e/authenticated-shell.spec.ts` that require `E2E_USER_EMAIL`/`E2E_USER_PASSWORD` (and, for the two-account cases, `E2E_USER_B_EMAIL`/`E2E_USER_B_PASSWORD`) — no such credentials exist in this environment, and the specs' own guard skips them rather than failing |
 | `npx playwright test tests/e2e/applications.spec.ts tests/e2e/authenticated-shell.spec.ts --workers=1` (credentialed, all 8 specs) — **round 1** | Run locally by the repository owner against a real Supabase project, not executed inside this session. Result: **2 passed, 6 failed**, on both `chromium` and `mobile-chromium`. The 2 passes were both instances of the cross-user isolation test (see "Two-account isolation results" — **PASS**, unmodified, never touched by either round of fixes). The 6 failures were both instances each of three *other*, unrelated specs — ticket 2.1's creation test, ticket 2.2's "opens, validates, and edits" test, and the authenticated-shell test — all failing on stale copy/selectors (`"Your applications"`, a company-name row link, `"Edit application"`, `"Application dashboard"`) left behind by a UI redesign, confirmed by reading the current `app/(app)/dashboard/page.tsx`, `app/(app)/applications/page.tsx`, `components/applications/application-records.tsx`, `components/applications/application-detail.tsx`, and `components/dashboard/dashboard-view.tsx`. Fixed; re-run below. |
 | Same command — **round 2**, after the round-1 fixes | Also run locally by the repository owner, not inside this session. Result: **6 passed, 2 failed**. Ticket 2.1 and authenticated-shell now pass on both projects. The remaining 2 failures were both in ticket 2.2's edit-flow test, one per project, each a distinct real gap in the round-1 fix rather than a UI defect: (1) on `chromium` (desktop, ≥1280px), the row click no longer navigates — `components/applications/application-records.tsx`'s desktop master-detail layout intercepts the click, selects the row, and opens an inline preview `<aside>` instead, so the test's `toHaveURL(/\/applications\/[0-9a-f-]+$/)` assertion saw the index URL unchanged; (2) on `mobile-chromium`, the detail page's `getByText("Toronto, ON")` hit Playwright's strict-mode ambiguity, because the identity line's "Toronto, ON · Fall 2027" context summary and the Location field's own "Toronto, ON" value both contain that substring. Both fixed (see below). |
-| Same command — **round 3**, after the round-2 fixes | Also run locally by the repository owner, not inside this session. Result: **6 passed, 2 failed**, identical failure on both projects this time. Both round-2 fixes held — creation, opening the record, detail verification, the edit form and its validation, saving the update, the redirect to `?updated=1`, the success message, and the updated heading all passed on both `chromium` and `mobile-chromium`. The one remaining failure: `page.getByText("Updated without changing application status.")` found the text present but hidden — `components/applications/application-detail.tsx`'s `DisclosureSection` renders Notes inside a native `<details>` that starts collapsed, so the saved note was genuinely on the page but not visible until its `<summary>` is opened, which the test never did. Fixed (see below); not yet re-run against a real project. |
-| `npm run test:db` (`supabase test db`, pgTAP) | **BLOCKED** — requires a local Postgres via `supabase start`, which requires a running Docker daemon; neither this session's sandbox nor the repository owner's local machine has run this (the owner confirmed they are not using Docker). The RLS assertions this would run remain documented as VERIFIED by direct code/migration reading above, not by execution. |
+| Same command — **round 3**, after the round-2 fixes | Also run locally by the repository owner, not inside this session. Result: **6 passed, 2 failed**, identical failure on both projects this time. Both round-2 fixes held — creation, opening the record, detail verification, the edit form and its validation, saving the update, the redirect to `?updated=1`, the success message, and the updated heading all passed on both `chromium` and `mobile-chromium`. The one remaining failure: `page.getByText("Updated without changing application status.")` found the text present but hidden — `components/applications/application-detail.tsx`'s `DisclosureSection` renders Notes inside a native `<details>` that starts collapsed, so the saved note was genuinely on the page but not visible until its `<summary>` is opened, which the test never did. Fixed. |
+| Same command — **round 4 (final)**, after the round-3 fix, against commit `22c8710` | Also run locally by the repository owner, not inside this session. **Result: 8 passed (40.8s).** Every credentialed spec now passes on both `chromium` and `mobile-chromium`: the cross-user isolation test (unmodified, passing on all four runs), ticket 2.1, ticket 2.2's full open/verify/edit/save/reload/concurrent-update flow, and authenticated-shell. This is the final credentialed E2E result for this PR — no further test-fix rounds are open. |
+| `npm run test:db` (`supabase test db`, pgTAP) | **BLOCKED / NOT RUN** — requires a local Postgres via `supabase start`, which requires a running Docker daemon. The repository owner has confirmed they are not using Docker, and this session's sandbox has no working Docker daemon either. This pgTAP suite has not been executed against a real Postgres by anyone at any point in this PR. The RLS assertions it contains remain documented as VERIFIED by direct code/migration reading above, **not by execution** — that distinction stands unchanged and is not implied to be resolved by the E2E results above, which exercise the application layer, not this suite. |
 
 **Stale E2E assertions fixed in this follow-up.** After inspecting the
 current Dashboard and Applications UI directly (not just the failing test
@@ -449,8 +456,23 @@ touched.
 Verified in this session for round 3, same constraints as the previous two
 rounds (no live Supabase project available here): `npm run lint` and `npm
 run typecheck` clean on the changed file, and a full `npm run test:e2e`
-re-run still showing 64 passed / 8 skipped. **Not yet re-run against a real
-Supabase project** — see the manual step below.
+re-run still showing 64 passed / 8 skipped.
+
+**Round 4 (final): confirmed live.** The repository owner re-ran the same
+command a fourth time, against commit `22c8710`, against a real Supabase
+project with the real two test accounts:
+
+```
+npx playwright test tests/e2e/applications.spec.ts tests/e2e/authenticated-shell.spec.ts --workers=1
+8 passed (40.8s)
+```
+
+All 8 credentialed specs pass on both `chromium` and `mobile-chromium`.
+The round-3 Notes-disclosure fix holds, and so does everything fixed in
+rounds 1 and 2, and the unmodified cross-user isolation test. This closes
+out the credentialed E2E work for this PR — there is no remaining
+unconfirmed fix in `tests/e2e/applications.spec.ts` or
+`tests/e2e/authenticated-shell.spec.ts`.
 
 `npm audit` also ran (not one of the required commands, run as due diligence):
 6 high-severity advisories, all build-time tooling, listed as a Low finding
@@ -503,23 +525,21 @@ deployment.
    suites under `supabase/tests/`, which this session could only verify by
    reading. **Still BLOCKED** — neither this session's sandbox nor the
    repository owner's local machine has a working Docker daemon available.
-9. **Re-run the credentialed E2E specs a fourth time** to confirm the
-   round-3 fix to ticket 2.2's edit-flow test:
+9. ~~Re-run the credentialed E2E specs to confirm the round-3 fix to
+   ticket 2.2's edit-flow test~~ — **RESOLVED.** Four rounds of real runs
+   against a real Supabase project (reported by the repository owner, not
+   executed inside this session) now **confirm all 8 credentialed specs
+   passing** on both `chromium` and `mobile-chromium`, as of final commit
+   `22c8710`:
    ```
    npx playwright test tests/e2e/applications.spec.ts tests/e2e/authenticated-shell.spec.ts --workers=1
+   8 passed (40.8s)
    ```
-   Three rounds of real runs against a real Supabase project (reported by
-   the repository owner, not executed inside this session) have already
-   **confirmed passing**: the cross-user isolation test (both projects,
-   unmodified across all three rounds), ticket 2.1 (both projects, since
-   round 1), and authenticated-shell (both projects, since round 1). Ticket
-   2.2's edit-flow test has gotten further on each round — round 2 cleared
-   the row-open/navigation and Location-field failures — but still has one
-   unconfirmed fix: opening the collapsed Notes disclosure before asserting
-   the saved note text, checked so far only by reading source
-   (`components/applications/application-detail.tsx`'s `DisclosureSection`)
-   and by a credential-free `test:e2e` run in this session, not by
-   executing the fixed assertion against a real project.
+   This covers the cross-user isolation test (unmodified across every
+   round), ticket 2.1, ticket 2.2's full edit flow, and authenticated-shell.
+   No credentialed spec in these two files remains unconfirmed against a
+   real project. See "Tests and commands run" for the full round-by-round
+   history.
 10. **Extension production config**: before packaging or distributing a
     build, substitute real values for `extension/src/config.ts`'s
     `jobtrackOrigin`, `supabaseUrl`, and `oauthClientId` and the matching
@@ -568,19 +588,20 @@ refactors (including the `npm audit` dependency bumps and the cosmetic
 **CONDITIONAL GO** — no known code-level launch blockers remain, and the
 core claim of this audit — cross-user isolation — now has real, credentialed,
 two-real-account HTTP evidence behind it (the isolation test: **PASS** on
-both `chromium` and `mobile-chromium`, confirmed across three independent
-live runs), not only code inspection. Two of the three specs found stale
-by that testing (ticket 2.1, authenticated-shell) are likewise now
-confirmed passing live on both projects, and most of the third (ticket
-2.2's edit-flow test) now is too — three real re-runs have progressively
-narrowed it to one still-unconfirmed fix. Before launch, these must still
-pass: SMTP/email template/redirect-URL/site-URL/confirm-email/rate-limit
-configuration in the live Supabase project (items 1–6 above), one real
-end-to-end signup and password-reset test against the production domain
-(item 7), execution of the pgTAP RLS suite against a real Postgres (item 8
-— still blocked, no Docker available to either this session or the
-repository owner so far), one more live re-run to confirm the round-3 fix
-to ticket 2.2's edit-flow test (item 9 — the only credentialed spec not
-yet confirmed passing), and — only if the browser extension ships as part
-of this launch — substitution of its real production config values (item
-10).
+both `chromium` and `mobile-chromium`, confirmed across four independent
+live runs), not only code inspection. All three specs found stale by that
+testing (ticket 2.1, ticket 2.2's edit flow, authenticated-shell) are now
+also confirmed passing live on both projects, as of final commit
+`22c8710` — the full credentialed E2E gate (all 8 specs) is green. Before
+launch, these must still pass: SMTP/email template/redirect-URL/site-URL/
+confirm-email/rate-limit configuration in the live Supabase project (items
+1–6 above), one real end-to-end signup and password-reset test against the
+production domain (item 7), execution of the pgTAP RLS suite against a
+real Postgres (item 8 — **still BLOCKED / NOT RUN**, no Docker available
+to either this session or the repository owner, who has confirmed they are
+not using Docker; this remains genuinely unverified and is not implied to
+be covered by the E2E results, which exercise the application layer, not
+this database-level suite), and — only if the browser extension ships as
+part of this launch — substitution of its real production config values
+(item 10). Item 9 (the credentialed E2E specs) is resolved and no longer a
+launch condition.
