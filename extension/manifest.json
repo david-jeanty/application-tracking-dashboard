@@ -1,5 +1,6 @@
 {
   "manifest_version": 3,
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyeVKNjLcf6CjYQ13p4Go7fMZaQWZV15uGwdW0/Lx6ipWUGSulwmhQa/bB+3TExdr8uFzJzYC90VIsEwTkGGKPZUl/H8E9XXp/YqdrepCZ6bqQiNLsAtddngRTCGUMzAb1cz4eHKXOLFAlTo19EYwveUXBYT+BS5G6KImnYJrXQljsukZ4lJ5OXkHwGSitBj4g5245zpujKg+r2wnKuT81+dZPvUYXMJLNruOQbNaL/cqcJaQYFz5pfkqWJhvk9IRku6pzLSxvEkj0w1eZ9NTFNxiDqNPufclEQeyw8+0Tcs40+9839lfoUooZbw+MMeW8zkowVYHLRm9C4NQGqoCMwIDAQAB",
   "name": "Interndex Capture",
   "version": "0.1.0",
   "description": "Save the job posting you are viewing into your own Interndex account.",

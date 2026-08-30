@@ -19,6 +19,15 @@ documentation-only correction: no OAuth implementation, permission,
 extractor, UI, packaging-script, or database code changed as part of it —
 see §12.
 
+**Progress note.** §2 steps A–E are now complete: the bootstrap item exists
+as a saved Draft, its permanent Store item ID and public key were obtained,
+and that public key is committed as `extension/manifest.json`'s top-level
+`"key"` field. Step F — confirming a locally loaded unpacked build's
+extension ID actually matches the Store item ID — is the next action and
+has not been done yet. Steps G onward (registering the OAuth redirect URI,
+configuring production values) are intentionally not started until F is
+confirmed. See §2 for full detail.
+
 ## 1. What blocks a real production build today
 
 Three values are still development placeholders in `extension/src/config.ts`
@@ -73,6 +82,27 @@ something — it does not have to be the real, fully-configured extension.**
 **Do not hardcode a temporary unpacked-extension ID and call this done.**
 The correct sequence, in order:
 
+**Progress so far:**
+
+| Step | Status |
+| --- | --- |
+| A. Generate bootstrap ZIP | **Done** |
+| B. Upload to a new Store item, Save Draft only | **Done** — not submitted for review |
+| C. Record the permanent Store item ID | **Done** — `llggmpgoichadgcolincmjcfkljpboad` |
+| D. Copy the public key from the Package tab | **Done** |
+| E. Add the public key to `extension/manifest.json` as `"key"` | **Done** — committed in this revision |
+| F. Load unpacked and confirm the ID matches | **Not done — next action** |
+| G–Q. Redirect URI, OAuth client, production config, QA, submission | **Not started**, intentionally, until F is confirmed |
+
+**Expected redirect URI once F is confirmed (step G):**
+`https://llggmpgoichadgcolincmjcfkljpboad.chromiumapp.org/`
+
+This is derived directly from the Store item ID recorded in step C and
+should be treated as expected, not final, until step F's local ID check
+confirms the pinned `"key"` actually produces this same ID on a real
+`chrome://extensions` load — see §16 for why that check comes first, before
+touching Supabase or `extension/src/config.ts`.
+
 **A. Generate an inert bootstrap package.** Its only purpose is to be
 *something* to upload so the Web Store item and its public key come into
 existence; it must never be submitted for review or published. Run this
@@ -99,7 +129,7 @@ cat > "$BOOTSTRAP_DIR/manifest.json" <<'JSON'
   "manifest_version": 3,
   "name": "Interndex Capture — BOOTSTRAP ONLY — DO NOT SUBMIT",
   "version": "0.0.0.1",
-  "description": "Inert placeholder package. Used once to create the Chrome Web Store draft item and obtain its permanent item ID and public key. Contains no runtime code, no permissions, and no OAuth configuration. Never submit this package for review and never publish it.",
+  "description": "Bootstrap-only draft for reserving the Interndex Capture Chrome Web Store item ID. Not for review or publication.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -124,26 +154,37 @@ assign an item ID and a public key. It is written to `~/Downloads`, not to
 any tracked or gitignored path inside this repository, and its name makes
 its non-release status unmistakable in a directory listing.
 
-**B.** Chrome Web Store Developer Dashboard → Add new item → upload the
-bootstrap ZIP → **Save Draft only.** Do not submit for review.
+The `description` above was corrected in this revision: an earlier draft of
+this document exceeded the Chrome Web Store's 132-character manifest
+description limit. The text now shown is the one actually uploaded and
+accepted.
 
-**C.** Record the permanent Store item ID the dashboard assigns.
+**B. Done.** Uploaded the bootstrap ZIP to a new item in the Chrome Web
+Store Developer Dashboard and saved it as a **Draft only** — not submitted
+for review.
 
-**D.** Package tab → View public key. Copy it.
+**C. Done.** Permanent Store item ID: `llggmpgoichadgcolincmjcfkljpboad`.
 
-**E.** Add that **public** key to the real, production
-`extension/manifest.json` as a top-level `"key"` field (alongside
-`manifest_version`, `name`, `version`, etc. — not inside any other object).
-This is a public key, safe to have in the repository; it is not a secret
-the way a client secret would be.
+**D. Done.** Package tab → View public key → copied.
 
-**F.** Load the real extension unpacked (`chrome://extensions` → Developer
-mode → Load unpacked → `extension/`) and confirm the ID Chrome assigns it
-now matches the Store item ID from step C. If it does not match, the `key`
-field was not copied correctly — stop and fix this before continuing; every
-step after this one depends on it.
+**E. Done.** The public key is committed in `extension/manifest.json` as a
+top-level `"key"` field (alongside `manifest_version`, `name`, `version`,
+etc. — not inside any other object). This is a public key, safe to have in
+the repository; it is not a secret the way a client secret would be.
 
-**G.** Derive the redirect URI: `https://<store-item-id>.chromiumapp.org/`.
+**F. Next action — not yet done.** Load the real extension unpacked
+(`chrome://extensions` → enable Developer mode → Load unpacked → select the
+`extension/` directory) and confirm the ID Chrome assigns it is exactly
+`llggmpgoichadgcolincmjcfkljpboad`, matching the Store item ID from step C.
+If it does not match, the `key` field was not copied correctly — stop and
+fix this before continuing; every step after this one depends on it.
+
+**G. Not started — do this only after F is confirmed.** Derive the redirect
+URI from the Store item ID: `https://llggmpgoichadgcolincmjcfkljpboad.chromiumapp.org/`.
+This value is *expected*, not yet *confirmed* — step F is what proves the
+pinned `"key"` actually makes a real Chrome load produce this exact ID.
+Registering an OAuth redirect URI before that confirmation risks
+registering a value nothing will ever actually generate.
 
 **H.** Register a **dedicated** OAuth client in the production Supabase
 project for Interndex Capture, with that redirect URI. Do not reuse the MCP
@@ -876,10 +917,13 @@ explicitly flagged for your sign-off rather than assumed).
 
 Conditions that must be satisfied before actual submission:
 
-1. Run §2's corrected bootstrap sequence (steps A–H) to obtain the Store
-   item ID, its public key, and a matching OAuth redirect URI, then supply
-   the three production values in §1 and complete steps I–L to rebuild and
-   repackage.
+1. §2 steps A–E are done (Store item ID `llggmpgoichadgcolincmjcfkljpboad`,
+   public key committed as `manifest.json`'s `"key"`). **Next: step F** —
+   load the extension unpacked and confirm its ID actually matches before
+   doing anything else. Only after that confirmation, proceed to step G
+   (derive the redirect URI), register the dedicated OAuth client (step H),
+   supply the three production values in §1, and complete steps I–L to
+   rebuild and repackage.
 2. Decide on §6's residual risk: accept it for this release (this review's
    recommendation) or require the `client_id`-aware RLS follow-up first.
 3. Confirm the extension-ID match ("Gate zero" in §13) before running the
