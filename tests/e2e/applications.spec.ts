@@ -107,7 +107,7 @@ test.describe("applications ticket 2.1", () => {
     await page.goto("/applications");
 
     await expect(
-      page.getByRole("heading", { name: "Your applications" }),
+      page.getByRole("heading", { name: "Applications", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "No applications yet" }),
@@ -145,15 +145,20 @@ test.describe("applications ticket 2.1", () => {
     await expect(
       page.getByText("Application added successfully."),
     ).toBeVisible();
-    await expect(page.getByText(company)).toHaveCount(2);
+    await expect(page.getByText(company)).toHaveCount(1);
 
+    // Each application row is one link whose accessible name is the job
+    // title; the company name and status render as text inside it. Locating
+    // by role rather than by a styling class keeps this assertion tied to
+    // the row's actual accessible structure, not an implementation detail
+    // that changes with each visual redesign.
     await page.setViewportSize({ width: 390, height: 844 });
-    const mobileCard = page
-      .getByRole("heading", { name: company })
-      .locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
-    await expect(mobileCard).toBeVisible();
-    await expect(mobileCard.getByText("Business Analyst Intern")).toBeVisible();
-    await expect(mobileCard.getByText("Status: Applied")).toBeVisible();
+    const mobileRow = page.getByRole("link", {
+      name: "Business Analyst Intern",
+    });
+    await expect(mobileRow).toBeVisible();
+    await expect(mobileRow.getByText(company)).toBeVisible();
+    await expect(mobileRow.getByText("Status: Applied")).toBeVisible();
   });
 });
 
@@ -201,8 +206,11 @@ test.describe("applications ticket 2.2", () => {
       page.getByText("Application added successfully."),
     ).toBeVisible();
 
+    // The row's accessible name is the job title, not the company: the whole
+    // row is one link, and the company renders as text inside it rather than
+    // as its own link. Opening the record means activating that row link.
     await page
-      .getByRole("link", { name: company })
+      .getByRole("link", { name: "Revenue Operations Intern" })
       .filter({ visible: true })
       .click();
     await expect(page).toHaveURL(/\/applications\/[0-9a-f-]+$/);
@@ -211,7 +219,7 @@ test.describe("applications ticket 2.2", () => {
     await expect(page.getByText("Toronto, ON")).toBeVisible();
     await expect(page.getByText("Jul 24, 2027")).toBeVisible();
 
-    await page.getByRole("link", { name: "Edit application" }).click();
+    await page.getByRole("link", { name: "Edit", exact: true }).click();
     await expect(page.getByLabel("Company name")).toHaveValue(company);
     await expect(page.getByLabel("Original job title")).toHaveValue(
       "Revenue Operations Intern",
@@ -239,7 +247,7 @@ test.describe("applications ticket 2.2", () => {
       page.getByText("Updated without changing application status."),
     ).toBeVisible();
 
-    await page.getByRole("link", { name: "Edit application" }).click();
+    await page.getByRole("link", { name: "Edit", exact: true }).click();
     const staleVersion = await page
       .locator('input[name="expectedUpdatedAt"]')
       .inputValue();
@@ -283,7 +291,7 @@ test.describe("applications ticket 2.2", () => {
       page.getByRole("heading", { name: updatedCompany }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Edit application" }),
+      page.getByRole("link", { name: "Edit", exact: true }),
     ).toBeVisible();
     const hasHorizontalOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth,

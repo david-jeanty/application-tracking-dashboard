@@ -14,6 +14,17 @@ no service-role bypass exists on any normal path. Findings below are Medium
 and below, plus a set of manual production checks that cannot be verified
 from a repository.
 
+**Update:** the credentialed two-account E2E spec was subsequently run
+locally by the repository owner, outside this session, against a real
+Supabase project — see "Two-account isolation results" for the reported PASS
+on both `chromium` and `mobile-chromium`. That same run surfaced three
+unrelated stale assertions in the other credentialed specs (`tests/e2e/applications.spec.ts`'s
+ticket 2.1 and ticket 2.2 "opens, validates, and edits" tests, and
+`tests/e2e/authenticated-shell.spec.ts`), left behind by a UI redesign that
+landed after those specs were written. They have been updated in this PR to
+match the current, intended UI — see "Tests and commands run" for detail —
+without touching the passing isolation test or any product UI.
+
 ## Scope and method
 
 Two accounts (`User A` / `User B`) were audited at the SQL/RLS level using the
@@ -168,12 +179,37 @@ owner-scoped/token-derived path as MCP and web — `findApplicationByExactUrl`
 filters by `authenticatedUserId`, so one user's capture cannot observe or
 match another user's existing application.
 
-**Not executed live in this session:** no two real Supabase user accounts
-were exercised end-to-end through the running application (web UI, MCP
-client, or extension) because no Supabase project credentials and no
-working local Postgres were available in this environment (see "Blocked").
-The conclusions above rest on direct reading of the enforcing SQL and the
-call sites that reach it, not on an observed HTTP response.
+**Not executed live inside this session:** this session itself never
+exercised two real Supabase user accounts end-to-end through the running
+application (web UI, MCP client, or extension), because no Supabase project
+credentials and no working local Postgres were available in this sandbox
+(see "Blocked"). The web/MCP/browser-capture conclusions above rest on
+direct reading of the enforcing SQL and the call sites that reach it, not
+on an observed HTTP response, and that remains true for MCP and browser
+capture as of this update. The web surface is the one exception, reported
+next.
+
+**Web, over real HTTP (VERIFIED — reported by the repository owner, run
+locally on their own machine, not executed inside this session):** the
+credentialed isolation spec, `tests/e2e/applications.spec.ts`'s
+"applications ticket 2.2 › returns the same safe result for missing and
+non-owner records," was run against a real Supabase project with two real,
+disposable test accounts:
+
+```
+npx playwright test tests/e2e/applications.spec.ts tests/e2e/authenticated-shell.spec.ts --workers=1
+```
+
+**Result: PASS on both `chromium` and `mobile-chromium`.** This test creates
+an application as User A, then as User B requests `/applications/:id` for
+that record, a nonexistent id, and `/applications/:id/edit`, asserting all
+three render the identical generic "Page not found" result (never
+distinguishing "doesn't exist" from "isn't yours"), and separately confirms
+a direct Supabase `update` by User B against User A's row matches zero
+rows. This is the strongest evidence in this document: a real HTTP-level,
+two-real-account confirmation of the cross-user isolation this whole audit
+is about, not an inference from reading code. This test was not modified in
+this PR.
 
 ## MCP OAuth vs. extension OAuth — separate conclusions
 
@@ -273,7 +309,49 @@ without having been run.
 | `npm run extension:test` | **PASS** — 11 files, 399 tests |
 | `npm run extension:build` | **PASS** |
 | `npm run test:e2e` (Playwright, chromium + mobile-chromium) | **PASS** on 64 credential-free specs (public homepage, demo, auth pages, appearance, responsive layout); **SKIPPED** on 8 specs in `tests/e2e/applications.spec.ts` and `tests/e2e/authenticated-shell.spec.ts` that require `E2E_USER_EMAIL`/`E2E_USER_PASSWORD` (and, for the two-account cases, `E2E_USER_B_EMAIL`/`E2E_USER_B_PASSWORD`) — no such credentials exist in this environment, and the specs' own guard skips them rather than failing |
-| `npm run test:db` (`supabase test db`, pgTAP) | **BLOCKED** — requires a local Postgres via `supabase start`, which requires a running Docker daemon; the sandbox's Docker daemon was not reachable (`dial unix /var/run/docker.sock: connect: no such file or directory`), and starting one was not possible in this environment. The RLS assertions this would run are documented as VERIFIED by direct code/migration reading above, not by execution. |
+| `npx playwright test tests/e2e/applications.spec.ts tests/e2e/authenticated-shell.spec.ts --workers=1` (credentialed, all 8 specs) | Run locally by the repository owner against a real Supabase project, **not executed inside this session** (no credentials or working Docker here — see below). Reported result: **2 passed, 6 failed**, on both `chromium` and `mobile-chromium`. The 2 passes were both instances of the cross-user isolation test (see "Two-account isolation results" — **PASS**, unmodified). The 6 failures were both instances each of three *other*, unrelated specs — ticket 2.1's creation test, ticket 2.2's "opens, validates, and edits" test, and the authenticated-shell test — all failing on stale copy/selectors (`"Your applications"`, a company-name row link, `"Edit application"`, `"Application dashboard"`) left behind by a UI redesign, confirmed by reading the current `app/(app)/dashboard/page.tsx`, `app/(app)/applications/page.tsx`, `components/applications/application-records.tsx`, `components/applications/application-detail.tsx`, and `components/dashboard/dashboard-view.tsx`. Fixed in this PR (see below); not yet re-run against a real project. |
+| `npm run test:db` (`supabase test db`, pgTAP) | **BLOCKED** — requires a local Postgres via `supabase start`, which requires a running Docker daemon; neither this session's sandbox nor the repository owner's local machine has run this (the owner confirmed they are not using Docker). The RLS assertions this would run remain documented as VERIFIED by direct code/migration reading above, not by execution. |
+
+**Stale E2E assertions fixed in this follow-up.** After inspecting the
+current Dashboard and Applications UI directly (not just the failing test
+output), three specs were updated to assert against real, current markup —
+no product UI was changed to satisfy old test copy:
+
+- `tests/e2e/applications.spec.ts`, ticket 2.1: the page heading is
+  `"Applications"` (`app/(app)/applications/page.tsx`), not `"Your
+  applications"`; the mobile-card check was rewritten from an XPath lookup
+  tied to a `rounded-2xl` class that no longer exists to a role-based lookup
+  on the row's actual accessible structure (each row is one link whose
+  accessible name is the job title, per `components/applications/application-records.tsx`).
+  The `toHaveCount(2)` assertion on the company name is now `toHaveCount(1)`,
+  matching the current single-occurrence row layout.
+- `tests/e2e/applications.spec.ts`, ticket 2.2, "opens, validates, and edits
+  a disposable application": the row is opened via `getByRole("link", {
+  name: <job title> })` rather than `{ name: <company> }`, because the row's
+  accessible name is the job title, not the company (`aria-label={application.original_job_title}`
+  in `application-records.tsx`); the company still renders as visible text
+  inside the row and is asserted separately. `"Edit application"` is now
+  `"Edit"`, matching the current `ButtonLink` text in
+  `app/(app)/applications/[id]/page.tsx` (three occurrences).
+- `tests/e2e/authenticated-shell.spec.ts`: the dashboard heading is
+  `"Dashboard"` (`components/dashboard/dashboard-view.tsx`'s
+  `DashboardHeader`), not `"Application dashboard"`.
+
+Each test's behavioral intent is unchanged: ticket 2.1 still proves server
+validation, creation, and responsive visibility of the new record; ticket
+2.2 still proves opening, validating, editing, optimistic-concurrency
+conflict handling, and persisted changes; authenticated-shell still proves
+authenticated dashboard access, protected navigation, and mobile
+navigation. The cross-user isolation test in the same files was **not**
+modified. Verification performed on these three specs in this session,
+since no live Supabase project was available here: `npm run lint`, `npm run
+typecheck` (both clean on the changed files), and a full `npm run test:e2e`
+run confirming all three edited specs still parse and correctly self-skip
+under the credential-free guard (64 passed, 8 skipped — same shape as
+before the edit, with no syntax or type errors surfaced by Playwright's own
+test discovery). The edited assertions were derived directly from reading
+the current component source, not guessed, but **have not themselves been
+re-run against a real Supabase project** — that is the manual step below.
 
 `npm audit` also ran (not one of the required commands, run as due diligence):
 6 high-severity advisories, all build-time tooling, listed as a Low finding
@@ -324,13 +402,19 @@ deployment.
    start`, which needs a working Docker daemon) to execute
    `supabase/tests/001_foundation_rls.test.sql` and the other four pgTAP
    suites under `supabase/tests/`, which this session could only verify by
-   reading.
-9. **Run the credentialed two-account E2E specs** in
-   `tests/e2e/applications.spec.ts` and `tests/e2e/authenticated-shell.spec.ts`
-   with `E2E_USER_EMAIL`/`E2E_USER_PASSWORD`/`E2E_USER_B_EMAIL`/
-   `E2E_USER_B_PASSWORD` set to disposable, non-production Supabase test
-   accounts, to exercise real two-account isolation over HTTP rather than by
-   code inspection alone.
+   reading. **Still BLOCKED** — neither this session's sandbox nor the
+   repository owner's local machine has a working Docker daemon available.
+9. **Re-run the three fixed E2E specs** — ticket 2.1, ticket 2.2's "opens,
+   validates, and edits" test, and authenticated-shell — against a real
+   Supabase project to confirm the assertion fixes in this PR actually pass,
+   not only that they compile and match the source read in this session:
+   ```
+   npx playwright test tests/e2e/applications.spec.ts tests/e2e/authenticated-shell.spec.ts --workers=1
+   ```
+   The cross-user isolation test in the same run is **already confirmed
+   passing** (both `chromium` and `mobile-chromium`, reported by the
+   repository owner) and does not need to be re-run for that reason, though
+   it will run again as part of the same command.
 10. **Extension production config**: before packaging or distributing a
     build, substitute real values for `extension/src/config.ts`'s
     `jobtrackOrigin`, `supabaseUrl`, and `oauthClientId` and the matching
@@ -376,12 +460,16 @@ refactors (including the `npm audit` dependency bumps and the cosmetic
 
 ## Launch recommendation
 
-**CONDITIONAL GO** — no known code-level launch blockers remain, but these
-manual production checks must pass first: SMTP/email template/redirect-URL/
-site-URL/confirm-email/rate-limit configuration in the live Supabase project
-(items 1–6 above), one real end-to-end signup and password-reset test against
-the production domain (item 7), execution of the pgTAP RLS suite against a
-real Postgres (item 8), execution of the credentialed two-account E2E specs
-already checked into this repository (item 9), and — only if the browser
-extension ships as part of this launch — substitution of its real production
-config values (item 10).
+**CONDITIONAL GO** — no known code-level launch blockers remain, and the
+core claim of this audit — cross-user isolation — now has real, credentialed,
+two-real-account HTTP evidence behind it (item 9's isolation test: **PASS**
+on both `chromium` and `mobile-chromium`), not only code inspection. Before
+launch, these must still pass: SMTP/email template/redirect-URL/site-URL/
+confirm-email/rate-limit configuration in the live Supabase project (items
+1–6 above), one real end-to-end signup and password-reset test against the
+production domain (item 7), execution of the pgTAP RLS suite against a real
+Postgres (item 8 — still blocked, no Docker available to either this
+session or the repository owner so far), re-running the three E2E specs
+whose stale assertions were fixed in this follow-up (item 9), and — only if
+the browser extension ships as part of this launch — substitution of its
+real production config values (item 10).
