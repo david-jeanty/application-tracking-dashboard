@@ -1,6 +1,7 @@
 import { AlertCircle } from "lucide-react";
 import { redirect } from "next/navigation";
 import { PipelineCard } from "@/components/pipeline/pipeline-card";
+import { PipelineColumnScroller } from "@/components/pipeline/pipeline-column-scroller";
 import { ButtonLink } from "@/components/ui/button";
 import {
   listActiveApplications,
@@ -81,8 +82,15 @@ export function PipelineBoardLoading() {
         <div className="md:w-64 md:shrink-0" key={column}>
           <div className="h-6 animate-pulse border-b border-border bg-surface-muted" />
           <div className="mt-3 space-y-2">
-            <div className="h-24 animate-pulse bg-surface-muted" />
-            <div className="h-24 animate-pulse bg-surface-muted" />
+            {[0, 1].map((card) => (
+              <div
+                className="h-24 animate-pulse border border-border bg-surface p-3"
+                data-pipeline-loading-card
+                key={card}
+              >
+                <div className="h-full bg-surface-muted" />
+              </div>
+            ))}
           </div>
         </div>
       ))}
@@ -125,7 +133,7 @@ export function PipelineColumns({
         The horizontal padding is there so a focus ring on a card at the edge of
         a column is not clipped by the scroll container.
       */}
-      <div className="mt-5 flex flex-col gap-8 md:-mx-1 md:flex-row md:items-start md:gap-4 md:overflow-x-auto md:px-1 md:pb-3">
+      <PipelineColumnScroller>
         {board.columns.map((column) => (
           <Column
             basePath={basePath}
@@ -135,7 +143,7 @@ export function PipelineColumns({
             readOnly={readOnly}
           />
         ))}
-      </div>
+      </PipelineColumnScroller>
     </div>
   );
 }
@@ -168,13 +176,15 @@ export async function PipelineBoard({
   if (applications.error) {
     return (
       <div
-        className="flex gap-3 border border-danger/30 bg-danger-soft p-5 text-danger"
+        className="flex gap-3 border border-danger/30 bg-danger-soft p-4 text-danger"
         role="alert"
       >
-        <AlertCircle aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
+        <AlertCircle aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         <div>
-          <h2 className="font-medium">The pipeline could not be loaded</h2>
-          <p className="mt-1 text-sm">
+          <h2 className="text-[15px] font-medium">
+            The pipeline could not be loaded
+          </h2>
+          <p className="mt-1 text-[13px] leading-6">
             Refresh the page to try again. If the problem continues, check the
             database connection.
           </p>

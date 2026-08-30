@@ -27,7 +27,9 @@ vi.mock("@/lib/applications/actions", () => ({
   moveApplicationStatusAction: vi.fn(),
 }));
 
-const { PipelineBoard } = await import("@/components/pipeline/pipeline-board");
+const { PipelineBoard, PipelineBoardLoading } = await import(
+  "@/components/pipeline/pipeline-board"
+);
 
 let sequence = 0;
 
@@ -462,11 +464,19 @@ describe("the board when there is nothing to show", () => {
   });
 
   it("says so plainly when the read failed", async () => {
-    await renderBoard({ fails: true });
+    const { container } = await renderBoard({ fails: true });
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "The pipeline could not be loaded",
-    );
+    const alert = screen.getByRole("alert");
+    const heading = screen.getByRole("heading", {
+      level: 2,
+      name: "The pipeline could not be loaded",
+    });
+    const body = screen.getByText(/Refresh the page to try again/);
+
+    expect(alert).toHaveClass("p-4");
+    expect(container.querySelector('[role="alert"] svg')).toHaveClass("size-4");
+    expect(heading).toHaveClass("text-[15px]", "font-medium");
+    expect(body).toHaveClass("text-[13px]", "leading-6");
   });
 
   it("reads only the caller's own active applications", async () => {
@@ -477,5 +487,27 @@ describe("the board when there is nothing to show", () => {
       "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       { search: "analyst" },
     );
+  });
+});
+
+describe("the board while it is loading", () => {
+  it("keeps placeholder cards in the loaded card surface geometry", () => {
+    const { container } = render(<PipelineBoardLoading />);
+    const placeholders = container.querySelectorAll(
+      "[data-pipeline-loading-card]",
+    );
+
+    expect(placeholders).toHaveLength(8);
+    for (const placeholder of placeholders) {
+      expect(placeholder).toHaveClass(
+        "h-24",
+        "border",
+        "border-border",
+        "bg-surface",
+        "p-3",
+      );
+      expect(placeholder.className).not.toMatch(/rounded-/);
+      expect(placeholder.firstElementChild).toHaveClass("bg-surface-muted");
+    }
   });
 });

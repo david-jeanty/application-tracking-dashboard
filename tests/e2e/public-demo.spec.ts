@@ -225,6 +225,31 @@ test("the demo offers nothing that would write", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Add application" })).toHaveCount(0);
 });
 
+test("the pipeline quietly signals horizontal continuation above mobile", async ({
+  page,
+}) => {
+  await page.goto("/demo/pipeline");
+
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 768, height: 1000 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(page.locator("[data-pipeline-continuation-cue]")).toBeVisible();
+  }
+
+  const scroller = page.locator("[data-pipeline-column-scroller]");
+  await scroller.evaluate((element) => {
+    element.scrollLeft = element.scrollWidth;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await expect(page.locator("[data-pipeline-continuation-cue]")).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator("[data-pipeline-continuation-cue]")).toHaveCount(0);
+  await expect(scroller).toHaveCSS("overflow-x", "visible");
+});
+
 test("the demo offers the ways out of it", async ({ page }) => {
   await page.goto("/demo");
 
