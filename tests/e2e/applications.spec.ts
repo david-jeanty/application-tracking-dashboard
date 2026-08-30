@@ -213,10 +213,51 @@ test.describe("applications ticket 2.2", () => {
       .getByRole("link", { name: "Revenue Operations Intern" })
       .filter({ visible: true })
       .click();
+
+    // Below the desktop breakpoint the index is a full-width list and the
+    // row link navigates straight to the detail page, matching every other
+    // width. At and above it (application-records.tsx's own DESKTOP_QUERY,
+    // "(min-width: 1280px)"), the index becomes a master-detail layout: the
+    // same click instead selects the row and opens an inline preview aside
+    // without navigating, and "Open full application" is the deliberate,
+    // singular way from there into the full record — that link is where
+    // editing lives, so reaching it is part of this test's real intent
+    // rather than an assumption to route around. Checked against the actual
+    // viewport rather than the Playwright project name, so this keeps
+    // matching the application's own breakpoint if a project is ever
+    // renamed or added.
+    const viewportWidth = page.viewportSize()?.width ?? 0;
+    if (viewportWidth >= 1280) {
+      const preview = page.getByRole("complementary", {
+        name: "Selected application preview",
+      });
+      await expect(
+        preview.getByRole("heading", { name: "Revenue Operations Intern" }),
+      ).toBeVisible();
+      await expect(preview.getByText(company)).toBeVisible();
+      await preview
+        .getByRole("link", { name: "Open full application" })
+        .click();
+    }
+
     await expect(page).toHaveURL(/\/applications\/[0-9a-f-]+$/);
     await expect(page.getByRole("heading", { name: company })).toBeVisible();
     await expect(page.getByText("Revenue Operations Intern")).toBeVisible();
-    await expect(page.getByText("Toronto, ON")).toBeVisible();
+
+    // Scoped to the Location field specifically: "Toronto, ON" also appears
+    // inside the identity line's "location · work term" summary just above
+    // it, so a bare text match is ambiguous by design, not by accident. The
+    // detail page's fields are a `<dt>`/`<dd>` list, so the field's own
+    // label is the precise way to reach its value.
+    const applicationSection = page.getByRole("region", {
+      exact: true,
+      name: "Application",
+    });
+    await expect(
+      applicationSection
+        .locator("dt", { hasText: "Location" })
+        .locator("xpath=following-sibling::dd[1]"),
+    ).toHaveText("Toronto, ON");
     await expect(page.getByText("Jul 24, 2027")).toBeVisible();
 
     await page.getByRole("link", { name: "Edit", exact: true }).click();
