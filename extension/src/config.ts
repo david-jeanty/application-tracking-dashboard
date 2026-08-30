@@ -16,10 +16,10 @@
  */
 export const EXTENSION_CONFIG = {
   /** The Interndex deployment whose capture endpoint receives the record. */
-  jobtrackOrigin: "https://jobtrack.example.com",
+  jobtrackOrigin: "https://application-tracking-dashboard-wfgh.vercel.app",
 
   /** The Supabase project that issues and refreshes access tokens. */
-  supabaseUrl: "https://your-project-ref.supabase.co",
+  supabaseUrl: "https://jbkrwbofrctithcjevxy.supabase.co",
 
   /**
    * The dedicated PUBLIC OAuth client registered for this extension.
@@ -28,7 +28,7 @@ export const EXTENSION_CONFIG = {
    * different products with different consent copy, and a student must be able
    * to disconnect one without disconnecting the other.
    */
-  oauthClientId: "replace-with-the-extension-oauth-client-id",
+  oauthClientId: "461d1918-6343-447b-80f8-73f22e75b34d",
 } as const;
 
 /** Where the extension sends a confirmed capture. Never a Supabase table. */

@@ -1,9 +1,21 @@
 # Chrome Web Store release — Interndex Capture
 
-Status as of this review: **CONDITIONAL GO**, blocked on production
-configuration values only this session cannot supply, plus a documented
-least-privilege risk-acceptance decision. Not submitted to, or approved by,
-the Chrome Web Store. See "Recommendation" at the end.
+Status as of this revision — three tracks, tracked separately because they
+are genuinely different kinds of "done":
+
+- **CODE / PACKAGING: READY.** Production configuration is substituted, the
+  extension gate is green, and the real `0.1.0` release ZIP is built and
+  inspected. See §1, §11 (release build), and §12 (automated verification).
+- **MANUAL PRODUCTION QA: STILL REQUIRED.** Nobody has loaded the actual
+  release ZIP in a real Chrome browser or exercised OAuth/capture against
+  the live production Interndex/Supabase project yet. See §13 — nothing
+  there is marked PASS.
+- **CHROME WEB STORE SUBMISSION: STILL NOT DONE.** The bootstrap draft item
+  exists, but the real `0.1.0` package has not been uploaded to it, nothing
+  has been submitted for review, and nothing is published. See §14.
+
+Not submitted to, or approved by, the Chrome Web Store. See
+"Recommendation" (§16) for the full GO/CONDITIONAL GO/NO-GO reasoning.
 
 This document is the release package for taking Interndex Capture from a
 locally loadable unpacked extension to a Chrome Web Store submission. It
@@ -14,45 +26,58 @@ checklist, listing copy, and manual verification plan built on top of it.
 **Revision note.** §2 was corrected against current official Chrome
 documentation to replace a vaguer bootstrapping approach with Chrome's
 actual documented mechanism (an inert one-time upload to obtain the Store
-item's public key, added to the real manifest as `"key"`). This was a
+item's public key, added to the real manifest as `"key"`). That was a
 documentation-only correction: no OAuth implementation, permission,
-extractor, UI, packaging-script, or database code changed as part of it —
-see §12.
+extractor, UI, packaging-script, or database code changed as part of it.
 
-**Progress note.** §2 steps A–E are now complete: the bootstrap item exists
-as a saved Draft, its permanent Store item ID and public key were obtained,
-and that public key is committed as `extension/manifest.json`'s top-level
-`"key"` field. Step F — confirming a locally loaded unpacked build's
-extension ID actually matches the Store item ID — is the next action and
-has not been done yet. Steps G onward (registering the OAuth redirect URI,
-configuring production values) are intentionally not started until F is
-confirmed. See §2 for full detail.
+**Progress note.** All of §2's bootstrap/config steps (A through L) are now
+complete: the bootstrap draft item exists, its permanent Store item ID and
+public key were obtained and pinned into `extension/manifest.json`, a local
+unpacked load was manually confirmed to produce that exact ID, the
+dedicated Supabase OAuth client is registered against the confirmed
+redirect URI, the three production values are substituted into
+`extension/src/config.ts`, and the real `0.1.0` release ZIP is built. Steps
+M onward — extracting that exact ZIP, reconfirming its extension ID, and
+running the full manual QA in §13 — are next and have not been done yet.
+Nothing has been uploaded to the Chrome Web Store draft item beyond the
+original bootstrap package. See §2 and §13 for full detail.
 
-## 1. What blocks a real production build today
+## 1. Production configuration — CONFIRMED and substituted
 
-Three values are still development placeholders in `extension/src/config.ts`
-and the matching `host_permissions` in `extension/manifest.json`:
+All three values that were development placeholders in
+`extension/src/config.ts` and the matching `host_permissions` in
+`extension/manifest.json` are now confirmed and substituted:
 
-| Value | Current placeholder | Where the real value comes from |
+| Value | Status | Confirmed production value |
 | --- | --- | --- |
-| `jobtrackOrigin` | `https://jobtrack.example.com` | The canonical production origin Interndex is actually deployed to (Vercel project settings / DNS, the same value that belongs in `NEXT_PUBLIC_SITE_URL` for production). |
-| `supabaseUrl` | `https://your-project-ref.supabase.co` | Supabase Dashboard → the **production** project → Project Settings → API (or the Connect dialog). Must be the production project, not a local/dev/staging one. |
-| `oauthClientId` | `replace-with-the-extension-oauth-client-id` | A **dedicated** public OAuth client registered against the production Supabase project for Interndex Capture specifically — not the MCP client, not a shared client. See §2 for why this has to happen after the Web Store item exists. |
+| `jobtrackOrigin` | **CONFIRMED** | `https://application-tracking-dashboard-wfgh.vercel.app` |
+| `supabaseUrl` | **CONFIRMED** | `https://jbkrwbofrctithcjevxy.supabase.co` |
+| `oauthClientId` | **CONFIRMED** | `461d1918-6343-447b-80f8-73f22e75b34d` (dedicated public OAuth client registered for Interndex Capture specifically — not the MCP client) |
 
-This session has no access to the live Vercel deployment or the production
-Supabase project, and no `.env.local` or equivalent is present in this
-repository checkout (by design — `.gitignore` excludes it, and it was not
-supplied). Per the task instructions this review works under: **these
-values are not guessed.** Producing a "production" package with invented
-values would be worse than not producing one, so the packaging script added
-in this PR (`extension/scripts/package.mjs`, wired to
-`npm run extension:package`) refuses to build a ZIP while any of the three
-placeholder strings above are still present anywhere in the built output —
-see §11.
+These were supplied directly rather than guessed or invented — this session
+never had, and still does not have, access to the live Vercel deployment,
+the production Supabase project, or its Dashboard. `extension/manifest.json`'s
+`host_permissions` were updated to match exactly:
+
+```
+https://application-tracking-dashboard-wfgh.vercel.app/*
+https://jbkrwbofrctithcjevxy.supabase.co/*
+```
+
+No trailing slash on either origin, matching the existing architecture
+(`EXTENSION_CONFIG` values are always passed through `.replace(/\/$/, "")`
+or `new URL(...).origin` before use, so a trailing slash was never required
+and would only be redundant).
+
+**Production config substitution: COMPLETE.** The packaging script added
+earlier in this PR (`extension/scripts/package.mjs`, wired to
+`npm run extension:package`) no longer refuses to build — see §11 for the
+real release ZIP this produced, inspected for exactly these values and
+nothing else.
 
 Everything else in this document — the permission audit, the OAuth security
 review, the least-privilege decision, the privacy review, and the listing
-copy — does not depend on knowing these values and is complete now.
+copy — never depended on knowing these values and was already complete.
 
 ## 2. OAuth client and Web Store extension ID sequence
 
@@ -90,23 +115,33 @@ The correct sequence, in order:
 | B. Upload to a new Store item, Save Draft only | **Done** — not submitted for review |
 | C. Record the permanent Store item ID | **Done** — `llggmpgoichadgcolincmjcfkljpboad` |
 | D. Copy the public key from the Package tab | **Done** |
-| E. Add the public key to `extension/manifest.json` as `"key"` | **Done** — committed in this revision |
-| F. Load unpacked and confirm the ID matches | **Not done — next action** |
-| G–Q. Redirect URI, OAuth client, production config, QA, submission | **Not started**, intentionally, until F is confirmed |
+| E. Add the public key to `extension/manifest.json` as `"key"` | **Done** |
+| F. Load unpacked and confirm the ID matches | **Done** — manually confirmed: Load Unpacked produced exactly `llggmpgoichadgcolincmjcfkljpboad` |
+| G. Derive the redirect URI | **Done** — `https://llggmpgoichadgcolincmjcfkljpboad.chromiumapp.org/`, confirmed rather than merely expected, since F passed |
+| H. Register the dedicated OAuth client in production Supabase | **Done** — client id `461d1918-6343-447b-80f8-73f22e75b34d`, registered with the redirect URI above |
+| I. Put production values into `extension/src/config.ts` | **Done** — see §1 |
+| J. Update `manifest.json` `host_permissions` to match | **Done** — see §1 |
+| K. Run `extension:check` then `extension:package` | **Done** — see §12, §11 |
+| L. Inspect the real release ZIP | **Done** — see §11 |
+| M. Extract the ZIP and Load Unpacked from *that* folder | **Not done — next action** |
+| N. Reconfirm the extension ID from the extracted build | **Not done** |
+| O. Run the full manual QA (§13) | **Not done — nothing in §13 is PASS yet** |
+| P–Q. Upload the real package to the Store draft; fill listing; submit | **Not started**, intentionally, until O passes |
 
-**Expected redirect URI once F is confirmed (step G):**
-`https://llggmpgoichadgcolincmjcfkljpboad.chromiumapp.org/`
+**Confirmed redirect URI (step G):** `https://llggmpgoichadgcolincmjcfkljpboad.chromiumapp.org/`
+— registered against the dedicated Supabase OAuth client
+`461d1918-6343-447b-80f8-73f22e75b34d` (step H). This is no longer merely
+*expected*; step F's manual confirmation (Load Unpacked producing exactly
+`llggmpgoichadgcolincmjcfkljpboad`) is what makes it safe to treat as
+correct.
 
-This is derived directly from the Store item ID recorded in step C and
-should be treated as expected, not final, until step F's local ID check
-confirms the pinned `"key"` actually produces this same ID on a real
-`chrome://extensions` load — see §16 for why that check comes first, before
-touching Supabase or `extension/src/config.ts`.
-
-**A. Generate an inert bootstrap package.** Its only purpose is to be
-*something* to upload so the Web Store item and its public key come into
-existence; it must never be submitted for review or published. Run this
-once, from the repository root:
+**A. Generate an inert bootstrap package — kept here for the record; already
+done and now obsolete.** Its only purpose was to be *something* to upload
+so the Web Store item and its public key would come into existence; it must
+never be submitted for review or published, and now that the real `0.1.0`
+package exists (§11), this bootstrap command should never be run again for
+this item. The guard below already refuses once a real OAuth client id is
+configured, which is now the case:
 
 ```bash
 # One-time manual bootstrap. Not part of the tracked build and not run by
@@ -172,65 +207,63 @@ top-level `"key"` field (alongside `manifest_version`, `name`, `version`,
 etc. — not inside any other object). This is a public key, safe to have in
 the repository; it is not a secret the way a client secret would be.
 
-**F. Next action — not yet done.** Load the real extension unpacked
-(`chrome://extensions` → enable Developer mode → Load unpacked → select the
-`extension/` directory) and confirm the ID Chrome assigns it is exactly
-`llggmpgoichadgcolincmjcfkljpboad`, matching the Store item ID from step C.
-If it does not match, the `key` field was not copied correctly — stop and
-fix this before continuing; every step after this one depends on it.
+**F. Done.** The real extension was loaded unpacked (`chrome://extensions`
+→ Developer mode → Load unpacked → `extension/`) and Chrome assigned it
+exactly `llggmpgoichadgcolincmjcfkljpboad`, matching the Store item ID from
+step C. The pinned `"key"` is confirmed to produce the right ID.
 
-**G. Not started — do this only after F is confirmed.** Derive the redirect
-URI from the Store item ID: `https://llggmpgoichadgcolincmjcfkljpboad.chromiumapp.org/`.
-This value is *expected*, not yet *confirmed* — step F is what proves the
-pinned `"key"` actually makes a real Chrome load produce this exact ID.
-Registering an OAuth redirect URI before that confirmation risks
-registering a value nothing will ever actually generate.
+**G. Done.** Redirect URI derived and confirmed:
+`https://llggmpgoichadgcolincmjcfkljpboad.chromiumapp.org/`.
 
-**H.** Register a **dedicated** OAuth client in the production Supabase
-project for Interndex Capture, with that redirect URI. Do not reuse the MCP
-client — `docs/browser-capture.md` and `docs/mcp.md` are explicit that the
-two must remain independently revocable grants with different consent
-copy.
+**H. Done.** A **dedicated** OAuth client was registered in the production
+Supabase project for Interndex Capture, with that redirect URI:
+`461d1918-6343-447b-80f8-73f22e75b34d`. This is not the MCP client —
+`docs/browser-capture.md` and `docs/mcp.md` are explicit that the two must
+remain independently revocable grants with different consent copy.
 
-**I.** Put the real, public OAuth `client_id`, the production
-`jobtrackOrigin`, and the production `supabaseUrl` into
-`extension/src/config.ts`.
+**I. Done.** The real, public OAuth `client_id`, the production
+`jobtrackOrigin`, and the production `supabaseUrl` are in
+`extension/src/config.ts` — see §1 for the exact values.
 
-**J.** Update `extension/manifest.json`'s `host_permissions` to match
-exactly (or just run `npm run extension:package`, which refuses to proceed
-if they disagree — `extension/tests/manifest.test.ts` also asserts this).
+**J. Done.** `extension/manifest.json`'s `host_permissions` were updated to
+match exactly — `npm run extension:package` no longer refuses on this
+check (`extension/tests/manifest.test.ts` also passes).
 
-**K.** Run:
+**K. Done.** Ran:
 
 ```bash
 npm run extension:check
 npm run extension:package
 ```
 
-**L.** Inspect the real release ZIP from §11: version `0.1.0` (not
+Both succeeded — see §12 for the full `extension:check` results and §11
+for the packaging run.
+
+**L. Done.** Inspected the real release ZIP from §11: version `0.1.0` (not
 `0.0.0.1`), the Store public key present in its `manifest.json`, no
 placeholder strings, no secret-shaped values, and `host_permissions`
 matching the production origins exactly.
 
-**M.** Extract that exact ZIP and Load Unpacked from the extracted folder —
-not from `extension/` directly, so what you test is what §11 actually
-produced.
+**M. Next action — not yet done.** Extract that exact ZIP and Load Unpacked
+from the extracted folder — not from `extension/` directly, so what you
+test is what §11 actually produced. Exact commands in §13.
 
-**N.** Confirm its extension ID still equals the Store item ID from step C.
-The `key` field is what guarantees this; if it does not match, stop before
-any OAuth testing — the redirect URI registered in step H will not match
-what this build generates, and every connect attempt will fail at the
-redirect step.
+**N. Not yet done.** Confirm its extension ID still equals
+`llggmpgoichadgcolincmjcfkljpboad`. The `key` field is what guarantees
+this; if it does not match, stop before any OAuth testing — the redirect
+URI registered in step H will not match what this build generates, and
+every connect attempt will fail at the redirect step.
 
-**O.** Run the full manual production QA (§13) against that exact build.
+**O. Not yet done.** Run the full manual production QA (§13) against that
+exact build. Nothing in §13 is marked PASS.
 
-**P.** Only after QA passes, upload the real `0.1.0` package to the **same**
-Store draft item, replacing the bootstrap `0.0.0.1` upload. Because
-`0.1.0 > 0.0.0.1`, this is accepted as a normal version increase — no
-arbitrary version bump is needed to make the replacement valid.
+**P. Not started.** Only after QA passes, upload the real `0.1.0` package
+to the **same** Store draft item, replacing the bootstrap `0.0.0.1` upload.
+Because `0.1.0 > 0.0.0.1`, this is accepted as a normal version increase —
+no arbitrary version bump is needed to make the replacement valid.
 
-**Q.** Only then fill in Store Listing, Privacy practices, reviewer
-instructions, and Distribution (§9, §14), and submit for review.
+**Q. Not started.** Only then fill in Store Listing, Privacy practices,
+reviewer instructions, and Distribution (§9, §14), and submit for review.
 
 If the Web Store item's ID ever changes (a new item created by mistake, a
 developer account change), the redirect URI changes too and the OAuth
@@ -672,10 +705,26 @@ no bundler, no release framework — that:
 6. Reports the output path, manifest version, size, SHA-256 checksum, and
    full file listing.
 
-**Verified in this review**, using a disposable, non-production,
-fixture-shaped configuration (not committed, reverted immediately after):
-the script builds, its placeholder/secret/host-permission guards all fire
-correctly, and the resulting ZIP contained exactly:
+**Earlier in this PR**, before production values existed, this was verified
+with a disposable, non-production, fixture-shaped configuration (not
+committed, reverted immediately after): the script built, its
+placeholder/secret/host-permission guards all fired correctly on a
+placeholder config, and it correctly refused to build against the
+repository's placeholder config as committed at the time.
+
+**Now built for real, with production configuration substituted (§1):**
+
+```
+$ npm run extension:package
+
+Built /home/user/application-tracking-dashboard/extension/release/interndex-capture-v0.1.0.zip
+  manifest version: 0.1.0
+  size: 100196 bytes
+  sha256: 4630c34ccb29129ccc94f1cd87ac5b64cee0750f9863be7d6f23d80420406b89
+```
+
+**File listing (28 zip entries — 26 files, 2 directory entries — ~246 KB
+uncompressed):**
 
 ```
 manifest.json
@@ -688,56 +737,115 @@ icons/icon-128.png
 dist/*.js  (18 compiled modules, no .map files, no .ts sources)
 ```
 
-28 files, ~246 KB uncompressed, well under the Web Store's size limits.
+**Verified against the extracted contents of this exact ZIP:**
 
-**Against the actual repository as committed right now** (still carrying
-placeholder config), running `npm run extension:package` correctly refuses
-to build, exactly as intended — see the test added at
-`extension/tests/package-script.test.ts`, which asserts this refusal as a
-regression check so it cannot silently start succeeding with a placeholder
-config in place.
+- `manifest.json` is at the ZIP root, and it contains: version `0.1.0`; the
+  Store public key as `"key"` (unchanged, 392-character value, identical to
+  the one pinned in an earlier commit of this PR); `host_permissions`
+  exactly `https://application-tracking-dashboard-wfgh.vercel.app/*` and
+  `https://jbkrwbofrctithcjevxy.supabase.co/*`; `permissions` unchanged
+  (`activeTab`, `scripting`, `storage`, `identity`).
+- `dist/config.js` (the compiled config that ships) contains the confirmed
+  production `jobtrackOrigin`, `supabaseUrl`, and `oauthClientId`
+  (`461d1918-6343-447b-80f8-73f22e75b34d`) — each appearing exactly once.
+- No `jobtrack.example.com`, no `your-project-ref.supabase.co`, no
+  `replace-with-the-extension-oauth-client-id`, and no `BOOTSTRAP` text
+  anywhere in the archive.
+- No `.env` files, no `*.map` source maps, no `*.ts` TypeScript source, no
+  `tests/`, no `node_modules/`, no `tsconfig*.json`, no `vitest.config.ts`.
+- No secret-shaped value (`client_secret`, `service_role`, `sb_secret`,
+  `SUPABASE_SERVICE`) anywhere in the archive — grepped directly, not
+  inferred.
+- All executable code (`dist/*.js`) is local and compiled ahead of time;
+  nothing is fetched or evaluated at runtime.
+- Only the intended runtime files are present — the same explicit allow-list
+  as before (`manifest.json`, `popup.html`, `popup.css`, `icons/`, `dist/`).
 
-**The real production ZIP cannot be produced by this review** because §1's
-values are not available here. Once you have them: fill in
-`extension/src/config.ts` and `extension/manifest.json`'s
-`host_permissions`, then run `npm run extension:package`, and treat that
-exact ZIP as the one to upload — not a hand-built one.
+**This is the exact production release candidate.** Do not hand-build a
+substitute ZIP for upload, and do not rebuild it again before QA — treat
+this exact `extension/release/interndex-capture-v0.1.0.zip` (SHA-256 above)
+as the one to extract for QA (§13) and, only after QA passes, upload to the
+Store draft (§2 step P). The ZIP itself is not committed to this repository
+(`.gitignore` excludes `/extension/release`). Its *contents* are fully
+reproducible from this commit by running `npm run extension:package` again,
+but the ZIP's own bytes are not guaranteed to match — `zip` embeds file
+timestamps, so two builds from identical source produce different SHA-256
+checksums even though every file inside is identical. The checksum above
+identifies this specific build; use it to confirm you are extracting the
+same archive for QA that this document describes, not to verify a fresh
+rebuild against it.
 
 ## 12. Automated verification results
 
-Run in this session, on the unmodified-except-for-this-PR repository:
+**Re-run after substituting production configuration** (§1) and pinning the
+Store public key (an earlier commit in this PR):
 
 | Gate | Command | Result |
 | --- | --- | --- |
 | Extension typecheck | `npm run extension:typecheck` | **PASS** |
-| Extension unit tests | `npm run extension:test` | **PASS** — 400 tests (399 pre-existing + 1 new packaging-guard regression test), 12 files |
+| Extension unit tests | `npm run extension:test` | **PASS** — 400 tests, 12 files, run from a clean `extension/dist` |
 | Extension build | `npm run extension:build` | **PASS** |
 | Extension aggregate gate | `npm run extension:check` | **PASS** |
-| Manifest/config agreement test | `extension/tests/manifest.test.ts` (part of the above) | **PASS** |
-| Privacy page unit tests | `npx vitest run tests/unit/privacy-page.test.tsx` | **PASS** — 5 tests, updated for this PR's copy changes |
-| Packaging placeholder guard | `extension/tests/package-script.test.ts` (new) | **PASS** |
-| Full app gate | `npm run check` (lint, typecheck, unit tests, Next.js build, extension:check) | Run at the end of this PR — see final commit for output |
-| pgTAP RLS suite | `npm run test:db` | **BLOCKED / NOT RUN** — requires Docker, unavailable in this session and in the repository owner's own environment (consistent with every prior audit of this repository) |
-| Credentialed Playwright E2E | `npm run test:e2e` | **NOT RUN** in this session — requires a live Supabase project and real credentials, same limitation as every prior audit |
+| Manifest/config agreement test | `extension/tests/manifest.test.ts` (part of the above) | **PASS** — confirms `host_permissions` matches `EXTENSION_CONFIG`'s two production origins exactly |
+| Release packaging | `npm run extension:package` | **PASS — now succeeds**, producing the real `0.1.0` release ZIP (§11), where it previously refused on placeholder config |
+| Privacy page unit tests | `npx vitest run tests/unit/privacy-page.test.tsx` | **PASS** — 5 tests |
+| Packaging placeholder guard | `extension/tests/package-script.test.ts` | **PASS**, after a genuine fix (below) |
+| pgTAP RLS suite | `npm run test:db` | **BLOCKED / NOT RUN** — requires Docker, unavailable in this session and in the repository owner's own environment (consistent with every prior audit of this repository); no RLS/server code changed in this step, so no expanded database gate was required |
+| Credentialed Playwright E2E | `npm run test:e2e` | **NOT RUN** in this session — requires a live Supabase project and real credentials |
 
-No server/RLS code was changed in this PR (§6's decision was to document,
-not implement, the least-privilege change), so no expanded database gate
-was required.
+**Genuine regression found and fixed:** `extension/tests/package-script.test.ts`
+was written when `extension/src/config.ts` always shipped with development
+placeholder values, and asserted that `npm run extension:package` refuses
+against whatever the repository currently contains. Now that real
+production values are committed (§1), that assumption is false, and the
+test failed for the right reason — the guard it exercises was never broken,
+the test's premise about ambient repository state was. It was rewritten to
+inject a known placeholder string directly into the compiled
+`dist/config.js` (a gitignored build artifact, not tracked source), run the
+script against that, assert the refusal, and restore the original content
+immediately after — this makes the test verify the actual guard behavior
+regardless of what `extension/src/config.ts` currently contains, which is a
+correctness fix, not a weakening: it was previously passing for an
+accidental reason (either the real refusal, or merely a missing `dist/`)
+and now deterministically exercises the placeholder path every time
+`extension/dist` exists. No assertion was loosened or removed.
 
-**§2's correction (the bootstrap-ID sequencing fix) changed no executable
-code** — `extension/scripts/package.mjs` (`npm run extension:package`) is
-unmodified and remains the only production packager, no manifest or
-`config.ts` value changed, and no test was added or altered. The results
-above, recorded before that correction, still stand; the full suite was not
-rerun for a documentation-only change.
+`npm run check` (lint, typecheck, unit tests, Next.js build, extension:check)
+was **not** re-run in full for this step: it requires a live Supabase
+project's env vars to complete the Next.js build (unrelated to this
+extension-only change — see this PR's second commit, where it was run once
+against fixture env vars for that reason), and no web/server code changed
+here. The extension-scoped gates above are what this change touches and
+all are green.
 
 ## 13. Manual QA — the exact production build
 
 This cannot be executed from this session: it requires a real Chrome
 browser, a real Interndex account, and the finished production package
-from §1/§2/§11. What follows is the exact checklist to run once you have
-that package — none of it is marked PASS here, because none of it has been
-run against the described production build.
+from §1/§2/§11. **The real `0.1.0` release ZIP is now built** (§11), but
+nothing below has been run against it yet — none of it is marked PASS here.
+
+**Exact commands to extract the real release ZIP and load it (do this
+first, before anything else in this section):**
+
+```bash
+mkdir -p ~/interndex-capture-qa
+rm -rf ~/interndex-capture-qa/*
+unzip extension/release/interndex-capture-v0.1.0.zip -d ~/interndex-capture-qa
+```
+
+Then in Chrome:
+
+1. Go to `chrome://extensions`.
+2. Enable **Developer mode** (top right), if not already on.
+3. Click **Load unpacked** and select `~/interndex-capture-qa` — the
+   *extracted* folder, not the repository's `extension/` directory and not
+   the ZIP file itself.
+4. On the loaded extension's card, confirm the **ID** reads exactly
+   `llggmpgoichadgcolincmjcfkljpboad`. This must match before proceeding to
+   anything else — see "Gate zero" below.
+5. Only once that ID is confirmed, begin the production OAuth/capture QA
+   checklist below.
 
 **Never QA the bootstrap package.** The `0.0.0.1` `BOOTSTRAP ONLY — DO NOT
 SUBMIT` package from §2 step A has no OAuth configuration, no permissions,
@@ -849,51 +957,62 @@ extension-ID chicken-and-egg problem (§2; verify against
 `developer.chrome.com`'s Chrome Web Store documentation at submission time,
 since Google revises this dashboard periodically):
 
-1. Confirm/create the Chrome Web Store developer account (one-time
-   registration) if not already done.
-2. Generate the inert `0.0.0.1` bootstrap ZIP (§2, step A) and upload it to
-   a **new** dashboard item, **Save Draft only** — do not submit it for
-   review (§2, steps A–B).
-3. Record the item's permanent ID and copy its public key from the Package
-   tab (§2, steps C–D).
-4. Add that public key to the real, production `extension/manifest.json` as
-   the top-level `"key"` field, load the extension unpacked, and confirm
-   its ID now matches the Store item ID (§2, steps E–F).
-5. Derive the redirect URI from that ID and register the dedicated
-   Interndex Capture OAuth client in production Supabase with it (§2, steps
-   G–H).
-6. Put the real production `jobtrackOrigin`, `supabaseUrl`, and
-   `oauthClientId` into `extension/src/config.ts`, update
-   `host_permissions` to match, and run `npm run extension:check` and
+1. **Done.** Chrome Web Store developer account confirmed.
+2. **Done.** Generated the inert `0.0.0.1` bootstrap ZIP (§2, step A) and
+   uploaded it to a **new** dashboard item, **Save Draft only** — not
+   submitted for review (§2, steps A–B).
+3. **Done.** Recorded the item's permanent ID
+   (`llggmpgoichadgcolincmjcfkljpboad`) and copied its public key from the
+   Package tab (§2, steps C–D).
+4. **Done.** Added that public key to the real, production
+   `extension/manifest.json` as the top-level `"key"` field, loaded the
+   extension unpacked, and confirmed its ID matched the Store item ID (§2,
+   steps E–F).
+5. **Done.** Derived the redirect URI
+   (`https://llggmpgoichadgcolincmjcfkljpboad.chromiumapp.org/`) and
+   registered the dedicated Interndex Capture OAuth client
+   (`461d1918-6343-447b-80f8-73f22e75b34d`) in production Supabase with it
+   (§2, steps G–H).
+6. **Done.** Put the real production `jobtrackOrigin`, `supabaseUrl`, and
+   `oauthClientId` into `extension/src/config.ts`, updated
+   `host_permissions` to match, and ran `npm run extension:check` and
    `npm run extension:package` to produce the real `0.1.0` release ZIP (§2,
-   steps I–L).
-7. Extract that exact ZIP, Load Unpacked, and re-confirm the extension ID
-   still matches the Store item ID before doing anything else (§2, steps
-   M–N; §13's "Gate zero").
-8. Run the full manual QA in §13 against that exact build (§2, step O).
-9. Only after QA passes, upload the real `0.1.0` package to the **same**
-   draft item, replacing the `0.0.0.1` bootstrap upload (§2, step P).
-10. Fill in Store Listing (§9A–C), icon (already present), and screenshots
-    (§9H — you provide).
-11. Fill in Privacy practices / data disclosure using §9E and the privacy
-    policy URL from §8.
-12. Add reviewer test instructions (§9G) and, separately in the dashboard's
-    own credential mechanism, disposable reviewer test-account credentials —
-    never in this repository.
-13. Configure Distribution (visibility, countries — §9H, your decision).
-14. Submit for review. Use Chrome's deferred/staged publication option (if
-    still offered on your dashboard at submission time) so an approved
-    listing does not go instantly public — this lets you install and
-    verify the actual Store-distributed build first.
-15. Once approved, install the real Store-distributed build (not the local
-    unpacked one) on a clean profile and re-run the OAuth and capture
-    checks from §13 against it specifically, including the extension-ID
-    check — the Store's own packaging step is a difference from your local
-    ZIP worth re-verifying.
-16. Only then, publish.
+   steps I–L; §11).
+7. **Next action — not yet done.** Extract that exact ZIP, Load Unpacked,
+   and re-confirm the extension ID still matches the Store item ID before
+   doing anything else (§2, steps M–N; §13's exact commands and "Gate
+   zero").
+8. **Not yet done.** Run the full manual QA in §13 against that exact
+   build (§2, step O).
+9. **Not started.** Only after QA passes, upload the real `0.1.0` package
+   to the **same** draft item, replacing the `0.0.0.1` bootstrap upload
+   (§2, step P). **The bootstrap package is now obsolete: once this
+   replacement happens, it must never be uploaded to this item again** —
+   the item's real content is the `0.1.0` package from here on.
+10. **Not started.** Fill in Store Listing (§9A–C), icon (already
+    present), and screenshots (§9H — you provide).
+11. **Not started.** Fill in Privacy practices / data disclosure using §9E
+    and the privacy policy URL from §8.
+12. **Not started.** Add reviewer test instructions (§9G) and, separately
+    in the dashboard's own credential mechanism, disposable reviewer
+    test-account credentials — never in this repository.
+13. **Not started.** Configure Distribution (visibility, countries — §9H,
+    your decision).
+14. **Not started.** Submit for review. Use Chrome's deferred/staged
+    publication option (if still offered on your dashboard at submission
+    time) so an approved listing does not go instantly public — this lets
+    you install and verify the actual Store-distributed build first.
+15. **Not started.** Once approved, install the real Store-distributed
+    build (not the local unpacked one) on a clean profile and re-run the
+    OAuth and capture checks from §13 against it specifically, including
+    the extension-ID check — the Store's own packaging step is a
+    difference from your local ZIP worth re-verifying.
+16. **Not started.** Only then, publish.
 
-This review does not perform any of these steps. Nothing has been uploaded
-or submitted.
+Steps 1–6 above are complete. **Nothing has been uploaded to the Chrome Web
+Store beyond the original bootstrap package, nothing has been submitted for
+review, and nothing is published.** Step 7 (extract and reconfirm the ID)
+is the next action.
 
 ## 15. Scope control — what this review did not touch
 
@@ -906,33 +1025,44 @@ verify it here — see §6 for the full reasoning.
 
 ## 16. Recommendation
 
-**CONDITIONAL GO.**
+**CONDITIONAL GO.** Split across three tracks, because they are genuinely
+different kinds of "done" and conflating them is exactly how a package gets
+submitted before it should:
 
-Everything code-level that does not require a production value or a live
-browser/OAuth/Postgres environment is complete: permission audit, single-
-purpose audit, Web Store security review, privacy/data-flow audit, privacy
-policy update, listing copy, packaging tooling with a placeholder/secret
-guard, and the least-privilege decision (documented, risk accepted,
-explicitly flagged for your sign-off rather than assumed).
+- **CODE / PACKAGING: READY.** §1's three production values are confirmed
+  and substituted, §2's bootstrap-through-repackage sequence (steps A–L) is
+  complete, `npm run extension:check` is green, and the real `0.1.0`
+  release ZIP is built and inspected clean (§11) — no placeholders, no
+  secrets, correct host permissions, correct public key, correct file set.
+  The permission audit, single-purpose audit, Web Store security review,
+  privacy/data-flow audit, privacy policy update, and listing copy were
+  already complete before this step and remain so.
+- **MANUAL PRODUCTION QA: STILL REQUIRED.** Nothing in §13 is marked PASS.
+  §2 steps M–O — extract the real ZIP, reconfirm its extension ID, and run
+  the full OAuth/capture checklist against a live production account — have
+  not been performed. This is the next action; §13 gives the exact
+  commands.
+- **CHROME WEB STORE SUBMISSION: STILL NOT DONE.** The draft item holds
+  only the obsolete `0.0.0.1` bootstrap package. Nothing has been uploaded,
+  submitted, or published (§2 steps P–Q, §14 steps 7–16).
 
 Conditions that must be satisfied before actual submission:
 
-1. §2 steps A–E are done (Store item ID `llggmpgoichadgcolincmjcfkljpboad`,
-   public key committed as `manifest.json`'s `"key"`). **Next: step F** —
-   load the extension unpacked and confirm its ID actually matches before
-   doing anything else. Only after that confirmation, proceed to step G
-   (derive the redirect URI), register the dedicated OAuth client (step H),
-   supply the three production values in §1, and complete steps I–L to
-   rebuild and repackage.
-2. Decide on §6's residual risk: accept it for this release (this review's
+1. Run §13's extraction commands and confirm the extension ID
+   (`llggmpgoichadgcolincmjcfkljpboad`) before testing anything else — "Gate
+   zero."
+2. Run the full manual QA checklist in §13 against that exact build and
+   record the results (PASS/FAIL per item, not assumed).
+3. Decide on §6's residual risk: accept it for this release (this review's
    recommendation) or require the `client_id`-aware RLS follow-up first.
-3. Confirm the extension-ID match ("Gate zero" in §13) before running the
-   rest of the manual QA in §13 against the real rebuilt package, and
-   record the results.
+   This is unchanged by production config being confirmed — it was never
+   blocked on that.
 4. Resolve §9H's open items (screenshots, support contact, category,
-   distribution settings, developer account).
-5. Run the full `npm run check` gate one more time against the final
-   commit before upload.
+   distribution settings).
+5. Only after 1–2 pass, upload the real `0.1.0` package to the Store draft,
+   replacing the bootstrap upload (§2 step P), then proceed through listing,
+   privacy, reviewer instructions, and distribution (§14 steps 10–13)
+   before submitting for review.
 
 None of these are code defects — they are the parts of a release that
 cannot be settled by reading and testing source code alone.
