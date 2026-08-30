@@ -24,7 +24,7 @@ test.describe("authenticated shell", () => {
 
     await expect(page).toHaveURL(/\/dashboard/);
     await expect(
-      page.getByRole("heading", { name: "Application dashboard" }),
+      page.getByRole("heading", { name: "Dashboard", exact: true }),
     ).toBeVisible();
 
     await page.setViewportSize({ width: 390, height: 844 });

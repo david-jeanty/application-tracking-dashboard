@@ -107,7 +107,7 @@ test.describe("applications ticket 2.1", () => {
     await page.goto("/applications");
 
     await expect(
-      page.getByRole("heading", { name: "Your applications" }),
+      page.getByRole("heading", { name: "Applications", exact: true }),
     ).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "No applications yet" }),
@@ -145,15 +145,20 @@ test.describe("applications ticket 2.1", () => {
     await expect(
       page.getByText("Application added successfully."),
     ).toBeVisible();
-    await expect(page.getByText(company)).toHaveCount(2);
+    await expect(page.getByText(company)).toHaveCount(1);
 
+    // Each application row is one link whose accessible name is the job
+    // title; the company name and status render as text inside it. Locating
+    // by role rather than by a styling class keeps this assertion tied to
+    // the row's actual accessible structure, not an implementation detail
+    // that changes with each visual redesign.
     await page.setViewportSize({ width: 390, height: 844 });
-    const mobileCard = page
-      .getByRole("heading", { name: company })
-      .locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
-    await expect(mobileCard).toBeVisible();
-    await expect(mobileCard.getByText("Business Analyst Intern")).toBeVisible();
-    await expect(mobileCard.getByText("Status: Applied")).toBeVisible();
+    const mobileRow = page.getByRole("link", {
+      name: "Business Analyst Intern",
+    });
+    await expect(mobileRow).toBeVisible();
+    await expect(mobileRow.getByText(company)).toBeVisible();
+    await expect(mobileRow.getByText("Status: Applied")).toBeVisible();
   });
 });
 
@@ -201,17 +206,61 @@ test.describe("applications ticket 2.2", () => {
       page.getByText("Application added successfully."),
     ).toBeVisible();
 
+    // The row's accessible name is the job title, not the company: the whole
+    // row is one link, and the company renders as text inside it rather than
+    // as its own link. Opening the record means activating that row link.
     await page
-      .getByRole("link", { name: company })
+      .getByRole("link", { name: "Revenue Operations Intern" })
       .filter({ visible: true })
       .click();
+
+    // Below the desktop breakpoint the index is a full-width list and the
+    // row link navigates straight to the detail page, matching every other
+    // width. At and above it (application-records.tsx's own DESKTOP_QUERY,
+    // "(min-width: 1280px)"), the index becomes a master-detail layout: the
+    // same click instead selects the row and opens an inline preview aside
+    // without navigating, and "Open full application" is the deliberate,
+    // singular way from there into the full record — that link is where
+    // editing lives, so reaching it is part of this test's real intent
+    // rather than an assumption to route around. Checked against the actual
+    // viewport rather than the Playwright project name, so this keeps
+    // matching the application's own breakpoint if a project is ever
+    // renamed or added.
+    const viewportWidth = page.viewportSize()?.width ?? 0;
+    if (viewportWidth >= 1280) {
+      const preview = page.getByRole("complementary", {
+        name: "Selected application preview",
+      });
+      await expect(
+        preview.getByRole("heading", { name: "Revenue Operations Intern" }),
+      ).toBeVisible();
+      await expect(preview.getByText(company)).toBeVisible();
+      await preview
+        .getByRole("link", { name: "Open full application" })
+        .click();
+    }
+
     await expect(page).toHaveURL(/\/applications\/[0-9a-f-]+$/);
     await expect(page.getByRole("heading", { name: company })).toBeVisible();
     await expect(page.getByText("Revenue Operations Intern")).toBeVisible();
-    await expect(page.getByText("Toronto, ON")).toBeVisible();
+
+    // Scoped to the Location field specifically: "Toronto, ON" also appears
+    // inside the identity line's "location · work term" summary just above
+    // it, so a bare text match is ambiguous by design, not by accident. The
+    // detail page's fields are a `<dt>`/`<dd>` list, so the field's own
+    // label is the precise way to reach its value.
+    const applicationSection = page.getByRole("region", {
+      exact: true,
+      name: "Application",
+    });
+    await expect(
+      applicationSection
+        .locator("dt", { hasText: "Location" })
+        .locator("xpath=following-sibling::dd[1]"),
+    ).toHaveText("Toronto, ON");
     await expect(page.getByText("Jul 24, 2027")).toBeVisible();
 
-    await page.getByRole("link", { name: "Edit application" }).click();
+    await page.getByRole("link", { name: "Edit", exact: true }).click();
     await expect(page.getByLabel("Company name")).toHaveValue(company);
     await expect(page.getByLabel("Original job title")).toHaveValue(
       "Revenue Operations Intern",
@@ -235,11 +284,25 @@ test.describe("applications ticket 2.2", () => {
     await expect(
       page.getByRole("heading", { name: updatedCompany }),
     ).toBeVisible();
+
+    // Notes sit behind a native <details> disclosure that starts collapsed
+    // (ApplicationDetail's DisclosureSection), so the record opens showing
+    // status and next action first rather than a wall of saved text. Confirm
+    // the save actually reached Notes — "View notes" only renders once a
+    // note exists — before opening the disclosure the same way a real
+    // reader would, and only then assert the exact saved text.
+    const notesDisclosure = page.locator("details", {
+      has: page.getByRole("heading", { level: 2, name: "Notes" }),
+    });
+    await expect(notesDisclosure.getByText("View notes")).toBeVisible();
+    await notesDisclosure.locator("summary").click();
     await expect(
-      page.getByText("Updated without changing application status."),
+      notesDisclosure.getByText(
+        "Updated without changing application status.",
+      ),
     ).toBeVisible();
 
-    await page.getByRole("link", { name: "Edit application" }).click();
+    await page.getByRole("link", { name: "Edit", exact: true }).click();
     const staleVersion = await page
       .locator('input[name="expectedUpdatedAt"]')
       .inputValue();
@@ -283,7 +346,7 @@ test.describe("applications ticket 2.2", () => {
       page.getByRole("heading", { name: updatedCompany }),
     ).toBeVisible();
     await expect(
-      page.getByRole("link", { name: "Edit application" }),
+      page.getByRole("link", { name: "Edit", exact: true }),
     ).toBeVisible();
     const hasHorizontalOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth,
