@@ -11,6 +11,7 @@ import {
 } from "./json-ld.js";
 import {
   extractDuration,
+  extractSalary,
   extractWorkArrangement,
   extractWorkTerm,
   type RichConfidence,
@@ -1039,6 +1040,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   });
   const workTerm = extractWorkTerm(richInput);
   const duration = extractDuration(richInput);
+  const salaryFromText = extractSalary(richInput);
 
   const structuredRichInput = {
     ...(structuredTitleCandidate ? { title: structuredTitleCandidate } : {}),
@@ -1076,9 +1078,33 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
     "workArrangement" | "workTerm" | "duration"
   >;
 
+  /**
+   * A labelled compensation statement, as a fallback for the structured
+   * salary above and only where the structured value did not already answer
+   * it. LinkedIn, Indeed and Workday publish no structured posting data on
+   * the pages a student actually reads at all — the same reason the other
+   * three rich fields exist — so an explicit rate stated in plain text has no
+   * other path into the record. Workday's salary field is left exactly as
+   * already computed: it is never trusted from a live value at all (see
+   * `workdayField` above), and this fallback does not change that.
+   */
+  const salaryField: CapturedField<string> =
+    fields.salary.state === "established" || site === "workday"
+      ? fields.salary
+      : richField(
+          salaryFromText.state === "established"
+            ? {
+                ...salaryFromText,
+                value:
+                  clamp(salaryFromText.value, LIMITS.salary) ?? salaryFromText.value,
+              }
+            : salaryFromText,
+        );
+
   const allFields = {
     ...fields,
     ...richFields,
+    salary: salaryField,
   } satisfies ExtractionReport["fields"];
 
   if (

@@ -318,14 +318,28 @@ const YEAR = String.raw`(?:20\d{2}|['’]\d{2})`;
 const RANGE_SEPARATOR = String.raw`(?:\s*[-–—]\s*|\s+(?:to|through|thru|until|till)\s+)`;
 
 /**
+ * A calendar day, optional and never itself part of the stored term.
+ *
+ * `September 14, 2026` states a day, but `extractWorkTerm` only ever records
+ * a month and a year — same as it always has, since no arithmetic happens
+ * here and a day number changes no month-range value this file produces. The
+ * `(?!\d)` guard exists so this cannot swallow the first digits of a bare
+ * four-digit year: without it, `\d{1,2}` greedily eating "20" out of
+ * "September 2027" would leave "27" behind, which is not a year on its own,
+ * and the whole match would silently fail on ordinary month-only postings.
+ */
+const DAY = String.raw`(?:\s+\d{1,2}(?!\d)(?:st|nd|rd|th)?)?`;
+
+/**
  * A stated month range, in the two shapes a posting writes one.
  *
  * Groups 1–4 are the both-years shape — `January 2027 to April 2027` — and
  * groups 5–7 the shared-year one — `January to August, 2027`. Every lead that
  * uses this fragment keeps its own groups non-capturing, so the numbering is
- * the same wherever it appears.
+ * the same wherever it appears. A day number may appear after either month —
+ * `September 14, 2026 to April 16, 2027` — and is simply skipped.
  */
-const RANGE = String.raw`(?:(${MONTH})\s*,?\s*(${YEAR})${RANGE_SEPARATOR}(${MONTH})\s*,?\s*(${YEAR})|(${MONTH})${RANGE_SEPARATOR}(${MONTH})\s*,?\s*(${YEAR}))`;
+const RANGE = String.raw`(?:(${MONTH})${DAY}\s*,?\s*(${YEAR})${RANGE_SEPARATOR}(${MONTH})${DAY}\s*,?\s*(${YEAR})|(${MONTH})${DAY}${RANGE_SEPARATOR}(${MONTH})${DAY}\s*,?\s*(${YEAR}))`;
 
 /**
  * A range the posting labels as the term itself: `Co-op term is from …`.
@@ -580,6 +594,66 @@ export function extractDuration(input: {
     for (const match of text.matchAll(DURATION_CONTEXT_PATTERN)) {
       const value = duration(match[1], match[2]);
       if (value) candidates.push({ value, confidence: "strong", origin });
+    }
+  }
+
+  return resolve(candidates);
+}
+
+/* ------------------------------------------------------------------ *
+ * Salary (plain text)
+ * ------------------------------------------------------------------ */
+
+/**
+ * A field the posting dedicates to pay: `Compensation: $17.95/hour`.
+ *
+ * `extractor.ts`'s `readSalary` already reads a structured `baseSalary` when
+ * a publisher provides one, and structured data keeps its priority — this is
+ * only the fallback for postings that state pay in plain text instead. That
+ * fallback matters more than it looks: LinkedIn, Indeed and Workday publish
+ * no structured posting data on the pages a student actually reads at all
+ * (`extractJobReport`'s own trust-order comment says so), so an explicit
+ * hourly or annual rate on those sites has no path into a record without
+ * this. The label has to be there — a bare dollar figure floating in prose is
+ * as likely to be a fee, a budget, or someone else's example as a pay rate.
+ *
+ * Only the figure and its unit are captured — never trailing prose such as
+ * "paid biweekly" or a payment-frequency note, and never a currency code this
+ * file has no evidence for: `$` alone does not say USD or CAD, and guessing
+ * one would be inventing a fact the posting never stated. A tight capture
+ * also means this cannot run on into whatever the description says next: a
+ * label with no line break before the following sentence is common enough in
+ * text converted out of HTML that this cannot be assumed away.
+ */
+const SALARY_LABEL_PATTERN =
+  /\b(?:compensation|salary|pay rate|hourly rate|hourly wage|base pay|wage|pay)\s*[:\-–—]\s*(\$\s?\d[\d,]*(?:\.\d{1,2})?(?:\s*(?:\/|per)\s*(?:hour|hr|year|yr|annum|month|week|day)\b)?)/gi;
+
+/** Whether a labelled figure states nothing but zeroes — a template left in. */
+function statesOnlyZero(text: string): boolean {
+  const numbers = text.match(/\d+(?:[.,]\d+)*/g);
+  if (!numbers) return false;
+
+  return numbers.every((number) => Number(number.replace(/,/g, "")) === 0);
+}
+
+/**
+ * Pay, only when the posting labels it in text rather than in structured data.
+ *
+ * Two labelled statements that disagree end the field exactly as any other
+ * rich fact does: a `Compensation: $17/hour` beside a `Salary: $20/hour`
+ * elsewhere in the same description is a posting that contradicts itself, and
+ * this file does not pick a side.
+ */
+export function extractSalary(input: { description?: string }): RichResult<string> {
+  const candidates: RichCandidate<string>[] = [];
+  const description = scannable(input.description);
+
+  if (description) {
+    for (const match of description.matchAll(SALARY_LABEL_PATTERN)) {
+      const raw = match[1]?.trim().replace(/[,;\s]+$/, "");
+      if (raw && !statesOnlyZero(raw)) {
+        candidates.push({ value: raw, confidence: "exact", origin: "description" });
+      }
     }
   }
 
