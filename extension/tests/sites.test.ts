@@ -1751,7 +1751,18 @@ describe("Workday", () => {
     expect(extractJob(readSitePage(html, CIBC_JOB)).company).toBeUndefined();
   });
 
-  it("does not mine later sidebar prose for employer branding", () => {
+  /**
+   * Superseded by the general sentence-scanning fix below: a real Workday
+   * "About Us" block routinely opens with a sentence of recognition or
+   * marketing copy before the sentence that actually names the employer (the
+   * Live Nation posting found in production QA does exactly this), so a
+   * corroborating declaration is no longer required to be the very first
+   * thing in the block. See "Workday company corroboration beyond an exact
+   * tenant match" for the coverage that replaces this test's old intent —
+   * refusing a candidate that merely *mentions* another organization, or
+   * that does not corroborate the tenant at all.
+   */
+  it("reads a corroborating declaration even when it is not the sidebar's first sentence", () => {
     const html = workdayDetail({
       title: "Analyst Intern",
       location: "Toronto, ON",
@@ -1760,7 +1771,7 @@ describe("Workday", () => {
         '<img data-automation-id="image" alt="Logo" /><div data-automation-id="richText">Welcome. BMO is a leading bank.</div>',
     });
 
-    expect(extractJob(readSitePage(html, BMO_JOB)).company).toBeUndefined();
+    expect(extractJob(readSitePage(html, BMO_JOB)).company).toBe("BMO");
   });
 
   it("continues rejecting Workday page furniture as a title", () => {
@@ -1843,6 +1854,112 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
 
     expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBeUndefined();
   });
+
+  it("reads a corroborating declaration after an introductory marketing sentence", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Recognized for its workplace culture. Northbridge Robotics is a global robotics company building the next generation of warehouse automation.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics",
+    );
+  });
+
+  it("reads a corroborating declaration introduced by a comma clause, not a full sentence", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Founded in 1998, Northbridge Robotics is one of Canada\'s largest robotics employers.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics",
+    );
+  });
+
+  it("picks the one candidate that corroborates when another organization is also named", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">The University of Toronto is a research partner. Northbridge Robotics is a global robotics company.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics",
+    );
+  });
+
+  it("returns blank rather than choosing between two differently-worded corroborating candidates", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics is a global leader in automation. Northbridge Robotics Group is expanding rapidly across North America.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBeUndefined();
+  });
+
+  it("leaves an abbreviation-only logo insufficient with no full-name evidence anywhere", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<img data-automation-id="image" alt="NBR Logo" /><div data-automation-id="richText">We build the future of automation.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBeUndefined();
+  });
+
+  it("reads the full name from rich text alongside an abbreviation-only logo", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<img data-automation-id="image" alt="NBR Logo" /><div data-automation-id="richText">Recognized industry-wide, Northbridge Robotics is a global leader in automation.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics",
+    );
+  });
+
+  it("falls back to the selected description when the sidebar establishes nothing", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description:
+        "Recognized industry-wide, Northbridge Robotics is a global leader in automation. Apply today.",
+      sidebar: "",
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics",
+    );
+  });
+
+  it("leaves company blank with a sidebar present but no corroborating evidence in it", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">We are proud of our inclusive workplace culture.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBeUndefined();
+  });
 });
 
 describe("Workday employer domain from the sidebar's own link", () => {
@@ -1909,6 +2026,28 @@ describe("Workday employer domain from the sidebar's own link", () => {
     });
 
     expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBeUndefined();
+  });
+
+  /**
+   * Company-name resolution and domain resolution are two independent
+   * pipelines: one reads corroborated declarative prose, the other reads and
+   * vets an actual URL. Neither gates the other, in either direction — a
+   * page can establish a trustworthy domain from an explicit link even while
+   * its company-name prose stays ambiguous or entirely absent.
+   */
+  it("populates the domain from an explicit link even when the company name stays unresolved", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">We are proud of our inclusive workplace culture. <a href="https://www.northbridgerobotics.example">www.northbridgerobotics.example</a></div>',
+    });
+
+    const job = extractJob(readSitePage(html, NORTHBRIDGE_JOB));
+
+    expect(job.company).toBeUndefined();
+    expect(job.companyDomain).toBe("northbridgerobotics.example");
   });
 });
 
@@ -1999,8 +2138,15 @@ describe("the Live Nation Workday posting found in production QA", () => {
       "The expected compensation for this position in Ontario is: $22/hr",
       "This is a full-time, fixed-term position with a minimum commitment of 37.5 hours per week.",
     ].join(" "),
+    // The real page's sidebar shape, not the simplified one this fixture
+    // originally used: an abbreviation-only logo ("LNE Logo", never expanded
+    // by this file) and an About Us paragraph that opens with a sentence of
+    // recognition/marketing copy before the sentence that actually names the
+    // employer — exactly the shape that made the previous fixture pass while
+    // the real page still failed.
     sidebar:
-      "<div data-automation-id=\"richText\">Live Nation Entertainment is the world's leading live entertainment company. <a href=\"https://www.livenationentertainment.com\">www.livenationentertainment.com</a></div>",
+      "<img data-automation-id=\"image\" alt=\"LNE Logo\" />" +
+      "<div data-automation-id=\"richText\">Recognized for seven years as a Great Place to Work and named one of Fortune's World's Most Admired Companies, Live Nation Entertainment is the world's leading live entertainment company. <a href=\"https://www.livenationentertainment.com\">www.livenationentertainment.com</a></div>",
   });
 
   const captured = () => extractJob(readSitePage(html, LIVE_NATION_JOB));
