@@ -12,6 +12,12 @@ import type {
   ApplicationListItem,
   ApplicationRecord,
 } from "@/lib/applications/types";
+import { APPLICATION_LIST_VIEW_HTML } from "@/lib/mcp/app-views/application-list-html";
+import {
+  APP_VIEW_MIME_TYPE,
+  APPLICATION_LIST_VIEW_URI,
+  MCP_APPS_VIEW_MIME_TYPE,
+} from "@/lib/mcp/app-views";
 import {
   registerJobTrackTools,
   type JobTrackRepositoryFactory,
@@ -205,16 +211,41 @@ function fakeRepositoryFactory(
 type ToolResult = {
   content: { type: string; text: string }[];
   structuredContent?: Record<string, unknown>;
+  _meta?: Record<string, unknown>;
   isError?: boolean;
 };
 
 type ToolDefinition = {
   name: string;
   description?: string;
+  _meta?: Record<string, unknown>;
   inputSchema: {
     properties: Record<string, Record<string, unknown>>;
     required?: string[];
   };
+};
+
+type ResourceDefinition = {
+  uri: string;
+  name: string;
+  mimeType?: string;
+  _meta?: Record<string, unknown>;
+};
+
+type ResourceTemplateDefinition = {
+  uriTemplate: string;
+  name: string;
+  mimeType?: string;
+  _meta?: Record<string, unknown>;
+};
+
+type ResourceContents = {
+  contents: {
+    uri: string;
+    mimeType?: string;
+    text?: string;
+    _meta?: Record<string, unknown>;
+  }[];
 };
 
 function authFor(userId: string): AuthInfo {
@@ -281,6 +312,17 @@ async function connectServer(repositoryFactory = fakeRepositoryFactory()) {
       request<{ tools: ToolDefinition[] }>("tools/list", {}).then(
         (result) => result.tools,
       ),
+    listResources: () =>
+      request<{ resources: ResourceDefinition[] }>("resources/list", {}).then(
+        (result) => result.resources,
+      ),
+    listResourceTemplates: () =>
+      request<{ resourceTemplates: ResourceTemplateDefinition[] }>(
+        "resources/templates/list",
+        {},
+      ).then((result) => result.resourceTemplates),
+    readResource: (uri: string) =>
+      request<ResourceContents>("resources/read", { uri }),
     callTool: (
       name: string,
       args: Record<string, unknown>,
@@ -1208,6 +1250,186 @@ describe("save_job reports what it created", () => {
 
     expect(saved.isError).toBeUndefined();
     expect(saved.structuredContent!.company).toBe("Telus");
+    await connection.close();
+  });
+});
+
+/*
+ * The ChatGPT Apps SDK contract.
+ *
+ * These drive the same `registerJobTrackTools` the route serves, over a real
+ * MCP server, so what is asserted here is what a host actually reads: a tool
+ * that names a view, and a view that resolves. The rest of this file is the
+ * other half of the guarantee — `list_jobs` keeps its arguments, its text
+ * block, its structured content and its ownership behaviour with the metadata
+ * attached.
+ */
+describe("Apps SDK view served by the real server", () => {
+  it("binds list_jobs to the view with the key ChatGPT reads", async () => {
+    const connection = await connectServer();
+
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "list_jobs",
+    );
+
+    // `openai/outputTemplate` is the association ChatGPT resolves. The MCP
+    // Apps spellings ride alongside; all three must name the same resource.
+    expect(tool!._meta).toMatchObject({
+      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+      ui: { resourceUri: APPLICATION_LIST_VIEW_URI },
+      "ui/resourceUri": APPLICATION_LIST_VIEW_URI,
+    });
+    // The view renders a result; it may not call back into the tracker.
+    expect(tool!._meta!["openai/widgetAccessible"]).toBe(false);
+    await connection.close();
+  });
+
+  it("labels the tool invocation for the host to show", async () => {
+    const connection = await connectServer();
+
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "list_jobs",
+    );
+
+    expect(tool!._meta!["openai/toolInvocation/invoking"]).toBeTypeOf("string");
+    expect(tool!._meta!["openai/toolInvocation/invoked"]).toBeTypeOf("string");
+    await connection.close();
+  });
+
+  it("leaves every other tool without a view", async () => {
+    const connection = await connectServer();
+
+    const withViews = (await connection.listTools())
+      .filter((tool) => tool._meta?.["openai/outputTemplate"])
+      .map((tool) => tool.name);
+
+    expect(withViews).toEqual(["list_jobs"]);
+    await connection.close();
+  });
+
+  it("lists the view as text/html+skybridge", async () => {
+    // The regression this pins: ChatGPT resolves the tool's outputTemplate to
+    // a resource and renders a custom component only when that resource is
+    // `text/html+skybridge`. Advertising the newer MCP Apps profile type here
+    // instead left ChatGPT rendering its default table, with every other part
+    // of the integration working.
+    const connection = await connectServer();
+
+    const resource = (await connection.listResources()).find(
+      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
+    );
+
+    expect(resource).toBeDefined();
+    expect(resource!.mimeType).toBe("text/html+skybridge");
+    expect(resource!.mimeType).toBe(APP_VIEW_MIME_TYPE);
+    await connection.close();
+  });
+
+  it("carries the view association on the resource listing too", async () => {
+    const connection = await connectServer();
+
+    const resource = (await connection.listResources()).find(
+      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
+    );
+
+    expect(resource!._meta).toMatchObject({
+      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+      ui: { prefersBorder: false },
+    });
+    // A resource's `ui` says how to render the document, not what points at
+    // it — `resourceUri` there would be the tool's spelling in the wrong place.
+    expect(resource!._meta!.ui).not.toHaveProperty("resourceUri");
+    await connection.close();
+  });
+
+  it("advertises the view as a resource template as well", async () => {
+    const connection = await connectServer();
+
+    const template = (await connection.listResourceTemplates()).find(
+      (candidate) => candidate.uriTemplate === APPLICATION_LIST_VIEW_URI,
+    );
+
+    expect(template).toBeDefined();
+    expect(template!.mimeType).toBe(APP_VIEW_MIME_TYPE);
+    expect(template!._meta).toMatchObject({
+      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+    });
+    await connection.close();
+  });
+
+  it("lists the view exactly once", async () => {
+    // The template lists nothing of its own, so registering the view twice
+    // does not put it in `resources/list` twice.
+    const connection = await connectServer();
+
+    const matches = (await connection.listResources()).filter(
+      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
+    );
+
+    expect(matches).toHaveLength(1);
+    await connection.close();
+  });
+
+  it("reads the view as skybridge first, MCP Apps second", async () => {
+    const connection = await connectServer();
+
+    const read = await connection.readResource(APPLICATION_LIST_VIEW_URI);
+
+    // Order matters: a host that takes the first content item must get the
+    // type it asked for.
+    expect(read.contents.map((item) => item.mimeType)).toEqual([
+      APP_VIEW_MIME_TYPE,
+      MCP_APPS_VIEW_MIME_TYPE,
+    ]);
+    // One document, offered twice — not two views that could drift apart.
+    for (const item of read.contents) {
+      expect(item.text).toBe(APPLICATION_LIST_VIEW_HTML);
+      expect(item.text).toContain("<!doctype html>");
+      expect(item._meta).toMatchObject({
+        "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+      });
+    }
+    await connection.close();
+  });
+
+  it("repeats the view association on the list_jobs result", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool("list_jobs", {});
+
+    expect(result._meta).toMatchObject({
+      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+    });
+    await connection.close();
+  });
+
+  it("still answers list_jobs with text and structured content", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool("list_jobs", {});
+
+    // The view is metadata, not a replacement: a client that never reads a
+    // resource is served exactly what it was served before.
+    expect(result.content[0].type).toBe("text");
+    expect(result.content[0].text).toContain("RBC");
+    expect(result.structuredContent).toHaveProperty("applications");
+    expect(result.structuredContent).toHaveProperty("has_more");
+    await connection.close();
+  });
+
+  it("serves the view without ever reading a student's applications", async () => {
+    // No auth is passed to `resources/read` here. The document is static, so
+    // it resolves; nothing student-owned can be in it, and the assertion is
+    // that no application text ever appears in the view's body.
+    const connection = await connectServer();
+
+    const read = await connection.readResource(APPLICATION_LIST_VIEW_URI);
+
+    for (const item of read.contents) {
+      expect(item.text).not.toContain("RBC");
+      expect(item.text).not.toContain("Shopify");
+      expect(item.text).not.toContain(STUDENT);
+    }
     await connection.close();
   });
 });
