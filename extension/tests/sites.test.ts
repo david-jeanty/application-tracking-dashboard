@@ -1159,6 +1159,319 @@ describe("Indeed", () => {
   });
 });
 
+/**
+ * General Indeed location/work-arrangement normalization.
+ *
+ * Indeed frequently states location and work-model metadata in one rendered
+ * string, separated by a bullet: `Toronto, ON M5R 3V5 • Hybrid work`. The
+ * geographic `location` field must contain only geographic information, and
+ * this must generalize across any city, province, postal code, or country —
+ * nothing here is anchored to one geography, and nothing strips a bullet
+ * segment merely for appearing after one.
+ */
+describe("Indeed's combined location and arrangement line", () => {
+  const posting = (location: string) => `<body>
+     <h2 data-testid="jobsearch-JobInfoHeader-title">Analyst Intern</h2>
+     <div data-testid="inlineHeader-companyName">Northfield Analytics</div>
+     <div data-testid="inlineHeader-companyLocation">${location}</div>
+     <div id="jobDescriptionText"><p>Join the analytics team.</p></div>
+   </body>`;
+
+  it("separates a postal code and Hybrid work from the geographic location", () => {
+    const job = extractJob(
+      readSitePage(posting("Toronto, ON M5R 3V5 • Hybrid work"), INDEED_JOB),
+    );
+
+    expect(job.location).toBe("Toronto, ON M5R 3V5");
+    expect(job.workArrangement).toBe("Hybrid");
+  });
+
+  it("separates a city from a Remote statement", () => {
+    const job = extractJob(readSitePage(posting("Ottawa, ON • Remote"), INDEED_JOB));
+
+    expect(job.location).toBe("Ottawa, ON");
+    expect(job.workArrangement).toBe("Remote");
+  });
+
+  it("separates a city from an On-site statement, in either wording Indeed uses", () => {
+    for (const location of ["Vancouver, BC • On-site", "Vancouver, BC • In-person"]) {
+      const job = extractJob(readSitePage(posting(location), INDEED_JOB));
+
+      expect(job.location).toBe("Vancouver, BC");
+      expect(job.workArrangement).toBe("On-site");
+    }
+  });
+
+  it("leaves a city-only location untouched, with no arrangement manufactured", () => {
+    const job = extractJob(readSitePage(posting("Ottawa, ON"), INDEED_JOB));
+
+    expect(job.location).toBe("Ottawa, ON");
+    expect(job.workArrangement).toBeUndefined();
+  });
+
+  it("reads a bare arrangement as arrangement evidence, never as a location", () => {
+    const job = extractJob(readSitePage(posting("Remote"), INDEED_JOB));
+
+    expect(job.location).toBeUndefined();
+    expect(job.workArrangement).toBe("Remote");
+  });
+
+  it("never treats an employment-type word as a work arrangement", () => {
+    for (const location of [
+      "Toronto, ON • Full-time",
+      "Toronto, ON • Part-time",
+      "Toronto, ON • Contract",
+      "Toronto, ON • Internship",
+    ]) {
+      const job = extractJob(readSitePage(posting(location), INDEED_JOB));
+
+      // Not a recognized arrangement word, so it is not stripped out at all —
+      // a bullet is not a promise that what follows it is work-model metadata.
+      expect(job.location).toBe(location);
+      expect(job.workArrangement).toBeUndefined();
+    }
+  });
+
+  it("does not strip arbitrary text merely because it follows a bullet", () => {
+    const job = extractJob(
+      readSitePage(posting("Toronto, ON • Downtown office"), INDEED_JOB),
+    );
+
+    expect(job.location).toBe("Toronto, ON • Downtown office");
+    expect(job.workArrangement).toBeUndefined();
+  });
+});
+
+/**
+ * General employer-domain extraction for Indeed.
+ *
+ * This exercises `selectedCompanyDomain`/`employerDomainFromUrl`, which are
+ * already site-agnostic: any site whose "description" selector matches a
+ * container gets its links collected the same way. Nothing Indeed-specific
+ * was added for this — these tests exist to prove the general mechanism
+ * already covers Indeed, and to catch a regression if that ever stops being
+ * true.
+ */
+describe("Indeed employer domain from description-link evidence", () => {
+  const posting = (descriptionHtml: string) => `<body>
+     <h2 data-testid="jobsearch-JobInfoHeader-title">Analyst Intern</h2>
+     <div data-testid="inlineHeader-companyName">Northfield Analytics</div>
+     <div data-testid="inlineHeader-companyLocation">Toronto, ON</div>
+     <div id="jobDescriptionText">${descriptionHtml}</div>
+   </body>`;
+
+  it("accepts an explicit employer-owned URL", () => {
+    const job = extractJob(
+      readSitePage(
+        posting(
+          '<p>Learn more at <a href="https://www.northfieldanalytics.example/careers">our careers page</a>.</p>',
+        ),
+        INDEED_JOB,
+      ),
+    );
+
+    expect(job.companyDomain).toBe("northfieldanalytics.example");
+  });
+
+  it("rejects Indeed's own company-page URL", () => {
+    const job = extractJob(
+      readSitePage(
+        posting(
+          '<p>See our <a href="https://www.indeed.com/cmp/Northfield-Analytics">company profile</a>.</p>',
+        ),
+        INDEED_JOB,
+      ),
+    );
+
+    expect(job.companyDomain).toBeUndefined();
+  });
+
+  it("rejects a redirect/tracking URL hosted on Indeed itself", () => {
+    const job = extractJob(
+      readSitePage(
+        posting(
+          '<p><a href="https://ca.indeed.com/rc/clk?jk=a1b2c3d4e5f6a7b8&from=jobsearch">Apply</a></p>',
+        ),
+        INDEED_JOB,
+      ),
+    );
+
+    expect(job.companyDomain).toBeUndefined();
+  });
+
+  it("leaves company domain unset with no URL evidence at all", () => {
+    const job = extractJob(readSitePage(posting("<p>Join the analytics team.</p>"), INDEED_JOB));
+
+    expect(job.companyDomain).toBeUndefined();
+  });
+});
+
+/**
+ * A structured street address is promoted to the front of `location` only
+ * when the publisher's own JobPosting data supplies it alongside a real
+ * city — never inferred from description text. This is a general
+ * `readLocation` improvement, not an Indeed-specific one: Indeed's own pages
+ * publish no structured JobPosting data at all (see the Indeed describe
+ * blocks above, which never carry a `jsonLd(...)` fixture), so this is
+ * exercised against a generic structured posting the way the rest of this
+ * file already does for other structured-data behavior.
+ */
+describe("a structured street address, promoted only with high confidence", () => {
+  it("includes a street address when the structured data also states a city", () => {
+    const html = `<head>${jsonLd({
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: "Finance Intern",
+      description: "Support the finance team.",
+      hiringOrganization: { "@type": "Organization", name: "Northfield Analytics" },
+      jobLocation: {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: "100 King Street West",
+          addressLocality: "Toronto",
+          addressRegion: "ON",
+        },
+      },
+    })}</head><body><h1>Job posting</h1></body>`;
+
+    const job = extractJob(readSitePage(html, "https://careers.example.com/jobs/1"));
+
+    expect(job.location).toBe("100 King Street West, Toronto, ON");
+  });
+
+  it("stays at city level when no street address is stated", () => {
+    const html = `<head>${jsonLd({
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: "Finance Intern",
+      description: "Support the finance team.",
+      hiringOrganization: { "@type": "Organization", name: "Northfield Analytics" },
+      jobLocation: {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "Toronto",
+          addressRegion: "ON",
+        },
+      },
+    })}</head><body><h1>Job posting</h1></body>`;
+
+    const job = extractJob(readSitePage(html, "https://careers.example.com/jobs/1"));
+
+    expect(job.location).toBe("Toronto, ON");
+  });
+
+  it("never reads a description number as a street address", () => {
+    // A misleading numeric statement that looks street-address-shaped but is
+    // not one — this must never leak into location, and no address-shaped
+    // heuristic exists over description text at all.
+    const html = `<head>${jsonLd({
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: "Finance Intern",
+      description:
+        "This posting has received 123 Main Street applications so far this week.",
+      hiringOrganization: { "@type": "Organization", name: "Northfield Analytics" },
+      jobLocation: {
+        "@type": "Place",
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "Toronto",
+          addressRegion: "ON",
+        },
+      },
+    })}</head><body><h1>Job posting</h1></body>`;
+
+    const job = extractJob(readSitePage(html, "https://careers.example.com/jobs/1"));
+
+    expect(job.location).toBe("Toronto, ON");
+    expect(job.jobDescription).toContain("123 Main Street");
+  });
+});
+
+/**
+ * Regression fixture: a real Capital One Indeed posting found in production
+ * manual QA. This is one integration fixture that reproduced the bug, not a
+ * template — every behavior it asserts is a general rule proven independently
+ * above, and no production code anywhere checks for Capital One, this job
+ * title, this Indeed job id, "161 Bay Street", "$45,000" or "$85,000".
+ */
+describe("the Capital One Indeed posting found in production QA", () => {
+  const html = `<body>
+     <h2 data-testid="jobsearch-JobInfoHeader-title">Summer 2027 Intern, Technology - job post</h2>
+     <div data-testid="inlineHeader-companyName">Capital One</div>
+     <div data-testid="inlineHeader-companyLocation">161 Bay Street, Toronto, ON M5R 3V5 • Hybrid work</div>
+     <div id="jobDescriptionText"><p>${[
+       "Summer 2027 Internship - Technology",
+       "The expected annual salary for this position is between $45,000 to $85,000.",
+       "This role follows a hybrid schedule based out of our Toronto office.",
+     ].join(" ")}</p></div>
+   </body>`;
+
+  const captured = () =>
+    toExtractedJob(
+      extractJobReport(
+        readSitePage(html, "https://ca.indeed.com/viewjob?jk=f4e3d2c1b0a99887"),
+      ),
+    );
+
+  it("keeps company and title correct", () => {
+    const job = captured();
+
+    expect(job.company).toBe("Capital One");
+    expect(job.jobTitle).toBe("Summer 2027 Intern, Technology");
+  });
+
+  it("separates the geographic location from the Hybrid arrangement", () => {
+    const job = captured();
+
+    expect(job.location).toBe("161 Bay Street, Toronto, ON M5R 3V5");
+    expect(job.location).not.toContain("Hybrid");
+    expect(job.workArrangement).toBe("Hybrid");
+  });
+
+  it("reads the work term from the title", () => {
+    expect(captured().workTerm).toBe("Summer 2027");
+  });
+
+  it("captures the explicit annual salary range", () => {
+    expect(captured().salary).toBe("$45,000 to $85,000");
+  });
+
+  it("leaves company domain unset — the page carries no employer-owned URL", () => {
+    expect(captured().companyDomain).toBeUndefined();
+  });
+});
+
+/**
+ * Shared by every Workday describe block below: the selected-posting-page
+ * shape `readWorkdayJobDetail` reads, with Similar Jobs cards bracketing it
+ * on both sides the way a live page does.
+ */
+function workdayDetail({
+  title,
+  location,
+  description,
+  sidebar,
+}: {
+  title: string;
+  location: string;
+  description: string;
+  sidebar: string;
+}) {
+  return `<body>
+      <div data-automation-id="similarJobsCard"><h2>Similar Jobs title</h2><div data-automation-id="locations"><dl><dd>Wrong before location</dd></dl></div></div>
+      <div data-automation-id="jobPostingPage">
+        <h2 data-automation-id="jobPostingHeader">${title}</h2>
+        <div data-automation-id="job-posting-details"><div data-automation-id="locations"><dl><dt>locations</dt><dd>${location}</dd></dl></div></div>
+        <div data-automation-id="jobPostingDescription"><p>${description}</p></div>
+      </div>
+      <div data-automation-id="similarJobsCard"><h2>Another similar title</h2><div data-automation-id="locations"><dl><dd>Wrong after location</dd></dl></div></div>
+      <aside data-automation-id="jobSidebar">${sidebar}</aside>
+    </body>`;
+}
+
 describe("Workday", () => {
   const posting = `<body>
      <h1>Search for Jobs</h1>
@@ -1173,29 +1486,6 @@ describe("Workday", () => {
     "https://bmo.wd3.myworkdayjobs.com/en-US/External/job/Toronto/Analyst_123";
   const CIBC_JOB =
     "https://cibc.wd3.myworkdayjobs.com/campus/job/Toronto/Coordinator_123";
-
-  function workdayDetail({
-    title,
-    location,
-    description,
-    sidebar,
-  }: {
-    title: string;
-    location: string;
-    description: string;
-    sidebar: string;
-  }) {
-    return `<body>
-      <div data-automation-id="similarJobsCard"><h2>Similar Jobs title</h2><div data-automation-id="locations"><dl><dd>Wrong before location</dd></dl></div></div>
-      <div data-automation-id="jobPostingPage">
-        <h2 data-automation-id="jobPostingHeader">${title}</h2>
-        <div data-automation-id="job-posting-details"><div data-automation-id="locations"><dl><dt>locations</dt><dd>${location}</dd></dl></div></div>
-        <div data-automation-id="jobPostingDescription"><p>${description}</p></div>
-      </div>
-      <div data-automation-id="similarJobsCard"><h2>Another similar title</h2><div data-automation-id="locations"><dl><dd>Wrong after location</dd></dl></div></div>
-      <aside data-automation-id="jobSidebar">${sidebar}</aside>
-    </body>`;
-  }
 
   function staleStructuredPosting(overrides: Record<string, unknown> = {}) {
     return {
@@ -1461,7 +1751,18 @@ describe("Workday", () => {
     expect(extractJob(readSitePage(html, CIBC_JOB)).company).toBeUndefined();
   });
 
-  it("does not mine later sidebar prose for employer branding", () => {
+  /**
+   * Superseded by the general sentence-scanning fix below: a real Workday
+   * "About Us" block routinely opens with a sentence of recognition or
+   * marketing copy before the sentence that actually names the employer (the
+   * Live Nation posting found in production QA does exactly this), so a
+   * corroborating declaration is no longer required to be the very first
+   * thing in the block. See "Workday company corroboration beyond an exact
+   * tenant match" for the coverage that replaces this test's old intent —
+   * refusing a candidate that merely *mentions* another organization, or
+   * that does not corroborate the tenant at all.
+   */
+  it("reads a corroborating declaration even when it is not the sidebar's first sentence", () => {
     const html = workdayDetail({
       title: "Analyst Intern",
       location: "Toronto, ON",
@@ -1470,7 +1771,7 @@ describe("Workday", () => {
         '<img data-automation-id="image" alt="Logo" /><div data-automation-id="richText">Welcome. BMO is a leading bank.</div>',
     });
 
-    expect(extractJob(readSitePage(html, BMO_JOB)).company).toBeUndefined();
+    expect(extractJob(readSitePage(html, BMO_JOB)).company).toBe("BMO");
   });
 
   it("continues rejecting Workday page furniture as a title", () => {
@@ -1482,5 +1783,404 @@ describe("Workday", () => {
     });
 
     expect(extractJob(readSitePage(html, CIBC_JOB)).jobTitle).toBeUndefined();
+  });
+});
+
+/**
+ * General Workday company/domain/salary evidence, generalized beyond BMO and
+ * CIBC (whose tenant slugs already equal their company name exactly) to
+ * tenants where the legal name is longer than the slug — a shortened Workday
+ * tenant is common, and this is the failure mode a real posting found: a
+ * tenant of `livenation` beside sidebar copy stating "Live Nation
+ * Entertainment" was previously rejected outright by an exact-match
+ * corroboration check.
+ */
+describe("Workday company corroboration beyond an exact tenant match", () => {
+  const NORTHBRIDGE_JOB =
+    "https://northbridge.wd5.myworkdayjobs.com/en-US/Careers/job/Toronto/Operations-Intern_R-4821";
+  const SHORT_TENANT_JOB =
+    "https://acme.wd1.myworkdayjobs.com/en-US/External/job/Toronto/Intern_R-1";
+
+  it("corroborates a legal name that contains the tenant slug as a prefix", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is a global leader in industrial automation.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics Inc.",
+    );
+  });
+
+  it("does not corroborate an unrelated name merely because a short tenant appears somewhere", () => {
+    // "acme" (4 chars) sits at the exact length boundary; requiring it to
+    // appear as a substring of totally unrelated prose would corroborate far
+    // too easily, so a 4-character tenant still needs the text to actually
+    // be about it, not just contain the letters somewhere.
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Academic and community engagement matters to every intern.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, SHORT_TENANT_JOB)).company).toBeUndefined();
+  });
+
+  it("still requires exact equality for a genuinely short tenant/company pair", () => {
+    // Preserves the existing BMO/CIBC behavior: a short tenant that exactly
+    // equals a short company name still corroborates.
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar: '<img data-automation-id="image" alt="Acme logo" />',
+    });
+
+    expect(extractJob(readSitePage(html, SHORT_TENANT_JOB)).company).toBe("Acme");
+  });
+
+  it("does not fabricate a company from the tenant slug alone, with no sidebar evidence at all", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar: "",
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBeUndefined();
+  });
+
+  it("reads a corroborating declaration after an introductory marketing sentence", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Recognized for its workplace culture. Northbridge Robotics is a global robotics company building the next generation of warehouse automation.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics",
+    );
+  });
+
+  it("reads a corroborating declaration introduced by a comma clause, not a full sentence", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Founded in 1998, Northbridge Robotics is one of Canada\'s largest robotics employers.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics",
+    );
+  });
+
+  it("picks the one candidate that corroborates when another organization is also named", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">The University of Toronto is a research partner. Northbridge Robotics is a global robotics company.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics",
+    );
+  });
+
+  it("returns blank rather than choosing between two differently-worded corroborating candidates", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics is a global leader in automation. Northbridge Robotics Group is expanding rapidly across North America.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBeUndefined();
+  });
+
+  it("leaves an abbreviation-only logo insufficient with no full-name evidence anywhere", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<img data-automation-id="image" alt="NBR Logo" /><div data-automation-id="richText">We build the future of automation.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBeUndefined();
+  });
+
+  it("reads the full name from rich text alongside an abbreviation-only logo", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<img data-automation-id="image" alt="NBR Logo" /><div data-automation-id="richText">Recognized industry-wide, Northbridge Robotics is a global leader in automation.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics",
+    );
+  });
+
+  it("falls back to the selected description when the sidebar establishes nothing", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description:
+        "Recognized industry-wide, Northbridge Robotics is a global leader in automation. Apply today.",
+      sidebar: "",
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics",
+    );
+  });
+
+  it("leaves company blank with a sidebar present but no corroborating evidence in it", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">We are proud of our inclusive workplace culture.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBeUndefined();
+  });
+});
+
+describe("Workday employer domain from the sidebar's own link", () => {
+  const NORTHBRIDGE_JOB =
+    "https://northbridge.wd5.myworkdayjobs.com/en-US/Careers/job/Toronto/Operations-Intern_R-4821";
+
+  it("accepts an explicit employer-owned link in the About Us sidebar", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is a global leader in industrial automation. <a href="https://www.northbridgerobotics.example">www.northbridgerobotics.example</a></div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBe(
+      "northbridgerobotics.example",
+    );
+  });
+
+  it("rejects a Workday-hosted URL even if one appears in the sidebar", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is hiring. <a href="https://northbridge.wd5.myworkdayjobs.com/en-US/Careers">View all openings</a></div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBeUndefined();
+  });
+
+  it("rejects a social-media link", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is hiring. <a href="https://www.instagram.com/northbridgerobotics">Follow us</a></div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBeUndefined();
+  });
+
+  it("rejects an ATS-hosted URL, per the existing rejection policy", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is hiring. <a href="https://boards.greenhouse.io/northbridgerobotics">More roles</a></div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBeUndefined();
+  });
+
+  it("leaves company domain unset with no employer URL evidence at all", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is a global leader in industrial automation.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBeUndefined();
+  });
+
+  /**
+   * Company-name resolution and domain resolution are two independent
+   * pipelines: one reads corroborated declarative prose, the other reads and
+   * vets an actual URL. Neither gates the other, in either direction — a
+   * page can establish a trustworthy domain from an explicit link even while
+   * its company-name prose stays ambiguous or entirely absent.
+   */
+  it("populates the domain from an explicit link even when the company name stays unresolved", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">We are proud of our inclusive workplace culture. <a href="https://www.northbridgerobotics.example">www.northbridgerobotics.example</a></div>',
+    });
+
+    const job = extractJob(readSitePage(html, NORTHBRIDGE_JOB));
+
+    expect(job.company).toBeUndefined();
+    expect(job.companyDomain).toBe("northbridgerobotics.example");
+  });
+});
+
+describe("Workday salary from the selected posting's own description", () => {
+  const NORTHBRIDGE_JOB =
+    "https://northbridge.wd5.myworkdayjobs.com/en-US/Careers/job/Toronto/Operations-Intern_R-4821";
+
+  it("captures an explicit hourly compensation statement", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description:
+        "The expected compensation for this position in Ontario is: $24/hr",
+      sidebar: "",
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).salary).toBe("$24/hr");
+  });
+
+  it("captures an explicit compensation range", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Compensation for this position ranges from $20 to $25 per hour.",
+      sidebar: "",
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).salary).toBe(
+      "$20 to $25 per hour",
+    );
+  });
+
+  it("ignores an unrelated dollar amount with no compensation context", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Our team has supported over $2 million in community grants.",
+      sidebar: "",
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).salary).toBeUndefined();
+  });
+
+  it("shows a stale structured figure as rejected once the live description states one", () => {
+    const html = `<head>${jsonLd({
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: "Stale backend title",
+      description: "Stale backend description.",
+      baseSalary: { currency: "CAD", value: { value: "999999", unitText: "YEAR" } },
+    })}</head>${workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "The expected compensation for this position is: $24/hr",
+      sidebar: "",
+    })}`;
+
+    const report = extractJobReport(readSitePage(html, NORTHBRIDGE_JOB));
+    const job = toExtractedJob(report);
+
+    expect(job.salary).toBe("$24/hr");
+    expect(report.fields.salary).toMatchObject({
+      state: "established",
+      value: "$24/hr",
+      rejected: [
+        { source: "json_ld_job_posting", reason: "workday_structured_data_untrusted" },
+      ],
+    });
+  });
+});
+
+/**
+ * Regression fixture: a real Live Nation Workday posting found in production
+ * manual QA. This is one integration fixture that reproduced the bug, not a
+ * template — every behavior it asserts is a general rule proven independently
+ * above, and no production code anywhere checks for Live Nation, "Brand
+ * Partnerships", this requisition id, livenationentertainment.com, or $22/hr.
+ */
+describe("the Live Nation Workday posting found in production QA", () => {
+  const LIVE_NATION_JOB =
+    "https://livenation.wd503.myworkdayjobs.com/en-US/livenation/job/Toronto/Brand-Partnerships-Intern--Fall-2026-_JR-92460";
+
+  const html = workdayDetail({
+    title: "Brand Partnerships Intern (Fall 2026)",
+    location: "Toronto, ON",
+    description: [
+      "Fall 2026 Internship - Brand Partnerships",
+      "The expected compensation for this position in Ontario is: $22/hr",
+      "This is a full-time, fixed-term position with a minimum commitment of 37.5 hours per week.",
+    ].join(" "),
+    // The real page's sidebar shape, not the simplified one this fixture
+    // originally used: an abbreviation-only logo ("LNE Logo", never expanded
+    // by this file) and an About Us paragraph that opens with a sentence of
+    // recognition/marketing copy before the sentence that actually names the
+    // employer — exactly the shape that made the previous fixture pass while
+    // the real page still failed.
+    sidebar:
+      "<img data-automation-id=\"image\" alt=\"LNE Logo\" />" +
+      "<div data-automation-id=\"richText\">Recognized for seven years as a Great Place to Work and named one of Fortune's World's Most Admired Companies, Live Nation Entertainment is the world's leading live entertainment company. <a href=\"https://www.livenationentertainment.com\">www.livenationentertainment.com</a></div>",
+  });
+
+  const captured = () => extractJob(readSitePage(html, LIVE_NATION_JOB));
+
+  it("now captures the employer from corroborated sidebar copy", () => {
+    expect(captured().company).toBe("Live Nation Entertainment");
+  });
+
+  it("preserves title, location and work term", () => {
+    const job = captured();
+
+    expect(job.jobTitle).toBe("Brand Partnerships Intern (Fall 2026)");
+    expect(job.location).toBe("Toronto, ON");
+    expect(job.workTerm).toBe("Fall 2026");
+  });
+
+  it("now captures the explicit hourly compensation", () => {
+    expect(captured().salary).toBe("$22/hr");
+  });
+
+  it("now captures the employer domain from the sidebar's own link", () => {
+    expect(captured().companyDomain).toBe("livenationentertainment.com");
+  });
+
+  it("leaves work arrangement unset — the page states no explicit Remote/Hybrid/On-site", () => {
+    expect(captured().workArrangement).toBeUndefined();
+  });
+
+  it("does not attempt to resolve the Part time / full-time conflict in any field", () => {
+    const job = captured();
+
+    // No employment-type field exists in the schema; the conflicting text
+    // stays exactly where it was said, inside the description, untouched.
+    expect(job.jobDescription).toContain("full-time, fixed-term");
+    expect(job.jobDescription).toContain("37.5 hours per week");
   });
 });

@@ -121,6 +121,12 @@ const ARRANGEMENT_WORDS: Readonly<Record<string, CaptureWorkArrangement>> = {
   onsite: "On-site",
   "on-site": "On-site",
   "on site": "On-site",
+  // Indeed's own wording for on-site work, observed alongside "Remote" and
+  // "Hybrid" in the same metadata region. It names the same fact, not a
+  // fourth arrangement.
+  "in-person": "On-site",
+  "in person": "On-site",
+  inperson: "On-site",
 };
 
 /** Only `jobLocationType` values that stand for remote work, per schema.org. */
@@ -147,7 +153,15 @@ const TITLE_BRACKETED_PATTERN =
 /** `Analyst Intern — Remote` — the same statement, made with a separator. */
 const TITLE_SUFFIX_PATTERN = /[-–—|·,]\s*(remote|hybrid|on[\s-]?site)\s*$/i;
 
-function arrangementWord(raw: string): CaptureWorkArrangement | undefined {
+/**
+ * Whether one bounded piece of text names an arrangement, and nothing else.
+ *
+ * Exported so a site's own text-splitting logic (Indeed states location and
+ * arrangement in one string) can ask "is this segment an arrangement word?"
+ * against the same one table `extractWorkArrangement` itself uses, rather
+ * than keeping a second list that could quietly drift from this one.
+ */
+export function arrangementWord(raw: string): CaptureWorkArrangement | undefined {
   const normalized = raw.trim().toLowerCase().replace(/\s+/g, " ");
 
   return ARRANGEMENT_WORDS[normalized];
@@ -318,14 +332,28 @@ const YEAR = String.raw`(?:20\d{2}|['’]\d{2})`;
 const RANGE_SEPARATOR = String.raw`(?:\s*[-–—]\s*|\s+(?:to|through|thru|until|till)\s+)`;
 
 /**
+ * A calendar day, optional and never itself part of the stored term.
+ *
+ * `September 14, 2026` states a day, but `extractWorkTerm` only ever records
+ * a month and a year — same as it always has, since no arithmetic happens
+ * here and a day number changes no month-range value this file produces. The
+ * `(?!\d)` guard exists so this cannot swallow the first digits of a bare
+ * four-digit year: without it, `\d{1,2}` greedily eating "20" out of
+ * "September 2027" would leave "27" behind, which is not a year on its own,
+ * and the whole match would silently fail on ordinary month-only postings.
+ */
+const DAY = String.raw`(?:\s+\d{1,2}(?!\d)(?:st|nd|rd|th)?)?`;
+
+/**
  * A stated month range, in the two shapes a posting writes one.
  *
  * Groups 1–4 are the both-years shape — `January 2027 to April 2027` — and
  * groups 5–7 the shared-year one — `January to August, 2027`. Every lead that
  * uses this fragment keeps its own groups non-capturing, so the numbering is
- * the same wherever it appears.
+ * the same wherever it appears. A day number may appear after either month —
+ * `September 14, 2026 to April 16, 2027` — and is simply skipped.
  */
-const RANGE = String.raw`(?:(${MONTH})\s*,?\s*(${YEAR})${RANGE_SEPARATOR}(${MONTH})\s*,?\s*(${YEAR})|(${MONTH})${RANGE_SEPARATOR}(${MONTH})\s*,?\s*(${YEAR}))`;
+const RANGE = String.raw`(?:(${MONTH})${DAY}\s*,?\s*(${YEAR})${RANGE_SEPARATOR}(${MONTH})${DAY}\s*,?\s*(${YEAR})|(${MONTH})${DAY}${RANGE_SEPARATOR}(${MONTH})${DAY}\s*,?\s*(${YEAR}))`;
 
 /**
  * A range the posting labels as the term itself: `Co-op term is from …`.
@@ -580,6 +608,110 @@ export function extractDuration(input: {
     for (const match of text.matchAll(DURATION_CONTEXT_PATTERN)) {
       const value = duration(match[1], match[2]);
       if (value) candidates.push({ value, confidence: "strong", origin });
+    }
+  }
+
+  return resolve(candidates);
+}
+
+/* ------------------------------------------------------------------ *
+ * Salary (plain text)
+ * ------------------------------------------------------------------ */
+
+/**
+ * A field the posting dedicates to pay: `Compensation: $17.95/hour`.
+ *
+ * `extractor.ts`'s `readSalary` already reads a structured `baseSalary` when
+ * a publisher provides one, and structured data keeps its priority — this is
+ * only the fallback for postings that state pay in plain text instead. That
+ * fallback matters more than it looks: LinkedIn, Indeed and Workday publish
+ * no structured posting data on the pages a student actually reads at all
+ * (`extractJobReport`'s own trust-order comment says so), so an explicit
+ * hourly or annual rate on those sites has no path into a record without
+ * this. The label has to be there — a bare dollar figure floating in prose is
+ * as likely to be a fee, a budget, or someone else's example as a pay rate.
+ *
+ * Only the figure (or figures, for a range) and its unit are captured — never
+ * trailing prose such as "paid biweekly" or a payment-frequency note, and
+ * never a currency code this file has no evidence for: `$` alone does not say
+ * USD or CAD, and guessing one would be inventing a fact the posting never
+ * stated. A tight capture also means this cannot run on into whatever the
+ * description says next: a label with no line break before the following
+ * sentence is common enough in text converted out of HTML that this cannot be
+ * assumed away.
+ *
+ * A statement does not have to be a colon-labelled line. `Salary range:
+ * $60,000-$70,000`, `The expected annual salary for this position is between
+ * $45,000 to $85,000`, and `Pay range is $22–$27 per hour` are all explicit
+ * compensation statements a real posting writes in prose, and the context
+ * word, an optional short filler ("for this position"), and a small closed
+ * set of connecting phrases ("is", "is between", "ranges from") are what
+ * stand between the label and the figure in each of them. What keeps this
+ * from drifting into free-text salary guessing is that every one of those
+ * connectors is a specific, enumerated phrase — never "any nearby text" —
+ * so a sentence that merely mentions "pay" or "wage" near an unrelated dollar
+ * figure ("the department's pay structure includes a $500 signing bonus")
+ * does not match: nothing here reads as one of the enumerated connectors.
+ */
+const SALARY_MONEY = String.raw`\$\s?\d[\d,]*(?:\.\d{1,2})?`;
+/** The second figure of a range may omit its own currency sign. */
+const SALARY_SECOND_MONEY = String.raw`\$?\s?\d[\d,]*(?:\.\d{1,2})?`;
+const SALARY_RANGE_SEPARATOR = String.raw`\s*(?:-|–|—|to)\s*`;
+const SALARY_UNIT = String.raw`(?:\s*(?:\/|per)\s*(?:hour|hr|year|yr|annum|month|week|day)\b)?`;
+
+/** Every labelled or verbosely-worded way a posting names its own pay. */
+const SALARY_CONTEXT = String.raw`(?:annual\s+salary|starting\s+salary|base\s+salary|hourly\s+rate|hourly\s+wage|pay\s+rate|base\s+pay|salary\s+range|pay\s+range|compensation\s+range|salary|compensation|pay|wage)`;
+/**
+ * Noise a sentence may put between the context word and the connector.
+ *
+ * Each clause is a specific, enumerated shape — "for this position", "in
+ * Ontario" — not arbitrary text, and up to two may appear in sequence: a real
+ * Workday posting writes "compensation for this position in Ontario is:
+ * $22/hr", stacking both. `in <place>` is bounded to one or two words so it
+ * covers "Ontario" and "New York" without turning into an open-ended filler
+ * that could swallow unrelated prose before the connector.
+ */
+const SALARY_FILLER_CLAUSE = String.raw`(?:for\s+(?:this|the)\s+(?:position|role|job)|in\s+[A-Za-z]+(?:\s+[A-Za-z]+)?)`;
+const SALARY_FILLER = String.raw`(?:\s+${SALARY_FILLER_CLAUSE}){0,2}`;
+/**
+ * A closed set of phrases — never arbitrary nearby text — introducing a
+ * figure. "is"/"are" may be followed directly by a colon ("is: $22/hr") or
+ * by ordinary connecting words ("is between $45,000 to $85,000"); both are
+ * real postings' own wording, not two different rules.
+ */
+const SALARY_CONNECTOR = String.raw`(?:\s*[:\-–—]\s*|\s+(?:is|are)(?:\s*:\s*|\s+)(?:expected\s+to\s+be\s+)?(?:between\s+|from\s+)?|\s+ranges?\s+from\s+)`;
+
+const SALARY_STATEMENT_PATTERN = new RegExp(
+  String.raw`\b${SALARY_CONTEXT}${SALARY_FILLER}${SALARY_CONNECTOR}(${SALARY_MONEY}(?:${SALARY_RANGE_SEPARATOR}${SALARY_SECOND_MONEY})?${SALARY_UNIT})`,
+  "gi",
+);
+
+/** Whether a labelled figure states nothing but zeroes — a template left in. */
+function statesOnlyZero(text: string): boolean {
+  const numbers = text.match(/\d+(?:[.,]\d+)*/g);
+  if (!numbers) return false;
+
+  return numbers.every((number) => Number(number.replace(/,/g, "")) === 0);
+}
+
+/**
+ * Pay, only when the posting labels it in text rather than in structured data.
+ *
+ * Two labelled statements that disagree end the field exactly as any other
+ * rich fact does: a `Compensation: $17/hour` beside a `Salary: $20/hour`
+ * elsewhere in the same description is a posting that contradicts itself, and
+ * this file does not pick a side.
+ */
+export function extractSalary(input: { description?: string }): RichResult<string> {
+  const candidates: RichCandidate<string>[] = [];
+  const description = scannable(input.description);
+
+  if (description) {
+    for (const match of description.matchAll(SALARY_STATEMENT_PATTERN)) {
+      const raw = match[1]?.trim().replace(/[,;\s]+$/, "");
+      if (raw && !statesOnlyZero(raw)) {
+        candidates.push({ value: raw, confidence: "exact", origin: "description" });
+      }
     }
   }
 

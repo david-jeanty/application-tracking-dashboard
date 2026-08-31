@@ -35,3 +35,6 @@ yarn-error.log*
 
 # Extension build output, produced by `npm run extension:build`
 /extension/dist
+
+# Extension release ZIP, produced by `npm run extension:package`
+/extension/release

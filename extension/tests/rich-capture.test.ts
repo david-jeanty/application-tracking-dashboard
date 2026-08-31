@@ -7,6 +7,7 @@ import {
 } from "../src/extractor.js";
 import {
   extractDuration,
+  extractSalary,
   extractWorkArrangement,
   extractWorkTerm,
 } from "../src/rich-fields.js";
@@ -1134,5 +1135,276 @@ describe("the rich fields' evidence", () => {
         reason: "workday_structured_data_untrusted",
       });
     }
+  });
+});
+
+/**
+ * Regression coverage for a real LinkedIn posting found in production manual
+ * QA: The Canadian Academy of Recording Arts and Sciences, "Intern, Academy
+ * Operations" (LinkedIn job id 4456029535).
+ *
+ * The saved record correctly captured company, title, location, Hybrid
+ * arrangement, source, the posting URL and the full description — but missed
+ * an explicit hourly rate the description stated in plain text, and (a
+ * separate, correct outcome that manual QA should not mistake for a bug) left
+ * the work term blank because the same description states two conflicting
+ * internship end dates for the same posting.
+ */
+describe("full calendar-date ranges in a stated internship term", () => {
+  it("reads an unambiguous term stated as a full date range", () => {
+    const report = extractWorkTerm({
+      description: "INTERNSHIP TERM: September 14, 2026 – December 18, 2026",
+    });
+
+    expect(report).toMatchObject({
+      state: "established",
+      value: "September-December 2026",
+      confidence: "exact",
+      origin: "description",
+    });
+  });
+
+  it("keeps both years of a full date range that crosses one", () => {
+    const report = extractWorkTerm({
+      description: "INTERNSHIP TERM: September 14, 2026 – April 16, 2027",
+    });
+
+    expect(report).toMatchObject({
+      state: "established",
+      value: "September 2026-April 2027",
+    });
+  });
+
+  it("refuses two conflicting full-date internship-term statements", () => {
+    // The exact contradiction found in the CARAS posting: one labelled line
+    // gives an April end date, and "Additional Information" later in the same
+    // description gives a December end date for the same September start.
+    const description = [
+      "INTERNSHIP TERM: September 14, 2026 – April 16, 2027",
+      "COMPENSATION: $17.95/hour, paid biweekly",
+      "",
+      "Additional Information",
+      "Internship term is September 14, 2026 – December 18, 2026.",
+    ].join("\n");
+
+    const report = extractWorkTerm({ description });
+
+    expect(report).toMatchObject({ state: "conflict" });
+  });
+
+  it("never guesses between two conflicting dates when read through the full pipeline", () => {
+    const description = [
+      "INTERNSHIP TERM: September 14, 2026 – April 16, 2027",
+      "COMPENSATION: $17.95/hour, paid biweekly",
+      "",
+      "Additional Information",
+      "Internship term is September 14, 2026 – December 18, 2026.",
+    ].join("\n");
+
+    const job = toExtractedJob(
+      extractJobReport(
+        structured({
+          title: "Intern, Academy Operations",
+          description,
+        }),
+      ),
+    );
+
+    expect(job.workTerm).toBeUndefined();
+  });
+});
+
+describe("salary stated in plain text", () => {
+  it("reads an explicit hourly rate the posting labels", () => {
+    const report = extractSalary({
+      description: "COMPENSATION: $17.95/hour, paid biweekly",
+    });
+
+    expect(report).toMatchObject({
+      state: "established",
+      value: "$17.95/hour",
+      confidence: "exact",
+      origin: "description",
+    });
+  });
+
+  it("reads other common pay labels", () => {
+    for (const [description, expected] of [
+      ["Salary: $55,000/year", "$55,000/year"],
+      ["Pay rate: $22.50 per hour", "$22.50 per hour"],
+      ["Hourly wage: $19/hr", "$19/hr"],
+      ["Base pay: $18.00/hour", "$18.00/hour"],
+    ] as const) {
+      expect(extractSalary({ description })).toMatchObject({
+        state: "established",
+        value: expected,
+      });
+    }
+  });
+
+  it("refuses a bare dollar figure with no label", () => {
+    for (const description of [
+      "Relocation assistance up to $2,000 is available.",
+      "The team manages a $50,000 annual budget.",
+      "Application fee: $0.",
+    ]) {
+      expect(extractSalary({ description }).state).toBe("absent");
+    }
+  });
+
+  it("refuses a labelled figure that states only zero", () => {
+    expect(extractSalary({ description: "Compensation: $0.00/hour" }).state).toBe(
+      "absent",
+    );
+  });
+
+  it("refuses two labelled statements that disagree", () => {
+    const description =
+      "Compensation: $17.95/hour\nSalary: $20.00/hour for senior candidates";
+
+    expect(extractSalary({ description })).toMatchObject({ state: "conflict" });
+  });
+
+  it("does not run into unrelated text even with no line break separating fields", () => {
+    // Text converted out of HTML does not always keep the line breaks the
+    // original markup had, so the guarantee has to hold with or without one.
+    for (const description of [
+      "Compensation: $17.95/hour, paid biweekly.\nBenefits: extended health and dental.",
+      "Compensation: $17.95/hour, paid biweekly LOCATION: Toronto, ON (Hybrid)",
+    ]) {
+      const report = extractSalary({ description });
+
+      expect(report).toMatchObject({ state: "established", value: "$17.95/hour" });
+      if (report.state === "established") {
+        expect(report.value).not.toContain("Benefits");
+        expect(report.value).not.toContain("LOCATION");
+      }
+    }
+  });
+
+  it("reads a compact salary range stated after a range label", () => {
+    expect(
+      extractSalary({ description: "Salary range: $60,000-$70,000" }),
+    ).toMatchObject({
+      state: "established",
+      value: "$60,000-$70,000",
+      confidence: "exact",
+    });
+  });
+
+  it("reads an annual salary range stated in prose, not just a colon label", () => {
+    expect(
+      extractSalary({
+        description:
+          "The expected annual salary for this position is between $45,000 to $85,000.",
+      }),
+    ).toMatchObject({
+      state: "established",
+      value: "$45,000 to $85,000",
+    });
+  });
+
+  it("reads a range label phrased as \"range is\", with a per-hour unit", () => {
+    expect(extractSalary({ description: "Pay range is $22–$27 per hour" })).toMatchObject(
+      {
+        state: "established",
+        value: "$22–$27 per hour",
+      },
+    );
+  });
+
+  it("reads a range introduced by \"ranges from\"", () => {
+    expect(
+      extractSalary({ description: "Compensation ranges from $50,000 to $60,000." }),
+    ).toMatchObject({
+      state: "established",
+      value: "$50,000 to $60,000",
+    });
+  });
+
+  it("does not treat a merely nearby mention of pay or wage as a salary statement", () => {
+    for (const description of [
+      "The department's pay structure includes a $500 signing bonus for eligible new hires.",
+      "Minimum wage requirements do not apply; total funding of $10,000 supports the cohort.",
+    ]) {
+      expect(extractSalary({ description }).state).toBe("absent");
+    }
+  });
+
+  it("refuses two explicit ranges that materially disagree", () => {
+    const description =
+      "Salary range: $60,000-$70,000\nCompensation ranges from $80,000 to $90,000.";
+
+    expect(extractSalary({ description })).toMatchObject({ state: "conflict" });
+  });
+});
+
+describe("the CARAS LinkedIn posting found in production QA", () => {
+  const posting = () => `<head></head><body>
+      <article data-job-id="4456029535">
+        <div>
+          <div><div><div><div>
+            <a href="/jobs/view/4456029535/" aria-label="Intern, Academy Operations with verification">
+              <span>Intern, Academy Operations</span><span>Intern, Academy Operations</span>
+            </a>
+          </div></div></div></div>
+          <div><span>The Canadian Academy of Recording Arts and Sciences</span></div>
+          <div><ul><li><span>Toronto, ON</span></li></ul></div>
+          <div><ul><li>Hybrid</li><li>Internship</li></ul></div>
+        </div>
+      </article>
+      <section id="job-details"><h2>About the job</h2><p>${[
+        "INTERNSHIP TERM: September 14, 2026 - April 16, 2027",
+        "COMPENSATION: $17.95/hour, paid biweekly",
+        "LOCATION: Toronto, ON (Hybrid)",
+        "Join our operations team to support day-to-day academy programming.",
+        "Additional Information",
+        "Internship term is September 14, 2026 - December 18, 2026.",
+      ].join(" ")}</p></section>
+    </body>`;
+
+  const captured = () =>
+    toExtractedJob(
+      extractJobReport(
+        readSitePage(
+          posting(),
+          "https://www.linkedin.com/jobs/search/?currentJobId=4456029535",
+        ),
+      ),
+    );
+
+  it("preserves company, title, location, arrangement, source and URL", () => {
+    const job = captured();
+
+    expect(job.company).toBe("The Canadian Academy of Recording Arts and Sciences");
+    expect(job.jobTitle).toBe("Intern, Academy Operations");
+    expect(job.location).toBe("Toronto, ON");
+    expect(job.workArrangement).toBe("Hybrid");
+    expect(job.source).toBe("LinkedIn");
+    expect(job.jobUrl).toContain("4456029535");
+  });
+
+  it("captures the full description", () => {
+    const job = captured();
+
+    expect(job.jobDescription).toContain("INTERNSHIP TERM");
+    expect(job.jobDescription).toContain("COMPENSATION");
+  });
+
+  it("now captures the explicit hourly compensation", () => {
+    expect(captured().salary).toBe("$17.95/hour");
+  });
+
+  it("still leaves the work term blank rather than picking one of two conflicting dates", () => {
+    const job = captured();
+
+    expect(job.workTerm).toBeUndefined();
+  });
+
+  it("leaves duration and deadline unset, exactly as the posting leaves them unstated", () => {
+    const job = captured();
+
+    expect(job.duration).toBeUndefined();
+    expect(job.deadline).toBeUndefined();
   });
 });

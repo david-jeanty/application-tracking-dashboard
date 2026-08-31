@@ -30,12 +30,12 @@ export default function PrivacyPage() {
           </h1>
           <p className="mt-5 text-[15px] leading-7 text-foreground-secondary">
             This page describes the Interndex web app and the Interndex Capture
-            browser extension. The extension is built and can be installed
-            locally as an unpacked extension; it is not distributed through the
-            Chrome Web Store.
+            browser extension, including what the extension reads, stores, and
+            sends when installed from the Chrome Web Store or loaded locally as
+            an unpacked developer build.
           </p>
           <p className="mt-3 text-[13px] text-foreground-muted">
-            Last updated August 26, 2026.
+            Last updated August 30, 2026.
           </p>
 
           <div className="mt-10 space-y-10 text-[15px] leading-7 text-foreground-secondary">
@@ -133,8 +133,31 @@ export default function PrivacyPage() {
                 leaves the field empty rather than guessing at it.
               </p>
               <p className="mt-3">
-                The extension&apos;s permissions and data handling will receive a
-                further review before any public distribution.
+                All communication between the extension and Interndex, and
+                between the extension and Supabase, happens over HTTPS. The
+                extension does not sell captured data or use it for
+                advertising, and it does not share it with any other
+                third party.
+              </p>
+            </section>
+
+            <section aria-labelledby="contact-privacy">
+              <h2
+                className="border-b border-border pb-2 text-[20px] font-medium text-foreground"
+                id="contact-privacy"
+              >
+                Managing your data
+              </h2>
+              <p className="mt-4">
+                You can review, edit, archive, and delete your application
+                records at any time by signing in to Interndex. Settings is
+                where Supabase, not the extension itself, is the source of
+                truth about who still has access: revoking the Interndex
+                Capture extension&apos;s connection there — or a connected AI
+                assistant&apos;s — is independent of whatever the browser
+                extension still has stored locally, and disconnecting from
+                inside the extension does not by itself revoke that
+                server-side access.
               </p>
             </section>
           </div>

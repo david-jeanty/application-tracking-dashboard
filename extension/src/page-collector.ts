@@ -1303,47 +1303,162 @@ export function collectPageSignals(
       typeof rules.workdayTenant === "string"
         ? normalized(rules.workdayTenant)
         : "";
-    const corroboratesTenant = (candidate: string): boolean =>
-      Boolean(tenant) && normalized(candidate) === tenant;
+    /**
+     * Whether branded sidebar copy and the tenant name are the same employer.
+     *
+     * Exact equality (`bmo` tenant, "BMO" sidebar copy) always corroborates,
+     * regardless of length. Beyond that, a Workday tenant slug is very often
+     * a shortened or abbreviated form of the real legal name a page actually
+     * states — this fixture's own tenant is `livenation`, and the sidebar
+     * states "Live Nation Entertainment". Requiring exact equality for that
+     * case rejected the corroboration outright and left company blank
+     * despite the sidebar evidence being exactly what this mechanism looks
+     * for, so a substring relationship corroborates too — but only past a
+     * length floor (`tenant.length >= 4`): a three-letter-or-shorter slug is
+     * likely to appear inside unrelated text by pure coincidence, which
+     * would corroborate almost anything, so a short tenant still requires
+     * the exact match above.
+     */
+    const corroboratesTenant = (candidate: string): boolean => {
+      if (!tenant) return false;
+      const normalizedCandidate = normalized(candidate);
+      if (normalizedCandidate === tenant) return true;
+
+      return (
+        tenant.length >= 4 &&
+        (normalizedCandidate.includes(tenant) || tenant.includes(normalizedCandidate))
+      );
+    };
     const genericBrand = (candidate: string): boolean =>
       /^(?:logo|company|career|search(?: for)? jobs?|jobs)$/i.test(
         candidate.trim(),
       );
+    /**
+     * `LNE Logo` names an abbreviation, not a full legal name, and this file
+     * keeps no table that expands one into the other — `corroboratesTenant`
+     * would have to relate `LNE` to a tenant like `livenation` on its own
+     * merits, which a three-letter acronym essentially never does. An
+     * abbreviation-only logo is exactly the case §3 of this fix requires to
+     * stay insufficient by itself: it becomes one candidate like any other,
+     * and if nothing corroborates it, it corroborates nothing.
+     */
     const logoCandidate = (alt: string): string | undefined => {
       const candidate = /^\s*([A-Za-z0-9][A-Za-z0-9 .,&'’-]{0,80}?)\s+logo\s*$/i.exec(
         alt,
       )?.[1]?.trim();
       return candidate && !genericBrand(candidate) ? candidate : undefined;
     };
-    const richTextCandidate = (text: string): string | undefined => {
-      const candidate =
-        /^\s*At\s+([A-Z][A-Za-z0-9 .&'’-]{1,80}?),/.exec(text)?.[1] ??
-        /^\s*([A-Z][A-Za-z0-9 .&'’-]{1,80}?)\s+is\b/.exec(text)?.[1];
-      return candidate?.trim();
+    /**
+     * Every declarative self-identification within a bounded window of text.
+     *
+     * A real Workday "About Us" block routinely opens with a sentence of
+     * recognition or marketing copy before the clause that actually names the
+     * employer — "Recognized for seven years as a Great Place to Work® ...,
+     * Live Nation Entertainment is the world's leading live entertainment
+     * company." Requiring the employer-naming clause to be the very first
+     * thing in the block, as this used to, rejected that shape outright.
+     *
+     * A clause is only considered where it could plausibly start one: the
+     * very start of the bounded text, right after sentence-ending punctuation
+     * plus a space, or right after a comma plus a space (the shape the intro
+     * clause above actually uses). This is not a scan of arbitrary prose for
+     * capitalized noun phrases — a sentence that only *mentions* another
+     * organization mid-clause ("In partnership with the University of
+     * Toronto, ...") produces no candidate there, because "with" does not
+     * start a candidate clause; a clause that opens by naming a *different*
+     * organization ("The University of Toronto is a research partner.")
+     * becomes a candidate exactly like any other, and `corroboratesTenant`
+     * has to accept it independently, same as every other candidate.
+     *
+     * The candidate itself never contains a raw period: a name that legally
+     * carries one ("Northbridge Robotics Inc.") is matched through a small,
+     * closed list of corporate-entity suffixes rather than by letting the
+     * capture range freely over any period, which is what let an earlier
+     * version of this pattern capture "Welcome. BMO" as one candidate — the
+     * period after an ordinary opening word is indistinguishable from the
+     * period after an abbreviation by shape alone, so abbreviations are the
+     * only period this file allows through, and only from a fixed list.
+     */
+    const ORGANIZATION_NAME_CORE = String.raw`[A-Z][A-Za-z0-9 &'’-]{1,80}?`;
+    const ORGANIZATION_ENTITY_SUFFIX =
+      String.raw`(?:\s+(?:Inc|Incorporated|Corp|Corporation|Ltd|Limited|Co|LLC|LLP|Group|Holdings)\.?)?`;
+    const CLAUSE_START = String.raw`(?:^|(?<=[.!?]\s)|(?<=,\s))`;
+    const ORGANIZATION_NAME = `${ORGANIZATION_NAME_CORE}${ORGANIZATION_ENTITY_SUFFIX}`;
+    const AT_ORGANIZATION_PATTERN = new RegExp(
+      String.raw`${CLAUSE_START}At\s+(${ORGANIZATION_NAME}),`,
+      "g",
+    );
+    const IS_ORGANIZATION_PATTERN = new RegExp(
+      String.raw`${CLAUSE_START}(${ORGANIZATION_NAME})\s+is\b`,
+      "g",
+    );
+    const MAXIMUM_ORGANIZATION_SCAN_CHARACTERS = 1_000;
+    const organizationCandidatesIn = (text: string): string[] => {
+      const bounded = text.slice(0, MAXIMUM_ORGANIZATION_SCAN_CHARACTERS);
+
+      return [
+        ...Array.from(bounded.matchAll(AT_ORGANIZATION_PATTERN), (match) => match[1]),
+        ...Array.from(bounded.matchAll(IS_ORGANIZATION_PATTERN), (match) => match[1]),
+      ].filter((candidate): candidate is string => Boolean(candidate));
+    };
+    /**
+     * The one company every corroborating candidate agrees on, or nothing.
+     *
+     * Candidates that do not corroborate the tenant are dropped before this
+     * ever sees them — this only decides what to do when more than one
+     * *does*. Two corroborating candidates that normalize to the same text
+     * ("CIBC" from a logo, "CIBC" from "At CIBC, we...") are one answer, not
+     * two. Two that corroborate but disagree on the actual text are treated
+     * the same as no evidence at all: picking either would be a guess this
+     * file does not make.
+     */
+    const corroboratedCompany = (candidates: string[]): string | undefined => {
+      const distinct = new Map<string, string>();
+      for (const candidate of candidates) {
+        if (!corroboratesTenant(candidate)) continue;
+        const key = normalized(candidate);
+        if (!distinct.has(key)) distinct.set(key, candidate);
+      }
+
+      return distinct.size === 1 ? [...distinct.values()][0] : undefined;
     };
 
-    if (!sidebar) return;
+    const sidebarCandidates: string[] = [];
 
-    const logos = Array.from(
-      sidebar.querySelectorAll('[data-automation-id="image"][alt]'),
-    )
-      .map((image) => logoCandidate(image.getAttribute("alt") ?? ""))
-      .filter((candidate): candidate is string => Boolean(candidate));
-    const [logo] = logos;
+    if (sidebar) {
+      // The "About Us" block can carry the one piece of employer-domain
+      // evidence Workday exposes — a direct link to the employer's own site —
+      // independent of whether its company-name prose also corroborates the
+      // tenant. Domain evidence is validated on its own terms by
+      // `employerDomainFromUrl`'s host rejection list, not by name-matching,
+      // so this is recorded regardless of what company resolution finds.
+      const richText = sidebar.querySelector('[data-automation-id="richText"]');
+      recordDescriptionLinks(richText);
 
-    if (logo) {
-      if (logos.length === 1 && corroboratesTenant(logo)) {
-        siteFields["company"] = clamp(logo, MAXIMUM_FIELD_CHARACTERS);
-      }
+      sidebarCandidates.push(
+        ...Array.from(sidebar.querySelectorAll('[data-automation-id="image"][alt]'))
+          .map((image) => logoCandidate(image.getAttribute("alt") ?? ""))
+          .filter((candidate): candidate is string => Boolean(candidate)),
+        ...organizationCandidatesIn(trimmedText(richText)),
+      );
+    }
+
+    const fromSidebar = corroboratedCompany(sidebarCandidates);
+    if (fromSidebar) {
+      siteFields["company"] = clamp(fromSidebar, MAXIMUM_FIELD_CHARACTERS);
       return;
     }
 
-    const richText = sidebar.querySelector(
-      '[data-automation-id="richText"]',
+    // Fallback: the selected posting's own description, scanned the same
+    // bounded, sentence-by-sentence, tenant-corroborated way — only reached
+    // when the sidebar established nothing at all. A description commonly
+    // opens the same way a sidebar does ("Live Nation Entertainment is the
+    // world's leading live entertainment company...").
+    const fromDescription = corroboratedCompany(
+      organizationCandidatesIn(trimmedText(description)),
     );
-    const company = richTextCandidate(trimmedText(richText));
-    if (company && corroboratesTenant(company)) {
-      siteFields["company"] = clamp(company, MAXIMUM_FIELD_CHARACTERS);
+    if (fromDescription) {
+      siteFields["company"] = clamp(fromDescription, MAXIMUM_FIELD_CHARACTERS);
     }
   }
 

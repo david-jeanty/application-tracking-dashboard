@@ -11,6 +11,7 @@ import {
 } from "./json-ld.js";
 import {
   extractDuration,
+  extractSalary,
   extractWorkArrangement,
   extractWorkTerm,
   type RichConfidence,
@@ -147,14 +148,31 @@ function postingUrl(signals: PageSignals): string | undefined {
   return usable.length <= LIMITS.jobUrl ? usable : undefined;
 }
 
-/** `Ottawa, ON` from whichever parts of a postal address the posting supplies. */
+/**
+ * `Ottawa, ON` from whichever parts of a postal address the posting supplies,
+ * with a street address promoted to the front only when the publisher's own
+ * structured data corroborates it with a real city.
+ *
+ * A `streetAddress` on its own, with no `addressLocality`, is not included:
+ * a lone street name and number is not a high-confidence physical address
+ * without something to anchor it, and this file does not go looking in the
+ * page for a city to pair it with. This is the only source street-address
+ * evidence comes from — no description text is ever read for one, because
+ * "the job's own address" and "a number that appears somewhere in the
+ * description" are not the same claim, and only the publisher's own
+ * structured statement backs the first.
+ */
 function readLocation(posting: JsonLdNode): string | undefined {
   const place = firstRecord(posting["jobLocation"]);
   const address = place ? firstRecord(place["address"]) : undefined;
 
   if (address) {
+    const locality = firstString(address["addressLocality"]);
+    const street = locality ? firstString(address["streetAddress"]) : undefined;
+
     const parts = [
-      firstString(address["addressLocality"]),
+      street,
+      locality,
       firstString(address["addressRegion"]),
       firstString(address["addressCountry"]) ??
         firstString(firstRecord(address["addressCountry"])?.["name"]),
@@ -1039,6 +1057,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   });
   const workTerm = extractWorkTerm(richInput);
   const duration = extractDuration(richInput);
+  const salaryFromText = extractSalary(richInput);
 
   const structuredRichInput = {
     ...(structuredTitleCandidate ? { title: structuredTitleCandidate } : {}),
@@ -1076,9 +1095,51 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
     "workArrangement" | "workTerm" | "duration"
   >;
 
+  /**
+   * A labelled compensation statement, as a fallback for the structured
+   * salary above and only where the structured value did not already answer
+   * it. LinkedIn, Indeed and Workday publish no structured posting data on
+   * the pages a student actually reads at all — the same reason the other
+   * three rich fields exist — so an explicit rate stated in plain text has no
+   * other path into the record.
+   *
+   * Workday is not excluded from this. `workdayField` distrusts Workday's
+   * *structured* data specifically, because a live Workday SPA can retain a
+   * stale backend JobPosting after its visible detail pane has changed — a
+   * concern about `hiringOrganization`/`baseSalary` JSON that has nothing to
+   * do with plain text read out of the selected posting's own, already
+   * site-bounded description. That text is exactly as trustworthy here as it
+   * is for work arrangement, work term and duration, which already take the
+   * same `workdayRichField` path below rather than being excluded.
+   */
+  const clampedSalaryFromText: RichResult<string> =
+    salaryFromText.state === "established"
+      ? {
+          ...salaryFromText,
+          value: clamp(salaryFromText.value, LIMITS.salary) ?? salaryFromText.value,
+        }
+      : salaryFromText;
+
+  const structuredSalaryRichResult: RichResult<string> = structuredSalaryCandidate
+    ? {
+        state: "established",
+        value: structuredSalaryCandidate,
+        confidence: "exact",
+        origin: "structured",
+      }
+    : { state: "absent" };
+
+  const salaryField: CapturedField<string> =
+    fields.salary.state === "established"
+      ? fields.salary
+      : site === "workday"
+        ? workdayRichField(clampedSalaryFromText, structuredSalaryRichResult)
+        : richField(clampedSalaryFromText);
+
   const allFields = {
     ...fields,
     ...richFields,
+    salary: salaryField,
   } satisfies ExtractionReport["fields"];
 
   if (
