@@ -661,10 +661,25 @@ const SALARY_UNIT = String.raw`(?:\s*(?:\/|per)\s*(?:hour|hr|year|yr|annum|month
 
 /** Every labelled or verbosely-worded way a posting names its own pay. */
 const SALARY_CONTEXT = String.raw`(?:annual\s+salary|starting\s+salary|base\s+salary|hourly\s+rate|hourly\s+wage|pay\s+rate|base\s+pay|salary\s+range|pay\s+range|compensation\s+range|salary|compensation|pay|wage)`;
-/** Noise a sentence may put between the context word and the connector. */
-const SALARY_FILLER = String.raw`(?:\s+for\s+(?:this|the)\s+(?:position|role|job))?`;
-/** A closed set of phrases — never arbitrary nearby text — introducing a figure. */
-const SALARY_CONNECTOR = String.raw`(?:\s*[:\-–—]\s*|\s+(?:is|are)\s+(?:expected\s+to\s+be\s+)?(?:between\s+|from\s+)?|\s+ranges?\s+from\s+)`;
+/**
+ * Noise a sentence may put between the context word and the connector.
+ *
+ * Each clause is a specific, enumerated shape — "for this position", "in
+ * Ontario" — not arbitrary text, and up to two may appear in sequence: a real
+ * Workday posting writes "compensation for this position in Ontario is:
+ * $22/hr", stacking both. `in <place>` is bounded to one or two words so it
+ * covers "Ontario" and "New York" without turning into an open-ended filler
+ * that could swallow unrelated prose before the connector.
+ */
+const SALARY_FILLER_CLAUSE = String.raw`(?:for\s+(?:this|the)\s+(?:position|role|job)|in\s+[A-Za-z]+(?:\s+[A-Za-z]+)?)`;
+const SALARY_FILLER = String.raw`(?:\s+${SALARY_FILLER_CLAUSE}){0,2}`;
+/**
+ * A closed set of phrases — never arbitrary nearby text — introducing a
+ * figure. "is"/"are" may be followed directly by a colon ("is: $22/hr") or
+ * by ordinary connecting words ("is between $45,000 to $85,000"); both are
+ * real postings' own wording, not two different rules.
+ */
+const SALARY_CONNECTOR = String.raw`(?:\s*[:\-–—]\s*|\s+(?:is|are)(?:\s*:\s*|\s+)(?:expected\s+to\s+be\s+)?(?:between\s+|from\s+)?|\s+ranges?\s+from\s+)`;
 
 const SALARY_STATEMENT_PATTERN = new RegExp(
   String.raw`\b${SALARY_CONTEXT}${SALARY_FILLER}${SALARY_CONNECTOR}(${SALARY_MONEY}(?:${SALARY_RANGE_SEPARATOR}${SALARY_SECOND_MONEY})?${SALARY_UNIT})`,

@@ -1303,8 +1303,32 @@ export function collectPageSignals(
       typeof rules.workdayTenant === "string"
         ? normalized(rules.workdayTenant)
         : "";
-    const corroboratesTenant = (candidate: string): boolean =>
-      Boolean(tenant) && normalized(candidate) === tenant;
+    /**
+     * Whether branded sidebar copy and the tenant name are the same employer.
+     *
+     * Exact equality (`bmo` tenant, "BMO" sidebar copy) always corroborates,
+     * regardless of length. Beyond that, a Workday tenant slug is very often
+     * a shortened or abbreviated form of the real legal name a page actually
+     * states — this fixture's own tenant is `livenation`, and the sidebar
+     * states "Live Nation Entertainment". Requiring exact equality for that
+     * case rejected the corroboration outright and left company blank
+     * despite the sidebar evidence being exactly what this mechanism looks
+     * for, so a substring relationship corroborates too — but only past a
+     * length floor (`tenant.length >= 4`): a three-letter-or-shorter slug is
+     * likely to appear inside unrelated text by pure coincidence, which
+     * would corroborate almost anything, so a short tenant still requires
+     * the exact match above.
+     */
+    const corroboratesTenant = (candidate: string): boolean => {
+      if (!tenant) return false;
+      const normalizedCandidate = normalized(candidate);
+      if (normalizedCandidate === tenant) return true;
+
+      return (
+        tenant.length >= 4 &&
+        (normalizedCandidate.includes(tenant) || tenant.includes(normalizedCandidate))
+      );
+    };
     const genericBrand = (candidate: string): boolean =>
       /^(?:logo|company|career|search(?: for)? jobs?|jobs)$/i.test(
         candidate.trim(),
@@ -1324,6 +1348,15 @@ export function collectPageSignals(
 
     if (!sidebar) return;
 
+    // The "About Us" block can carry the one piece of employer-domain
+    // evidence Workday exposes — a direct link to the employer's own site —
+    // independent of whether its company-name prose also corroborates the
+    // tenant. Domain evidence is validated on its own terms by
+    // `employerDomainFromUrl`'s host rejection list, not by name-matching, so
+    // this is recorded regardless of what happens below.
+    const richText = sidebar.querySelector('[data-automation-id="richText"]');
+    recordDescriptionLinks(richText);
+
     const logos = Array.from(
       sidebar.querySelectorAll('[data-automation-id="image"][alt]'),
     )
@@ -1338,9 +1371,6 @@ export function collectPageSignals(
       return;
     }
 
-    const richText = sidebar.querySelector(
-      '[data-automation-id="richText"]',
-    );
     const company = richTextCandidate(trimmedText(richText));
     if (company && corroboratesTenant(company)) {
       siteFields["company"] = clamp(company, MAXIMUM_FIELD_CHARACTERS);

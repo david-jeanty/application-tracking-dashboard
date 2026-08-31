@@ -1101,22 +1101,40 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
    * it. LinkedIn, Indeed and Workday publish no structured posting data on
    * the pages a student actually reads at all — the same reason the other
    * three rich fields exist — so an explicit rate stated in plain text has no
-   * other path into the record. Workday's salary field is left exactly as
-   * already computed: it is never trusted from a live value at all (see
-   * `workdayField` above), and this fallback does not change that.
+   * other path into the record.
+   *
+   * Workday is not excluded from this. `workdayField` distrusts Workday's
+   * *structured* data specifically, because a live Workday SPA can retain a
+   * stale backend JobPosting after its visible detail pane has changed — a
+   * concern about `hiringOrganization`/`baseSalary` JSON that has nothing to
+   * do with plain text read out of the selected posting's own, already
+   * site-bounded description. That text is exactly as trustworthy here as it
+   * is for work arrangement, work term and duration, which already take the
+   * same `workdayRichField` path below rather than being excluded.
    */
+  const clampedSalaryFromText: RichResult<string> =
+    salaryFromText.state === "established"
+      ? {
+          ...salaryFromText,
+          value: clamp(salaryFromText.value, LIMITS.salary) ?? salaryFromText.value,
+        }
+      : salaryFromText;
+
+  const structuredSalaryRichResult: RichResult<string> = structuredSalaryCandidate
+    ? {
+        state: "established",
+        value: structuredSalaryCandidate,
+        confidence: "exact",
+        origin: "structured",
+      }
+    : { state: "absent" };
+
   const salaryField: CapturedField<string> =
-    fields.salary.state === "established" || site === "workday"
+    fields.salary.state === "established"
       ? fields.salary
-      : richField(
-          salaryFromText.state === "established"
-            ? {
-                ...salaryFromText,
-                value:
-                  clamp(salaryFromText.value, LIMITS.salary) ?? salaryFromText.value,
-              }
-            : salaryFromText,
-        );
+      : site === "workday"
+        ? workdayRichField(clampedSalaryFromText, structuredSalaryRichResult)
+        : richField(clampedSalaryFromText);
 
   const allFields = {
     ...fields,

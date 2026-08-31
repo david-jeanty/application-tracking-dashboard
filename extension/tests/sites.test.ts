@@ -1444,6 +1444,34 @@ describe("the Capital One Indeed posting found in production QA", () => {
   });
 });
 
+/**
+ * Shared by every Workday describe block below: the selected-posting-page
+ * shape `readWorkdayJobDetail` reads, with Similar Jobs cards bracketing it
+ * on both sides the way a live page does.
+ */
+function workdayDetail({
+  title,
+  location,
+  description,
+  sidebar,
+}: {
+  title: string;
+  location: string;
+  description: string;
+  sidebar: string;
+}) {
+  return `<body>
+      <div data-automation-id="similarJobsCard"><h2>Similar Jobs title</h2><div data-automation-id="locations"><dl><dd>Wrong before location</dd></dl></div></div>
+      <div data-automation-id="jobPostingPage">
+        <h2 data-automation-id="jobPostingHeader">${title}</h2>
+        <div data-automation-id="job-posting-details"><div data-automation-id="locations"><dl><dt>locations</dt><dd>${location}</dd></dl></div></div>
+        <div data-automation-id="jobPostingDescription"><p>${description}</p></div>
+      </div>
+      <div data-automation-id="similarJobsCard"><h2>Another similar title</h2><div data-automation-id="locations"><dl><dd>Wrong after location</dd></dl></div></div>
+      <aside data-automation-id="jobSidebar">${sidebar}</aside>
+    </body>`;
+}
+
 describe("Workday", () => {
   const posting = `<body>
      <h1>Search for Jobs</h1>
@@ -1458,29 +1486,6 @@ describe("Workday", () => {
     "https://bmo.wd3.myworkdayjobs.com/en-US/External/job/Toronto/Analyst_123";
   const CIBC_JOB =
     "https://cibc.wd3.myworkdayjobs.com/campus/job/Toronto/Coordinator_123";
-
-  function workdayDetail({
-    title,
-    location,
-    description,
-    sidebar,
-  }: {
-    title: string;
-    location: string;
-    description: string;
-    sidebar: string;
-  }) {
-    return `<body>
-      <div data-automation-id="similarJobsCard"><h2>Similar Jobs title</h2><div data-automation-id="locations"><dl><dd>Wrong before location</dd></dl></div></div>
-      <div data-automation-id="jobPostingPage">
-        <h2 data-automation-id="jobPostingHeader">${title}</h2>
-        <div data-automation-id="job-posting-details"><div data-automation-id="locations"><dl><dt>locations</dt><dd>${location}</dd></dl></div></div>
-        <div data-automation-id="jobPostingDescription"><p>${description}</p></div>
-      </div>
-      <div data-automation-id="similarJobsCard"><h2>Another similar title</h2><div data-automation-id="locations"><dl><dd>Wrong after location</dd></dl></div></div>
-      <aside data-automation-id="jobSidebar">${sidebar}</aside>
-    </body>`;
-  }
 
   function staleStructuredPosting(overrides: Record<string, unknown> = {}) {
     return {
@@ -1767,5 +1772,269 @@ describe("Workday", () => {
     });
 
     expect(extractJob(readSitePage(html, CIBC_JOB)).jobTitle).toBeUndefined();
+  });
+});
+
+/**
+ * General Workday company/domain/salary evidence, generalized beyond BMO and
+ * CIBC (whose tenant slugs already equal their company name exactly) to
+ * tenants where the legal name is longer than the slug — a shortened Workday
+ * tenant is common, and this is the failure mode a real posting found: a
+ * tenant of `livenation` beside sidebar copy stating "Live Nation
+ * Entertainment" was previously rejected outright by an exact-match
+ * corroboration check.
+ */
+describe("Workday company corroboration beyond an exact tenant match", () => {
+  const NORTHBRIDGE_JOB =
+    "https://northbridge.wd5.myworkdayjobs.com/en-US/Careers/job/Toronto/Operations-Intern_R-4821";
+  const SHORT_TENANT_JOB =
+    "https://acme.wd1.myworkdayjobs.com/en-US/External/job/Toronto/Intern_R-1";
+
+  it("corroborates a legal name that contains the tenant slug as a prefix", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is a global leader in industrial automation.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBe(
+      "Northbridge Robotics Inc.",
+    );
+  });
+
+  it("does not corroborate an unrelated name merely because a short tenant appears somewhere", () => {
+    // "acme" (4 chars) sits at the exact length boundary; requiring it to
+    // appear as a substring of totally unrelated prose would corroborate far
+    // too easily, so a 4-character tenant still needs the text to actually
+    // be about it, not just contain the letters somewhere.
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Academic and community engagement matters to every intern.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, SHORT_TENANT_JOB)).company).toBeUndefined();
+  });
+
+  it("still requires exact equality for a genuinely short tenant/company pair", () => {
+    // Preserves the existing BMO/CIBC behavior: a short tenant that exactly
+    // equals a short company name still corroborates.
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar: '<img data-automation-id="image" alt="Acme logo" />',
+    });
+
+    expect(extractJob(readSitePage(html, SHORT_TENANT_JOB)).company).toBe("Acme");
+  });
+
+  it("does not fabricate a company from the tenant slug alone, with no sidebar evidence at all", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar: "",
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).company).toBeUndefined();
+  });
+});
+
+describe("Workday employer domain from the sidebar's own link", () => {
+  const NORTHBRIDGE_JOB =
+    "https://northbridge.wd5.myworkdayjobs.com/en-US/Careers/job/Toronto/Operations-Intern_R-4821";
+
+  it("accepts an explicit employer-owned link in the About Us sidebar", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is a global leader in industrial automation. <a href="https://www.northbridgerobotics.example">www.northbridgerobotics.example</a></div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBe(
+      "northbridgerobotics.example",
+    );
+  });
+
+  it("rejects a Workday-hosted URL even if one appears in the sidebar", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is hiring. <a href="https://northbridge.wd5.myworkdayjobs.com/en-US/Careers">View all openings</a></div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBeUndefined();
+  });
+
+  it("rejects a social-media link", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is hiring. <a href="https://www.instagram.com/northbridgerobotics">Follow us</a></div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBeUndefined();
+  });
+
+  it("rejects an ATS-hosted URL, per the existing rejection policy", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is hiring. <a href="https://boards.greenhouse.io/northbridgerobotics">More roles</a></div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBeUndefined();
+  });
+
+  it("leaves company domain unset with no employer URL evidence at all", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Selected description.",
+      sidebar:
+        '<div data-automation-id="richText">Northbridge Robotics Inc. is a global leader in industrial automation.</div>',
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).companyDomain).toBeUndefined();
+  });
+});
+
+describe("Workday salary from the selected posting's own description", () => {
+  const NORTHBRIDGE_JOB =
+    "https://northbridge.wd5.myworkdayjobs.com/en-US/Careers/job/Toronto/Operations-Intern_R-4821";
+
+  it("captures an explicit hourly compensation statement", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description:
+        "The expected compensation for this position in Ontario is: $24/hr",
+      sidebar: "",
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).salary).toBe("$24/hr");
+  });
+
+  it("captures an explicit compensation range", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Compensation for this position ranges from $20 to $25 per hour.",
+      sidebar: "",
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).salary).toBe(
+      "$20 to $25 per hour",
+    );
+  });
+
+  it("ignores an unrelated dollar amount with no compensation context", () => {
+    const html = workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "Our team has supported over $2 million in community grants.",
+      sidebar: "",
+    });
+
+    expect(extractJob(readSitePage(html, NORTHBRIDGE_JOB)).salary).toBeUndefined();
+  });
+
+  it("shows a stale structured figure as rejected once the live description states one", () => {
+    const html = `<head>${jsonLd({
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      title: "Stale backend title",
+      description: "Stale backend description.",
+      baseSalary: { currency: "CAD", value: { value: "999999", unitText: "YEAR" } },
+    })}</head>${workdayDetail({
+      title: "Operations Intern",
+      location: "Toronto, ON",
+      description: "The expected compensation for this position is: $24/hr",
+      sidebar: "",
+    })}`;
+
+    const report = extractJobReport(readSitePage(html, NORTHBRIDGE_JOB));
+    const job = toExtractedJob(report);
+
+    expect(job.salary).toBe("$24/hr");
+    expect(report.fields.salary).toMatchObject({
+      state: "established",
+      value: "$24/hr",
+      rejected: [
+        { source: "json_ld_job_posting", reason: "workday_structured_data_untrusted" },
+      ],
+    });
+  });
+});
+
+/**
+ * Regression fixture: a real Live Nation Workday posting found in production
+ * manual QA. This is one integration fixture that reproduced the bug, not a
+ * template — every behavior it asserts is a general rule proven independently
+ * above, and no production code anywhere checks for Live Nation, "Brand
+ * Partnerships", this requisition id, livenationentertainment.com, or $22/hr.
+ */
+describe("the Live Nation Workday posting found in production QA", () => {
+  const LIVE_NATION_JOB =
+    "https://livenation.wd503.myworkdayjobs.com/en-US/livenation/job/Toronto/Brand-Partnerships-Intern--Fall-2026-_JR-92460";
+
+  const html = workdayDetail({
+    title: "Brand Partnerships Intern (Fall 2026)",
+    location: "Toronto, ON",
+    description: [
+      "Fall 2026 Internship - Brand Partnerships",
+      "The expected compensation for this position in Ontario is: $22/hr",
+      "This is a full-time, fixed-term position with a minimum commitment of 37.5 hours per week.",
+    ].join(" "),
+    sidebar:
+      "<div data-automation-id=\"richText\">Live Nation Entertainment is the world's leading live entertainment company. <a href=\"https://www.livenationentertainment.com\">www.livenationentertainment.com</a></div>",
+  });
+
+  const captured = () => extractJob(readSitePage(html, LIVE_NATION_JOB));
+
+  it("now captures the employer from corroborated sidebar copy", () => {
+    expect(captured().company).toBe("Live Nation Entertainment");
+  });
+
+  it("preserves title, location and work term", () => {
+    const job = captured();
+
+    expect(job.jobTitle).toBe("Brand Partnerships Intern (Fall 2026)");
+    expect(job.location).toBe("Toronto, ON");
+    expect(job.workTerm).toBe("Fall 2026");
+  });
+
+  it("now captures the explicit hourly compensation", () => {
+    expect(captured().salary).toBe("$22/hr");
+  });
+
+  it("now captures the employer domain from the sidebar's own link", () => {
+    expect(captured().companyDomain).toBe("livenationentertainment.com");
+  });
+
+  it("leaves work arrangement unset — the page states no explicit Remote/Hybrid/On-site", () => {
+    expect(captured().workArrangement).toBeUndefined();
+  });
+
+  it("does not attempt to resolve the Part time / full-time conflict in any field", () => {
+    const job = captured();
+
+    // No employment-type field exists in the schema; the conflicting text
+    // stays exactly where it was said, inside the description, untouched.
+    expect(job.jobDescription).toContain("full-time, fixed-term");
+    expect(job.jobDescription).toContain("37.5 hours per week");
   });
 });

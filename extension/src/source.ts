@@ -63,10 +63,27 @@ const JOB_BOARD_SOURCES: { suffix: string; source: string }[] = [
   { suffix: "jobbank.gc.ca", source: "Job Bank" },
 ];
 
+/**
+ * Social platforms a posting's "About Us" copy commonly links to alongside —
+ * or instead of — the employer's own site. A share icon or a company's
+ * social profile is not the employer's domain, and none of these hosts is
+ * ever registrable to one particular employer.
+ */
+const SOCIAL_MEDIA_HOSTS = [
+  "facebook.com",
+  "twitter.com",
+  "x.com",
+  "instagram.com",
+  "youtube.com",
+  "tiktok.com",
+  "pinterest.com",
+];
+
 /** Every host that must never become an employer domain. */
 const NEVER_EMPLOYER_HOSTS = [
   ...APPLICANT_TRACKING_HOSTS,
   ...JOB_BOARD_SOURCES.map((entry) => entry.suffix),
+  ...SOCIAL_MEDIA_HOSTS,
 ];
 
 /**
