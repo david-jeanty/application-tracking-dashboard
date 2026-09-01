@@ -20,9 +20,19 @@ import type { PageSignals } from "../src/types.js";
  * supplied by the test rather than by the environment. Everything else here is
  * genuinely read out of the document by the code that ships.
  */
+/**
+ * The address the generic fixtures are read at.
+ *
+ * Exported because a structured fixture now has to name the page it is on: a
+ * `JobPosting` that carries no `url`, `@id` or `identifier` establishes nothing,
+ * so a fixture that means to represent a valid structured capture has to say
+ * which posting it is, exactly as a real page does.
+ */
+export const FIXTURE_PAGE_URL = "https://careers.example.com/jobs/1";
+
 export function readPage(
   html: string,
-  pageUrl = "https://careers.example.com/jobs/1",
+  pageUrl = FIXTURE_PAGE_URL,
 ): PageSignals {
   document.documentElement.innerHTML = html;
 
@@ -72,13 +82,22 @@ export function applyControl(): string {
   return '<a href="/apply">Apply now</a>';
 }
 
-/** A minimal, complete JobPosting node the individual tests vary from. */
+/**
+ * A minimal, complete JobPosting node the individual tests vary from.
+ *
+ * It names `FIXTURE_PAGE_URL`, so a test that reads it at a different address
+ * has to override `url` to keep the record correlated with its page.
+ */
 export function jobPosting(
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
   return {
     "@context": "https://schema.org",
     "@type": "JobPosting",
+    // Identity, as a real posting publishes it. Without this the record cannot
+    // be correlated with the route and establishes nothing — which is the
+    // point of the correlation, not an inconvenience to work around.
+    url: FIXTURE_PAGE_URL,
     title: "Business Technology Analyst Intern",
     description: "Work with the analytics team for a four-month term.",
     hiringOrganization: { "@type": "Organization", name: "IBM" },

@@ -50,6 +50,7 @@ export function collectPageSignals(
   const MAXIMUM_TITLE_CHARACTERS = 500;
   const MAXIMUM_FIELD_CHARACTERS = 200_000;
   const MAXIMUM_MICRODATA_PROPERTIES = 60;
+  const MAXIMUM_MICRODATA_ROOTS = 5;
   const MAXIMUM_APPLY_CANDIDATES = 400;
   const MAXIMUM_SELECTED_LINKS = 20;
   const MAXIMUM_URL_LENGTH = 2_048;
@@ -186,12 +187,17 @@ export function collectPageSignals(
    * belonging to a breadcrumb, an organization footer, or a related-jobs list
    * elsewhere on the page are never mistaken for the posting's own.
    */
-  const microdataRoot = document.querySelector(
-    '[itemscope][itemtype*="JobPosting"]',
-  );
-  const microdata: Record<string, string> = {};
+  const microdataRoots = Array.from(
+    document.querySelectorAll('[itemscope][itemtype*="JobPosting"]'),
+  ).slice(0, MAXIMUM_MICRODATA_ROOTS);
+  const microdata: Record<string, string>[] = [];
 
-  if (microdataRoot) {
+  for (const microdataRoot of microdataRoots) {
+    // Every posting root is collected, not just the first one in the document.
+    // A page that publishes two postings gets to have both of them read, and
+    // which one belongs to the student's route is decided later, by identity,
+    // rather than here, by document order.
+    const posting: Record<string, string> = {};
     const properties = Array.from(
       microdataRoot.querySelectorAll("[itemprop]"),
     ).slice(0, MAXIMUM_MICRODATA_PROPERTIES);
@@ -210,7 +216,7 @@ export function collectPageSignals(
       if (names.length === 0 || node !== microdataRoot) continue;
 
       const key = names.join(".");
-      if (key in microdata) continue;
+      if (key in posting) continue;
 
       // `meta`, `link` and `time` state their value in an attribute; every
       // other element states it as its contents.
@@ -224,8 +230,10 @@ export function collectPageSignals(
           : null);
 
       const value = attribute?.trim() || markupOf(element);
-      if (value) microdata[key] = clamp(value, MAXIMUM_FIELD_CHARACTERS);
+      if (value) posting[key] = clamp(value, MAXIMUM_FIELD_CHARACTERS);
     }
+
+    if (Object.keys(posting).length > 0) microdata.push(posting);
   }
 
   const siteFields: Record<string, string> = {};
@@ -1504,7 +1512,7 @@ export function collectPageSignals(
     ...(heading
       ? { headingText: clamp(heading, MAXIMUM_TITLE_CHARACTERS) }
       : {}),
-    ...(Object.keys(microdata).length > 0 ? { microdata } : {}),
+    ...(microdata.length > 0 ? { microdata } : {}),
     ...(Object.keys(siteFields).length > 0 ? { siteFields } : {}),
     ...(selectedApplyUrls.size === 1 ||
     (!descriptionUrlOverflow && selectedDescriptionUrls.size > 0)
@@ -1521,7 +1529,7 @@ export function collectPageSignals(
       : {}),
     evidence: {
       applyAffordance,
-      jobPostingMicrodata: Boolean(microdataRoot),
+      jobPostingMicrodata: microdataRoots.length > 0,
     },
   };
 }

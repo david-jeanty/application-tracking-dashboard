@@ -43,6 +43,10 @@ function signalsFor(company: string, title: string, url: string): PageSignals {
       JSON.stringify({
         "@context": "https://schema.org",
         "@type": "JobPosting",
+        // A real posting names itself, and an unnamed one now establishes
+        // nothing, so a fixture standing in for a good page has to say which
+        // posting it is.
+        url,
         title,
         hiringOrganization: { "@type": "Organization", name: company },
         description: "Work with the analytics team.",
@@ -321,6 +325,51 @@ describe("popup capture, end to end", () => {
     expect(harness.captures).toHaveLength(1);
     expect(harness.captures[0]?.record).toMatchObject({ company: "Beta Corp" });
     expect(JSON.stringify(harness.sent)).not.toContain("Alpha Inc");
+  });
+
+  it("shows and saves nothing when the page's JSON-LD names a different posting", async () => {
+    const stale = {
+      "@context": "https://schema.org",
+      "@type": "JobPosting",
+      // The record left behind for the posting the student navigated away from.
+      url: "https://careers.example.com/postings/alpha",
+      title: "Alpha Intern",
+      hiringOrganization: { "@type": "Organization", name: "Alpha Inc" },
+      description: "Work with the alpha team.",
+    };
+
+    const harness = install({
+      // The student is on posting B; the page still carries A's record.
+      url: PAGE_B,
+      collect: async () => ({
+        jsonLdBlocks: [JSON.stringify(stale)],
+        meta: { "og:description": "Alpha Inc is hiring." },
+        pageUrl: PAGE_B,
+      }),
+    });
+
+    await openPopup();
+    await new Promise((resolve) => {
+      setTimeout(resolve, 250);
+    });
+    await settle();
+
+    // A form, because the route was verified and manual entry still works —
+    // but none of job A's values in it, and nothing enabled to save.
+    expect(visiblePanels()).toEqual(["ready"]);
+    expect(companyField()).toBe("");
+    expect(
+      document.querySelector<HTMLInputElement>("#job-title")?.value,
+    ).toBe("");
+    expect(document.querySelector<HTMLButtonElement>("#save")?.disabled).toBe(
+      true,
+    );
+
+    submit();
+    await settle();
+
+    expect(harness.captures).toHaveLength(0);
+    expect(JSON.stringify(harness.sent)).not.toContain("Alpha");
   });
 
   it("still hands over a savable form when the page identified but said nothing", async () => {

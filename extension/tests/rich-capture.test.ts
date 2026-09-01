@@ -78,17 +78,17 @@ describe("work arrangement", () => {
   });
 
   it("reads the same structured signal from microdata", () => {
+    const microdataPage = "https://careers.beaconaerospace.com/job/48213";
     const html = `<head></head><body>
        <div itemscope itemtype="https://schema.org/JobPosting">
+         <link itemprop="url" href="${microdataPage}" />
          <h1 itemprop="title">Systems Engineering Intern</h1>
          <meta itemprop="jobLocationType" content="TELECOMMUTE" />
          <div itemprop="description"><p>Work on avionics test benches.</p></div>
        </div>
      </body>`;
 
-    const report = extractJobReport(
-      readPage(html, "https://careers.beaconaerospace.com/job/48213"),
-    );
+    const report = extractJobReport(readPage(html, microdataPage));
 
     expect(toExtractedJob(report).workArrangement).toBe("Remote");
     expect(report.fields.workArrangement).toMatchObject({
@@ -164,6 +164,8 @@ describe("work arrangement", () => {
   it("keeps Workday's stale structured arrangement out of the selected posting", () => {
     const html = `<head>${jsonLd(
       jobPosting({
+        // Correlates with the page, so the Workday rule is what rejects it.
+        url: WORKDAY_JOB,
         title: "Stale backend title",
         description: "Work arrangement: Remote",
         jobLocationType: "TELECOMMUTE",
@@ -1039,6 +1041,7 @@ describe("the rich fields' evidence", () => {
     // list, and a search state establishes no selected posting to attach it to.
     const html = `<head>${jsonLd(
       jobPosting({
+        url: WORKDAY_SEARCH,
         title: "Stale Summer 2027 backend title",
         description: "Work arrangement: Remote\nDuration: 8 months",
         jobLocationType: "TELECOMMUTE",
@@ -1105,6 +1108,7 @@ describe("the rich fields' evidence", () => {
   it("cannot project a Workday rich fact that only stale structured data states", () => {
     const html = `<head>${jsonLd(
       jobPosting({
+        url: WORKDAY_JOB,
         title: "Stale Summer 2027 backend title",
         description: "Duration: 8 months",
         jobLocationType: "TELECOMMUTE",
