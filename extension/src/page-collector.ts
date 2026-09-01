@@ -1528,7 +1528,23 @@ export function collectPageSignals(
       const name = boardEmployerNameFrom(logoLink);
       if (name) boardEmployerNames.add(name);
     }
-    if (boardEmployerUrls.size === 1 && boardEmployerNames.size === 1) {
+    /**
+     * One board, one destination — a name is a bonus rather than a condition.
+     *
+     * The destination and the name answer different questions. Where the
+     * employer's own site is, is stated by the board's own link; who the
+     * employer is called, is stated by whatever label the board happens to put
+     * on its logo. Requiring both before either could be used meant a board
+     * that names no employer also published no domain, and the dashboard fell
+     * back to a lettermark on a page whose employer site was stated plainly.
+     * Live BDO is that board: its logo carries a decorative label and an
+     * employer-owned destination.
+     *
+     * Two destinations remain a conflict, because then it is not clear whose
+     * board this is. Two names across two links are the same conflict. A
+     * single link with no usable name is neither.
+     */
+    if (boardEmployerUrls.size === 1 && boardEmployerNames.size <= 1) {
       observePostingField("boardEmployer", posting, posting);
     }
 
@@ -1764,10 +1780,12 @@ export function collectPageSignals(
     ...(observedPostingFields.length > 0
       ? { observedPosting: { fields: observedPostingFields } }
       : {}),
-    ...(boardEmployerUrls.size === 1 && boardEmployerNames.size === 1
+    ...(boardEmployerUrls.size === 1 && boardEmployerNames.size <= 1
       ? {
           boardEmployer: {
-            name: [...boardEmployerNames][0]!,
+            ...(boardEmployerNames.size === 1
+              ? { name: [...boardEmployerNames][0]! }
+              : {}),
             url: [...boardEmployerUrls][0]!,
           },
         }

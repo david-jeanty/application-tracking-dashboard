@@ -565,6 +565,19 @@ or nesting depth. A site that cannot be read reliably returns blanks.
   generic, empty or address-shaped source is passed over rather than accepted.
   Disagreement is judged across links, where two different employers is a real
   conflict and still refuses both.
+
+  The destination and the name are then judged apart. They answer different
+  questions — where the employer's site is, and what the employer is called —
+  and they fail for different reasons. Live BDO states the first and not the
+  second: its logo carries a decorative label beside an employer-owned
+  destination. Requiring both before either could be used left that board
+  publishing no employer domain at all, so the dashboard drew a lettermark for
+  an employer whose own site the page had stated plainly. The domain is now
+  admitted on the strength of the link, the name on the strength of the label,
+  and both still pass through the same selected-root identity gate: neither is
+  admitted on a root that could not be tied to the current posting. A board
+  that names no employer therefore yields the right mark and a blank Company
+  the student types, which is the honest division of what the page said.
   **Source is never set to `Workday`**: Workday is an applicant-tracking system,
   not where a student found the opportunity. **A Workday hostname is never a
   company domain**, and the employer is left empty unless the posting itself

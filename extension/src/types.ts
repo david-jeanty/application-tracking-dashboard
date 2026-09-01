@@ -81,9 +81,17 @@ export type PageSignals = {
     /** Employer-owned destination explicitly stated in bounded page copy. */
     employerUrl?: string;
   };
-  /** Employer name and destination stated by one Workday board logo link. */
+  /**
+   * What one Workday board logo link states about the employer.
+   *
+   * The destination is the load-bearing half and is always present: it is the
+   * board's own statement of where the employer's site is. The name is whatever
+   * label the board put on its logo, and boards routinely put a decorative one
+   * there — so it is optional, and its absence withholds the employer's name
+   * without withholding the destination.
+   */
   boardEmployer?: {
-    name: string;
+    name?: string;
     url: string;
   };
   /** Posting ids observed at the same roots that supplied identity-aware evidence. */
@@ -348,9 +356,10 @@ export function isPageSignals(value: unknown): value is PageSignals {
     const board = boardEmployer as Record<string, unknown>;
     if (
       !Object.keys(board).every((key) => key === "name" || key === "url") ||
-      typeof board.name !== "string" ||
-      board.name.length === 0 ||
-      board.name.length > 160 ||
+      (board.name !== undefined &&
+        (typeof board.name !== "string" ||
+          board.name.length === 0 ||
+          board.name.length > 160)) ||
       !isHttpUrl(board.url)
     ) {
       return false;

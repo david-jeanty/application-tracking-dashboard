@@ -248,7 +248,57 @@ describe("Workday structured and employer-domain safety", () => {
     expect(job.companyDomain).toBeUndefined();
   });
 
-  it("does not turn a generic logo name into the employer even with a safe destination", () => {
+  /**
+   * Live BDO: a decorative logo label beside an employer-owned destination.
+   *
+   * The board states where the employer's site is and does not state what the
+   * employer is called. Those are different facts and they fail for different
+   * reasons, so the name is refused and the destination is not: the dashboard
+   * draws the right mark, and the student types the name they can see. Tying
+   * the two together left a page that named its employer's site publishing no
+   * domain at all.
+   */
+  it("keeps a safe destination when the logo name is only decorative", () => {
+    const job = extractJob(
+      readSitePage(
+        workdayRoot({
+          heading: "Canada",
+          logoLinkLabel: "Careers home",
+          logoName: "Company logo",
+          employerUrl: "https://www.bdo.ca/en-ca/careers/",
+          description: "Selected posting text with no employer declaration.",
+        }),
+        DIRECT_B,
+      ),
+    );
+
+    expect(job.company).toBeUndefined();
+    expect(job.companyDomain).toBe("bdo.ca");
+    expect(job.jobTitle).toBe("Co-op or Intern, M&A and Capital Markets");
+  });
+
+  it("keeps the same destination on the selected split pane", () => {
+    const job = extractJob(
+      readSitePage(
+        workdayRoot({
+          root: "jobDetails",
+          before: '<section data-automation-id="jobResults"><ul><li>Another posting</li></ul></section>',
+          heading: "Canada",
+          logoLinkLabel: "Careers home",
+          logoName: "Company logo",
+          employerUrl: "https://www.bdo.ca/en-ca/careers/",
+          description: "Selected posting text with no employer declaration.",
+        }),
+        DETAILS_B,
+      ),
+    );
+
+    expect(job.company).toBeUndefined();
+    expect(job.companyDomain).toBe("bdo.ca");
+  });
+
+  /** A decorative label never becomes the employer, whatever the destination. */
+  it("does not turn a generic logo name into the employer", () => {
     const job = extractJob(
       readSitePage(
         workdayRoot({
@@ -261,7 +311,45 @@ describe("Workday structured and employer-domain safety", () => {
     );
 
     expect(job.company).toBeUndefined();
+  });
+
+  /** The destination is still the only thing a domain may come from. */
+  it("refuses a decorative-label board whose destination is the tenant itself", () => {
+    const job = extractJob(
+      readSitePage(
+        workdayRoot({
+          heading: "Canada",
+          logoLinkLabel: "Careers home",
+          logoName: "Company logo",
+          employerUrl: "https://bdo.wd3.myworkdayjobs.com/en-US/BDO",
+          description: "Selected posting text with no employer declaration.",
+        }),
+        DIRECT_B,
+      ),
+    );
+
+    expect(job.company).toBeUndefined();
     expect(job.companyDomain).toBeUndefined();
+  });
+
+  /** A nameless destination is still bound to the verified selected root. */
+  it("suppresses a nameless board domain when the selected root mismatches", () => {
+    const job = extractJob(
+      readSitePage(
+        workdayRoot({
+          requisitions: [JOB_A],
+          heading: "Canada",
+          logoLinkLabel: "Careers home",
+          logoName: "Company logo",
+          employerUrl: "https://www.bdo.ca/en-ca/careers/",
+          description: "Selected posting text with no employer declaration.",
+        }),
+        DIRECT_B,
+      ),
+    );
+
+    expect(job.companyDomain).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
   });
 
   it("requires a safe employer destination before a logo name can establish company", () => {

@@ -130,23 +130,38 @@ function identityAwareResult(
     });
   }
   if (site === "workday" && signals.boardEmployer) {
+    /**
+     * The destination and the name are judged apart, because they answer
+     * different questions and fail for different reasons.
+     *
+     * A domain is admitted on the strength of where the board's own link
+     * points, after the ATS/board/social/redirector rejection list has had it.
+     * A name is admitted on the strength of what the board called itself, and
+     * a decorative label — `Company Logo`, a file name, a region — establishes
+     * nothing. Tying the first to the second meant a board with a decorative
+     * label published no employer domain either, and the dashboard drew a
+     * lettermark for an employer whose own site the page had stated. Both
+     * still pass through the same selected-root identity gate below; neither
+     * is admitted on a root that could not be tied to the current posting.
+     */
     const companyDomain = employerDomainFromUrl(signals.boardEmployer.url);
-    if (
-      companyDomain &&
-      plausibleBoardEmployerName(signals.boardEmployer.name)
-    ) {
-      candidates.push({
-        field: "company",
-        value: signals.boardEmployer.name,
-        rawField: "boardEmployer",
-        method: "board_branding",
-      });
+    if (companyDomain) {
       candidates.push({
         field: "companyDomain",
         value: companyDomain,
         rawField: "boardEmployer",
         method: "board_branding",
       });
+
+      const name = signals.boardEmployer.name;
+      if (name && plausibleBoardEmployerName(name)) {
+        candidates.push({
+          field: "company",
+          value: name,
+          rawField: "boardEmployer",
+          method: "board_branding",
+        });
+      }
     }
   }
   if (site === "workday" && signals.selectedLinks?.employerUrl) {
