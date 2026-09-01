@@ -6,11 +6,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { buildDemoDataset } from "@/lib/demo/dataset";
 import { DEMO_BASE_PATH } from "@/lib/demo/paths";
 import { demoToday } from "@/lib/demo/today";
-import {
-  ASSISTANT_CAN,
-  ASSISTANT_CANNOT,
-  ASSISTANT_OWNERSHIP_NOTE,
-} from "@/lib/mcp/capabilities";
+import { ASSISTANT_OWNERSHIP_NOTE } from "@/lib/mcp/capabilities";
 
 /**
  * The statuses the preview shows, in the order it shows them.
@@ -24,31 +20,18 @@ import {
 const PREVIEW_STATUSES = ["Offer", "Interview", "Applied", "Interested"] as const;
 
 /**
- * What a student asks their AI, and what that does to the record.
+ * What a student asks their AI, once Interndex is connected.
  *
- * Each line here is one of the registered MCP tools stated as a sentence
- * somebody would actually say: `save_job`, `list_jobs`, `list_jobs` narrowed to
- * what is due, and `update_job`. Nothing in this panel describes an action the
- * connection cannot perform, which is the whole reason the second half of each
- * row exists — the ask is the visitor's language, the effect is Interndex's.
+ * Three sentences somebody would actually say, each one a registered tool:
+ * `list_jobs` by stage, `list_jobs` read for what is due, and `update_job`.
+ * They belong below the fold rather than in the hero preview — the preview's
+ * job is to show the record, and a list of prompts stacked under it turned it
+ * into documentation.
  */
-const ASSISTANT_EXCHANGES = [
-  {
-    ask: "Save this posting to Interndex.",
-    effect: "Adds a record with the title, employer, and deadline.",
-  },
-  {
-    ask: "Show jobs I have applied to.",
-    effect: "Reads your applications, filtered by stage.",
-  },
-  {
-    ask: "Which applications need a follow-up this week?",
-    effect: "Reads the deadline and next action on each one.",
-  },
-  {
-    ask: "Update this application to Interview.",
-    effect: "Moves the record and keeps the status history.",
-  },
+const ASSISTANT_ASKS = [
+  "Show jobs I have applied to.",
+  "Which applications need a follow-up this week?",
+  "Update this application to Interview.",
 ] as const;
 
 /**
@@ -148,13 +131,14 @@ export function HomePage() {
       <main id="main-content">
         {/* ------------------------------------------------------------ hero */}
         {/*
-          One claim, the two things it depends on, and somewhere to go. The
-          visual beside it is not a mockup of an assistant: it is the product's
-          own list component holding four demo records, with the asks a
-          connected AI can actually serve stated underneath them.
+          One claim, one line saying which AI it holds for, and two ways in.
+          Beside it, the product: the same list component Interndex renders,
+          holding four demo rows across four stages. What a connected AI can be
+          asked lives in its own section below — inside the preview it made the
+          hero read as an explanation rather than as the thing explained.
         */}
         <section className="border-b border-border bg-brand-soft">
-          <div className="mx-auto max-w-[1120px] px-5 py-10 sm:px-8 sm:py-14 lg:grid lg:grid-cols-[minmax(0,45fr)_minmax(0,55fr)] lg:items-center lg:gap-14 lg:py-20">
+          <div className="mx-auto max-w-[1120px] px-5 py-10 sm:px-8 sm:py-14 lg:grid lg:grid-cols-[minmax(0,44fr)_minmax(0,56fr)] lg:items-start lg:gap-14 lg:py-20">
             <div>
               <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-accent">
                 Your AI&rsquo;s job-search context
@@ -164,8 +148,8 @@ export function HomePage() {
               </h1>
               <p className="mt-4 max-w-md text-[15px] leading-7 text-foreground-secondary sm:text-[16px] sm:leading-8">
                 Save every posting and application in one place. Connect
-                Interndex to ChatGPT, Claude, or another MCP-compatible AI so
-                it can find, update, and remember your job-search context.
+                ChatGPT, Claude, or another MCP-compatible AI so it has the
+                context to help with your search.
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3 sm:mt-8">
@@ -181,24 +165,14 @@ export function HomePage() {
                 </ButtonLink>
               </div>
               {/*
-                The compatibility line sits directly under the actions because
-                it answers the question the primary button raises — which AI? —
-                before a visitor has to scroll to find out.
+                The one line under the actions, and it answers the question the
+                primary button raises — which AI? — where the question is
+                asked. Everything else a visitor might want here (no account
+                for the demo, signing in) is a scroll or a header away, and
+                stacking it all under the buttons is what made the hero heavy.
               */}
-              <p className="mt-4 text-[13px] font-medium leading-6 text-foreground">
+              <p className="mt-4 text-[13px] leading-6 text-foreground-secondary">
                 Works with ChatGPT · Claude · MCP-compatible AI
-              </p>
-              {/*
-                Two lines rather than one sentence: at a phone width a single
-                line broke after "Sign", leaving "in" alone on the next row.
-              */}
-              <p className="mt-1.5 text-[13px] leading-6 text-foreground-muted">
-                The demo needs no account.
-              </p>
-              <p className="mt-0.5 text-[13px] leading-6 text-foreground-muted">
-                <Link className={workflowLinkClassName} href="/login">
-                  Already have an account? Sign in
-                </Link>
               </p>
             </div>
 
@@ -209,50 +183,21 @@ export function HomePage() {
                 moment the preview rendered.
               */}
               <h2 className="text-[13px] font-normal text-foreground-muted">
-                Your applications in Interndex, and what your AI can ask of them
+                Your applications, as Interndex keeps them
               </h2>
-
-              <div className="mt-4 overflow-hidden rounded-surface border border-border bg-surface">
-                {/*
-                  The production list component, given four records out of the
-                  demo workspace. Not a picture of the product — the product,
-                  and the dominant half of this visual.
-                */}
+              {/*
+                The production list component, given four records out of the
+                demo workspace. Not a picture of the product — the product, and
+                the only thing in this column.
+              */}
+              <div className="mt-4">
                 <ApplicationRecords
                   applications={preview}
                   basePath={DEMO_BASE_PATH}
                   history={demo.statusEvents}
                   showSummary={false}
                 />
-
-                {/*
-                  The connection, shown as what it does to the records above
-                  rather than as a chat window floating beside them. Each ask
-                  is one registered tool; each effect is what that tool changes
-                  or reads in the list directly above it.
-                */}
-                <div className="bg-surface-muted/60 px-4 py-4 sm:px-5 sm:py-5">
-                  <p className="text-[11px] uppercase tracking-[0.07em] text-foreground-muted">
-                    Asked in ChatGPT or Claude, answered from these records
-                  </p>
-                  <ul className="mt-3 space-y-3">
-                    {ASSISTANT_EXCHANGES.map((exchange) => (
-                      <li key={exchange.ask}>
-                        <p className="text-[13px] font-medium leading-5 text-foreground">
-                          &ldquo;{exchange.ask}&rdquo;
-                        </p>
-                        <p className="mt-0.5 flex gap-2 text-[12px] leading-5 text-foreground-secondary">
-                          <span aria-hidden="true" className="text-accent">
-                            &rarr;
-                          </span>
-                          <span>{exchange.effect}</span>
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
               </div>
-
               <p className="mt-4 text-[12px] leading-6 text-foreground-muted">
                 Sample applications from the demo workspace. They are
                 fictional and shown for demonstration only; the employers
@@ -358,12 +303,12 @@ export function HomePage() {
                 discussed with it.
               </p>
               <p className="mt-4 max-w-xl text-[14px] leading-7 text-foreground-secondary">
-                The connection uses MCP, the open standard ChatGPT, Claude and
-                other clients use to reach outside tools. You approve it once
-                from Settings, and you can remove it there at any time.
-                Interndex does not include an assistant and does not require
-                one; today this has been tested with Claude, and other
-                MCP-compatible clients connect at the same address.
+                The connection uses MCP, the open standard those clients use to
+                reach outside tools. You approve it once from Settings and can
+                remove it there at any time. Interndex does not include an
+                assistant and does not require one; today this has been tested
+                with Claude, and other MCP-compatible clients connect at the
+                same address.
               </p>
 
               <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -377,32 +322,27 @@ export function HomePage() {
             </div>
 
             {/*
-              The permissions, stated on the public page in the same words the
-              consent screen and Settings use — one list, imported rather than
-              re-written, so a homepage claim cannot outrun the tool surface.
+              Three things a student can say, on hairlines rather than in a
+              card: the point is that they are ordinary sentences answered from
+              the records above, not a chat interface and not a tool reference.
             */}
-            <div className="mt-10 lg:mt-0">
-              <div className="rounded-surface border border-border bg-surface p-5 sm:p-6">
-                <h3 className="text-[15px] font-medium text-foreground">
-                  What a connected AI can do
-                </h3>
-                <ul className="mt-3 space-y-1 text-[14px] leading-6 text-foreground-secondary">
-                  {ASSISTANT_CAN.map((capability) => (
-                    <li key={capability}>{capability}</li>
-                  ))}
-                </ul>
-                <h3 className="mt-5 text-[15px] font-medium text-foreground">
-                  What it cannot do
-                </h3>
-                <ul className="mt-3 space-y-1 text-[14px] leading-6 text-foreground-secondary">
-                  {ASSISTANT_CANNOT.map((limit) => (
-                    <li key={limit}>{limit}</li>
-                  ))}
-                </ul>
-                <p className="mt-4 text-[13px] leading-6 text-foreground-muted">
-                  {ASSISTANT_OWNERSHIP_NOTE}
-                </p>
-              </div>
+            <div className="mt-10 lg:mt-2">
+              <p className="text-[11px] uppercase tracking-[0.07em] text-foreground-muted">
+                Once connected, you can ask
+              </p>
+              <ul className="mt-3 divide-y divide-border border-y border-border">
+                {ASSISTANT_ASKS.map((ask) => (
+                  <li
+                    className="py-3 text-[15px] leading-6 text-foreground"
+                    key={ask}
+                  >
+                    &ldquo;{ask}&rdquo;
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-[13px] leading-6 text-foreground-muted">
+                {ASSISTANT_OWNERSHIP_NOTE}
+              </p>
             </div>
           </div>
         </section>

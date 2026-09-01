@@ -17,8 +17,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 const { default: RootPage } = await import("@/app/page");
 const { HomePage } = await import("@/components/public/home-page");
-const { ASSISTANT_CAN, ASSISTANT_CANNOT, ASSISTANT_OWNERSHIP_NOTE } =
-  await import("@/lib/mcp/capabilities");
+const { ASSISTANT_OWNERSHIP_NOTE } = await import("@/lib/mcp/capabilities");
 
 const HERO_HEADING = "The job tracker your AI can use.";
 
@@ -97,7 +96,7 @@ describe("the homepage's front door", () => {
     ).toBeInTheDocument();
     // ChatGPT and Claude are named before a visitor has to decode an acronym.
     expect(
-      within(hero).getByText(/Connect Interndex to ChatGPT, Claude, or another/),
+      within(hero).getByText(/Connect ChatGPT, Claude, or another MCP-compatible AI/),
     ).toBeInTheDocument();
   });
 
@@ -114,9 +113,31 @@ describe("the homepage's front door", () => {
     expect(
       within(hero).getByRole("link", { name: "Explore the demo" }),
     ).toHaveAttribute("href", "/demo");
+  });
+
+  it("keeps the hero to the product and one line of trust copy", () => {
+    render(<HomePage />);
+
+    const hero = screen
+      .getByRole("heading", { level: 1 })
+      .closest("section") as HTMLElement;
+    const visual = within(hero).getByRole("heading", {
+      name: "Your applications, as Interndex keeps them",
+    }).parentElement as HTMLElement;
+
+    // The preview column is the record list and its provenance note, and
+    // nothing else: no prompt panel, no tool-by-tool explanation.
+    expect(visual.querySelector('ul[aria-label="Applications"]')).not.toBeNull();
     expect(
-      within(hero).getByRole("link", { name: "Already have an account? Sign in" }),
-    ).toHaveAttribute("href", "/login");
+      within(hero).queryByText(/Asked in ChatGPT or Claude/),
+    ).not.toBeInTheDocument();
+    for (const ask of [
+      /Save this posting to Interndex/,
+      /Show jobs I have applied to/,
+      /Update this application to Interview/,
+    ]) {
+      expect(within(hero).queryByText(ask)).not.toBeInTheDocument();
+    }
   });
 
   it("says which AI clients work, right under the hero actions", () => {
@@ -133,6 +154,9 @@ describe("the homepage's front door", () => {
     expect(ctaRow.nextElementSibling?.textContent).toBe(
       "Works with ChatGPT · Claude · MCP-compatible AI",
     );
+    // And it is the only line under the actions, so the hero stays a claim
+    // and a product rather than a stack of small print.
+    expect(ctaRow.nextElementSibling?.nextElementSibling).toBeNull();
   });
 
   it("keeps the header's demo route and account links", () => {
@@ -165,10 +189,12 @@ describe("the homepage's front door", () => {
     expect(demoLinks.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("says out loud that the demo needs no account", () => {
+  it("still says somewhere that the demo needs no account", () => {
     render(<HomePage />);
 
-    expect(screen.getByText(/The demo needs no account/)).toBeInTheDocument();
+    // Out of the hero, but not off the page: the closing call to action is
+    // where a visitor who read that far decides whether to look.
+    expect(screen.getByText(/No account, nothing to sign up/)).toBeInTheDocument();
   });
 
   it("offers both ways into an account", () => {
@@ -271,7 +297,7 @@ describe("what the homepage claims", () => {
     ).toBeInTheDocument();
   });
 
-  it("states the connection's permissions in the same words the consent screen uses", () => {
+  it("shows what a connected AI is asked, beside the promise it keeps", () => {
     render(<HomePage />);
 
     const connect = screen
@@ -280,11 +306,14 @@ describe("what the homepage claims", () => {
       })
       .closest("section") as HTMLElement;
 
-    for (const capability of ASSISTANT_CAN) {
-      expect(within(connect).getByText(capability)).toBeInTheDocument();
-    }
-    for (const limit of ASSISTANT_CANNOT) {
-      expect(within(connect).getByText(limit)).toBeInTheDocument();
+    // Three ordinary sentences, each one a registered tool, below the fold
+    // rather than stacked under the hero preview.
+    for (const ask of [
+      "“Show jobs I have applied to.”",
+      "“Which applications need a follow-up this week?”",
+      "“Update this application to Interview.”",
+    ]) {
+      expect(within(connect).getByText(ask)).toBeInTheDocument();
     }
     expect(
       within(connect).getByText(ASSISTANT_OWNERSHIP_NOTE),
@@ -359,36 +388,6 @@ describe("what the homepage claims", () => {
     ]) {
       expect(text).not.toMatch(absent);
     }
-  });
-});
-
-describe("the hero's AI panel", () => {
-  it("shows asks the registered tools can actually serve", () => {
-    render(<HomePage />);
-
-    for (const ask of [
-      "“Save this posting to Interndex.”",
-      "“Show jobs I have applied to.”",
-      "“Which applications need a follow-up this week?”",
-      "“Update this application to Interview.”",
-    ]) {
-      expect(screen.getByText(ask)).toBeInTheDocument();
-    }
-  });
-
-  it("ties each ask to the records shown beside it", () => {
-    const { container } = render(<HomePage />);
-    const panel = screen
-      .getByText(/Asked in ChatGPT or Claude, answered from these records/)
-      .closest("div") as HTMLElement;
-    const list = container.querySelector('ul[aria-label="Applications"]');
-
-    expect(panel).not.toBeNull();
-    expect(list).not.toBeNull();
-    // The panel is part of the same bordered product surface as the record
-    // list, not a separate floating card somewhere else on the page.
-    const surface = panel.closest('div[class*="rounded-surface"]');
-    expect(surface?.contains(list as Node)).toBe(true);
   });
 });
 

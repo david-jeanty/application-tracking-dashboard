@@ -102,6 +102,9 @@ test("the homepage's first fold holds the message, both CTAs and the product on 
   await expect(
     page.locator('ul[aria-label="Applications"] > li').first(),
   ).toBeInViewport();
+  // And nothing else stacked under the actions: the compatibility line is the
+  // last thing in the hero's left column.
+  await expect(page.getByText(/Already have an account/)).toHaveCount(0);
 });
 
 test("the homepage header stays a single compact line on mobile", async ({
