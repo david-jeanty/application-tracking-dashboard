@@ -555,6 +555,16 @@ or nesting depth. A site that cannot be read reliably returns blanks.
   passes the ATS/job-board/social/redirect/CDN rejection list. Logo name and
   destination use a distinct board-employer evidence path; they are not treated
   as job-description links or required to appear inside the selected root.
+
+  One logo link states its employer at most once. A single link commonly
+  carries two accessible names — the image's `alt` describes the mark, the
+  anchor's `aria-label` describes where the link goes — and reading both as
+  competing employers is what blanked Company on the live BDO board while
+  title, locations and description all filled. The mark's own description is
+  read first because it names the employer rather than a destination; a
+  generic, empty or address-shaped source is passed over rather than accepted.
+  Disagreement is judged across links, where two different employers is a real
+  conflict and still refuses both.
   **Source is never set to `Workday`**: Workday is an applicant-tracking system,
   not where a student found the opportunity. **A Workday hostname is never a
   company domain**, and the employer is left empty unless the posting itself

@@ -1468,6 +1468,56 @@ export function collectPageSignals(
     // The logo link is Workday's explicit board-level employer destination.
     // It is stronger than arbitrary links in posting prose, and remains
     // subject to the adapter's same-root identity gate and host blocklist.
+    const genericAccessibleName =
+      /^(?:canada|united states|usa|us|global|english|fran[cç]ais|company|logo|careers?|jobs?|home(?:page)?)$/i;
+
+    /**
+     * The employer one logo link names, from the first source that states one.
+     *
+     * One link commonly carries more than one accessible name: the image's
+     * `alt` describes the mark, and the anchor's `aria-label` describes where
+     * the link goes. Those are two descriptions of one employer, not two
+     * employers — collecting both and then requiring the set to hold exactly
+     * one entry made a board that labels its logo twice look like a board that
+     * could not decide who it belonged to, and blanked the company on a page
+     * that stated it plainly. Live BDO is exactly that page.
+     *
+     * So one name is chosen per link, and disagreement is judged across links
+     * where it is a real conflict. The image's own description comes first
+     * because it names the mark; a link label such as `Careers home` names a
+     * destination. A source that is generic, empty or address-shaped is passed
+     * over rather than accepted, so a plain `alt="logo"` still falls through to
+     * a label that does name the employer.
+     */
+    const boardEmployerNameFrom = (logoLink: Element): string | undefined => {
+      const sources = [
+        logoLink.querySelector("img[alt]")?.getAttribute("alt"),
+        logoLink
+          .querySelector('[role="img"][aria-label]')
+          ?.getAttribute("aria-label"),
+        logoLink.getAttribute("aria-label"),
+      ];
+
+      for (const source of sources) {
+        const candidate = (source?.trim() ?? "")
+          .replace(/(?:\s+(?:logo|careers?|jobs?|home(?:page)?))+\s*$/i, "")
+          .replace(/^careers?\s+at\s+/i, "")
+          .trim();
+
+        if (
+          candidate &&
+          candidate.length <= 160 &&
+          /[a-z]/i.test(candidate) &&
+          !genericAccessibleName.test(candidate) &&
+          !/^https?:|\.[a-z]{2,}(?:\/|$)/i.test(candidate)
+        ) {
+          return candidate;
+        }
+      }
+
+      return undefined;
+    };
+
     for (const logoLink of Array.from(
       document.querySelectorAll('a[data-automation-id="logoLink"][href]'),
     )) {
@@ -1475,35 +1525,8 @@ export function collectPageSignals(
       if (!url) continue;
       boardEmployerUrls.add(url);
 
-      const accessibleNames = [
-        logoLink.getAttribute("aria-label"),
-        logoLink.querySelector("img[alt]")?.getAttribute("alt"),
-        logoLink
-          .querySelector('[role="img"][aria-label]')
-          ?.getAttribute("aria-label"),
-      ]
-        .map((value) =>
-          (value?.trim() ?? "")
-            .replace(
-              /(?:\s+(?:logo|careers?|jobs?|home(?:page)?))+\s*$/i,
-              "",
-            )
-            .replace(/^careers?\s+at\s+/i, "")
-            .trim(),
-        )
-        .filter(Boolean);
-      const genericAccessibleName =
-        /^(?:canada|united states|usa|us|global|english|fran[cç]ais|company|logo|careers?|jobs?|home(?:page)?)$/i;
-      for (const accessibleName of accessibleNames) {
-        if (
-          accessibleName.length <= 160 &&
-          /[a-z]/i.test(accessibleName) &&
-          !genericAccessibleName.test(accessibleName) &&
-          !/^https?:|\.[a-z]{2,}(?:\/|$)/i.test(accessibleName)
-        ) {
-          boardEmployerNames.add(accessibleName);
-        }
-      }
+      const name = boardEmployerNameFrom(logoLink);
+      if (name) boardEmployerNames.add(name);
     }
     if (boardEmployerUrls.size === 1 && boardEmployerNames.size === 1) {
       observePostingField("boardEmployer", posting, posting);

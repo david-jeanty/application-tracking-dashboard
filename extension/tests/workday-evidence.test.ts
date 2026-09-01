@@ -301,6 +301,133 @@ describe("Workday structured and employer-domain safety", () => {
     expect(job.companyDomain).toBe("td.com");
   });
 
+  /**
+   * The live BDO board, whose one logo link carries two accessible names.
+   *
+   * `aria-label` describes where the link goes and `alt` describes the mark,
+   * and both are plausible employer names. An earlier version collected both
+   * and then required exactly one, so a board that labels its logo twice looked
+   * like a board that could not say who it belonged to: title, locations and
+   * description all filled while Company stayed blank on a page that named the
+   * employer plainly. These are the cases that caught it.
+   */
+  describe("one logo link that states its employer more than once", () => {
+    const twiceLabelled = (options = {}) =>
+      workdayRoot({
+        heading: "Canada",
+        logoLinkLabel: "BDO Canada",
+        logoName: "BDO logo",
+        employerUrl: "https://www.bdo.ca/en-ca/careers/",
+        description: "Selected posting text with no employer declaration.",
+        ...options,
+      });
+
+    it("establishes the employer on a direct posting page", () => {
+      const job = extractJob(readSitePage(twiceLabelled(), DIRECT_B));
+
+      expect(job.company).toBe("BDO");
+      expect(job.companyDomain).toBe("bdo.ca");
+      // The rest of the verified root still projects exactly as before.
+      expect(job.jobTitle).toBe("Co-op or Intern, M&A and Capital Markets");
+      expect(job.location).toBe("Vancouver • Calgary - 8th Ave SW • Edmonton - 103 St");
+    });
+
+    it("establishes the employer on a selected split pane", () => {
+      const job = extractJob(
+        readSitePage(
+          twiceLabelled({
+            root: "jobDetails",
+            before: '<section data-automation-id="jobResults"><ul><li>Another posting</li></ul></section>',
+          }),
+          DETAILS_B,
+        ),
+      );
+
+      expect(job.company).toBe("BDO");
+      expect(job.companyDomain).toBe("bdo.ca");
+      expect(job.jobTitle).toBe("Co-op or Intern, M&A and Capital Markets");
+    });
+
+    /** A generic mark description is passed over, not treated as a conflict. */
+    it("falls through a generic alt to the label that names the employer", () => {
+      const job = extractJob(
+        readSitePage(
+          twiceLabelled({ logoName: "logo", logoLinkLabel: "BDO" }),
+          DIRECT_B,
+        ),
+      );
+
+      expect(job.company).toBe("BDO");
+      expect(job.companyDomain).toBe("bdo.ca");
+    });
+
+    /** Two links naming two employers is a real conflict and still refused. */
+    it("refuses two logo links that name different employers", () => {
+      const job = extractJob(
+        readSitePage(
+          twiceLabelled({
+            before:
+              '<a aria-label="Northwind" data-automation-id="logoLink" href="https://www.northwind.example/"><img data-automation-id="logo" alt="Northwind logo" /></a>',
+          }),
+          DIRECT_B,
+        ),
+      );
+
+      expect(job.company).toBeUndefined();
+      expect(job.companyDomain).toBeUndefined();
+    });
+
+    /** Board evidence is employer identity; the root is what binds the job. */
+    it("suppresses board company and domain when the selected root mismatches", () => {
+      const job = extractJob(
+        readSitePage(twiceLabelled({ requisitions: [JOB_A] }), DIRECT_B),
+      );
+
+      expect(job.company).toBeUndefined();
+      expect(job.companyDomain).toBeUndefined();
+      expect(job.jobTitle).toBeUndefined();
+    });
+
+    it("suppresses board company and domain when the root is ambiguous", () => {
+      const job = extractJob(
+        readSitePage(
+          twiceLabelled({ requisitions: [JOB_B, JOB_A] }),
+          DIRECT_B,
+        ),
+      );
+
+      expect(job.company).toBeUndefined();
+      expect(job.companyDomain).toBeUndefined();
+    });
+
+    it("cannot establish an employer with no selected root at all", () => {
+      const html = `<body>
+        <h1>Canada</h1>
+        <a aria-label="BDO Canada" data-automation-id="logoLink" href="https://www.bdo.ca/en-ca/careers/"><img data-automation-id="logo" alt="BDO logo" /></a>
+        <section data-automation-id="jobResults"><ul><li>A posting</li></ul></section>
+      </body>`;
+
+      const job = extractJob(readSitePage(html, DETAILS_B));
+
+      expect(job.company).toBeUndefined();
+      expect(job.companyDomain).toBeUndefined();
+    });
+
+    it("still refuses a Workday destination however the logo is labelled", () => {
+      const job = extractJob(
+        readSitePage(
+          twiceLabelled({
+            employerUrl: "https://bdo.wd3.myworkdayjobs.com/en-US/BDO",
+          }),
+          DIRECT_B,
+        ),
+      );
+
+      expect(job.company).toBeUndefined();
+      expect(job.companyDomain).toBeUndefined();
+    });
+  });
+
   it("keeps correlated Workday structured data observable but untrusted", () => {
     const structured = jsonLd({
       "@context": "https://schema.org",
