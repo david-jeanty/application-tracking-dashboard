@@ -96,7 +96,8 @@ export type SiteFieldKey =
 export type SiteStrategy =
   | "linkedin-job-detail"
   | "linkedin-split-pane"
-  | "workday-job-detail";
+  | "workday-job-detail"
+  | "workday-split-pane";
 
 /**
  * How to find the document that is actually showing the selected posting.
@@ -145,7 +146,7 @@ export type PageReadRules = {
 
 /** What one address resolves to, before the site's defaults are applied. */
 type RoutedRead = {
-  strategy: SiteStrategy;
+  strategy?: SiteStrategy;
   jobId?: string;
   resolveFrame?: FrameResolution;
   workdayTenant?: string;
@@ -236,12 +237,56 @@ function linkedInRoute(url: URL): RoutedRead {
   };
 }
 
-/** Workday tenant branding corroborates sidebar evidence; it never originates it. */
+/**
+ * The requisition token Workday writes at the end of both supported routes.
+ *
+ * Direct pages use `/job/.../<slug>_<requisition>` and selected search-result
+ * panes use `/details/<slug>_<requisition>`. The rendered selected root repeats
+ * that requisition in its own `requisitionId` field, which gives the collector
+ * a page-local identity comparison without consulting document order or the
+ * results rail.
+ *
+ * Common Workday ids contain their own separator (`R_1499751`,
+ * `JR-0107547`). A copied posting URL may append `-1` after such an id while
+ * the rendered requisition omits that copy suffix, so that one documented URL
+ * form is normalized here. Short ids and arbitrary tenant slugs are never
+ * rewritten.
+ */
+function workdayJobIdentifier(value: string): string | undefined {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return undefined;
+  }
+
+  const token =
+    /_((?:[A-Za-z]{1,12}[_-])[A-Za-z0-9-]{1,50})$/.exec(decoded)?.[1] ??
+    /_([A-Za-z0-9-]{1,64})$/.exec(decoded)?.[1];
+  if (!token) return undefined;
+
+  return /^((?:JR|REQ)[_-]?\d{4,}|R[_-]\d{4,})-\d+$/i.exec(token)?.[1] ?? token;
+}
+
+/** Workday tenant branding corroborates page evidence; it never originates it. */
 function workdayRoute(url: URL): RoutedRead {
   const tenant = url.hostname.split(".")[0]?.trim().toLowerCase();
+  const segments = url.pathname.split("/").filter(Boolean);
+  const direct = segments.lastIndexOf("job");
+  const details = segments.lastIndexOf("details");
+  const routeKind =
+    direct >= 0 && direct < segments.length - 1
+      ? "workday-job-detail"
+      : details >= 0 && details === segments.length - 2
+        ? "workday-split-pane"
+        : undefined;
+  const finalSegment = segments.at(-1);
+  const jobId = routeKind && finalSegment
+    ? workdayJobIdentifier(finalSegment)
+    : undefined;
 
   return {
-    strategy: "workday-job-detail",
+    ...(routeKind && jobId ? { strategy: routeKind, jobId } : {}),
     ...(tenant && /^[a-z0-9-]{1,64}$/.test(tenant)
       ? { workdayTenant: tenant }
       : {}),

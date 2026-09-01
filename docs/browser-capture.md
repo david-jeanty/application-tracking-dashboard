@@ -389,7 +389,8 @@ extractJobReport(pageSignals)
         ├── structured data the publisher asserts   (JSON-LD, then microdata)
         ├── deterministic capture adapter
         │       ├── LinkedIn identity-aware evidence
-        │       ├── Indeed / Workday compatibility
+        │       ├── Workday identity-aware evidence
+        │       ├── Indeed compatibility
         │       └── generic-page compatibility
         │
         └── a conservative generic fallback         (a title, with corroboration)
@@ -411,14 +412,14 @@ Nothing below the first level knows that Interndex, Supabase, OAuth,
 `applicationCreationSchema` or MCP exist; site rules extract facts from a page
 and stop there.
 
-#### P1.1 adapter and page-local evidence boundary
+#### P1.1/P1.2 adapter and page-local evidence boundary
 
 Adapter selection is based only on the invoked page URL and the registry's
-declared order. It does not inspect document order. LinkedIn is the only P1.1
-adapter that claims page-local posting-identity support; Indeed and Workday use
-their unchanged site-field compatibility path, while Greenhouse, Lever,
-SmartRecruiters and unrecognized pages use the unchanged generic path. Those
-compatibility adapters report identity as unsupported, not unobserved.
+declared order. It does not inspect document order. LinkedIn was the first
+adapter to claim page-local posting-identity support; Workday is the second.
+Indeed keeps its unchanged site-field compatibility path, while Greenhouse,
+Lever, SmartRecruiters and unrecognized pages keep the unchanged generic path.
+Those compatibility adapters report identity as unsupported, not unobserved.
 
 For LinkedIn, the collector records each field beside the posting ids written
 on the same bounded root that supplied it. A matching root may project. A root
@@ -427,6 +428,15 @@ a different posting is rejected. One matching job id elsewhere in the document
 cannot verify another root. Rejected evidence has no value-bearing path through
 the centralized evidence projection, so it cannot reappear through the popup or
 save payload.
+
+For supported Workday routes, the address and selected detail root both state
+the requisition id. Direct `/job/...` pages are scoped to the single
+`jobPostingPage`; selected `/details/...` search panes are scoped to the single
+`jobDetails` section. The collector reads the `requisitionId` inside that exact
+root and attaches it to every field and selected link. Missing, conflicting or
+mismatched root identity projects no automatic values. A requisition id in a
+search-result card cannot verify fields from the selected detail root, and
+multiple candidate roots are never resolved by document order.
 
 Selected Apply and description links are judged at the same boundary before
 they may participate in employer-domain resolution. This matters because the
@@ -536,7 +546,15 @@ or nesting depth. A site that cannot be read reliably returns blanks.
   route, so a record can never combine one job's address with another's fields.
 - **Indeed.** Employer, title, location and description from Indeed's own test
   attributes and the stable description id. Source is `Indeed`.
-- **Workday.** Title, location and description from `data-automation-id`.
+- **Workday.** Title, every stated location and description from stable
+  `data-automation-id` values inside the identity-verified selected root. The
+  employer may come from tenant-corroborated board branding or declarative
+  posting/sidebar copy. A board `logoLink` (or one unambiguous board-sidebar
+  destination where no logo link exists) may establish an employer domain only
+  after the selected root independently verifies its requisition and the host
+  passes the ATS/job-board/social/redirect/CDN rejection list. Logo name and
+  destination use a distinct board-employer evidence path; they are not treated
+  as job-description links or required to appear inside the selected root.
   **Source is never set to `Workday`**: Workday is an applicant-tracking system,
   not where a student found the opportunity. **A Workday hostname is never a
   company domain**, and the employer is left empty unless the posting itself
@@ -910,16 +928,39 @@ never a wrong one.
 A site that still extracts nothing is a finding for PR #29. A site that extracts
 something **wrong** is a bug in this one.
 
-**P1.2 follow-up fixtures, documented but not fixed in P1.1**
+**P1.2 Workday fixtures**
 
-- TD direct Workday posting: title, location, description and duration correct;
-  employer missing.
+- TD direct Workday posting: the prior title/location/description/duration
+  capture remains covered; P1.2 adds identity-gated board-name and `logoLink`
+  evidence for employer and domain. Real-Chrome confirmation is still required.
 - Greenhouse-hosted posting: title and description correct; employer and
-  location missing.
+  location missing. This remains outside P1.2.
 - BDO Workday search-results split pane at `/details/...`: the selected job is
-  visible, but company, title, location and description are missing; the
-  correct original-posting URL is retained and no neighbouring result leaks
-  into capture.
+  now represented by a matching-requisition fixture with title, three
+  locations, employer, description and safe employer-domain coverage. A stale
+  or neighbouring requisition yields a blank/manual form. Real-Chrome capture
+  confirmation is still required.
+
+**Read-only Workday data feasibility spike (1 September 2026)**
+
+- The initial document contains only the client shell and `window.workday`
+  tenant/site/locale configuration; it does not embed the selected job payload.
+- Rendered direct pages expose `jobPostingPage`, `jobPostingHeader`,
+  `job-posting-details`, `locations`, `requisitionId`,
+  `jobPostingDescription` and an Apply URL under the selected root.
+- Rendered search-result panes expose the selected posting as one `jobDetails`
+  section. The results rail remains a separate `jobResults` section. The BDO
+  JR6803 pane repeated `JR6803` inside `requisitionId` and exposed Vancouver,
+  Calgary and Edmonton as separate location definitions.
+- The board header exposes a `logoLink`; BDO pointed it to `bdo.ca` and TD to
+  `careers.td.com`. This is explicit board-owned domain evidence. The Workday
+  tenant host remains posting infrastructure and never supplies an employer
+  name or domain.
+- The public CXS job endpoint is technically useful: its response includes a
+  stable internal posting id, requisition id, title, primary/additional
+  locations, external URL and hiring-organization name. It is deliberately not
+  called by the extension: P1.2 adds no request, permission, host permission,
+  background fetch, dependency or network-architecture change.
 
 ### The least-privilege question
 

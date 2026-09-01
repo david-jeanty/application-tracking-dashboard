@@ -173,6 +173,7 @@ describe("work arrangement", () => {
     )}</head><body>
        <div data-automation-id="jobPostingPage">
          <h2 data-automation-id="jobPostingHeader">Senior Consultant, Internship</h2>
+         <div data-automation-id="requisitionId"><dl><dt>job requisition id</dt><dd>12345</dd></dl></div>
          <div data-automation-id="jobPostingDescription"><p>Work arrangement: Hybrid</p></div>
        </div>
      </body>`;
@@ -1116,6 +1117,7 @@ describe("the rich fields' evidence", () => {
     )}</head><body>
        <div data-automation-id="jobPostingPage">
          <h2 data-automation-id="jobPostingHeader">Senior Consultant, Internship</h2>
+         <div data-automation-id="requisitionId"><dl><dt>job requisition id</dt><dd>12345</dd></dl></div>
          <div data-automation-id="jobPostingDescription"><p>Join the consulting practice.</p></div>
        </div>
      </body>`;

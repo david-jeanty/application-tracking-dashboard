@@ -35,6 +35,8 @@ const PAGE_B = "https://careers.example.com/postings/beta";
 /** A LinkedIn split pane, where the frame probe runs before the read. */
 const JOB_A = "https://www.linkedin.com/jobs/search/?currentJobId=111";
 const JOB_B = "https://www.linkedin.com/jobs/search/?currentJobId=222";
+const WORKDAY_B =
+  "https://bdo.wd3.myworkdayjobs.com/en-US/BDO/details/Capital-Markets-Intern_JR6803";
 
 /** A page whose JSON-LD names one posting, as a real job page would. */
 function signalsFor(company: string, title: string, url: string): PageSignals {
@@ -370,6 +372,71 @@ describe("popup capture, end to end", () => {
 
     expect(harness.captures).toHaveLength(0);
     expect(JSON.stringify(harness.sent)).not.toContain("Alpha");
+  });
+
+  it("shows no retained Workday root values when its requisition differs from the route", async () => {
+    const harness = install({
+      url: WORKDAY_B,
+      collect: async () => ({
+        jsonLdBlocks: [],
+        meta: {},
+        pageUrl: WORKDAY_B,
+        siteFields: {
+          company: "Stale A Company",
+          title: "Stale A Title",
+          location: "Stale A Location",
+          description: "STALE_A_DESCRIPTION_MARKER",
+        },
+        selectedLinks: {
+          employerUrl: "https://stale-a.example/careers",
+        },
+        observedPosting: {
+          fields: [
+            { field: "company", jobIds: ["JR6403"] },
+            { field: "title", jobIds: ["JR6403"] },
+            { field: "location", jobIds: ["JR6403"] },
+            { field: "description", jobIds: ["JR6403"] },
+            { field: "selectedLinks", jobIds: ["JR6403"] },
+          ],
+        },
+      }),
+    });
+
+    await openPopup();
+    await new Promise((resolve) => {
+      // A recognized identity-aware route gets the full bounded render window
+      // before the popup settles on a blank/manual form.
+      setTimeout(resolve, 3_200);
+    });
+    await settle();
+
+    expect(visiblePanels()).toEqual(["ready"]);
+    expect(companyField()).toBe("");
+    expect(document.querySelector<HTMLInputElement>("#job-title")?.value).toBe(
+      "",
+    );
+    expect(document.querySelector<HTMLInputElement>("#location")?.value).toBe(
+      "",
+    );
+
+    for (const [id, value] of [
+      ["company", "Typed Company"],
+      ["job-title", "Typed Title"],
+    ] as const) {
+      const input = document.getElementById(id) as HTMLInputElement;
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    submit();
+    await settle();
+
+    expect(harness.captures).toHaveLength(1);
+    expect(harness.captures[0]?.record).not.toHaveProperty("company_domain");
+    expect(JSON.stringify(harness.sent)).not.toContain("Stale A");
+    expect(JSON.stringify(harness.sent)).not.toContain("stale-a.example");
+    expect(JSON.stringify(harness.sent)).not.toContain(
+      "STALE_A_DESCRIPTION_MARKER",
+    );
   });
 
   it("still hands over a savable form when the page identified but said nothing", async () => {

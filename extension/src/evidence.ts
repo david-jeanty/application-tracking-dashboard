@@ -13,7 +13,10 @@ export type EvidenceFieldName =
   | "companyDomain";
 
 /** The deliberately small vocabulary of ways adapter evidence is collected. */
-export type EvidenceMethod = "site_dom" | "selected_posting_links";
+export type EvidenceMethod =
+  | "site_dom"
+  | "selected_posting_links"
+  | "board_branding";
 
 /** Why page-local evidence was observed but refused. */
 export type EvidenceRejectionCode =

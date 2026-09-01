@@ -978,9 +978,15 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
     : undefined;
   const structuredCompanyDomain = readCompanyDomain(organization);
   const selectedCompanyDomainField = selectedCompanyDomain(
-    adapter.admitsSelectedLinks ? signals.selectedLinks : undefined,
+    site !== "workday" && adapter.admitsSelectedLinks
+      ? signals.selectedLinks
+      : undefined,
     siteSource,
   );
+  const workdayCompanyDomainField: CapturedField<string> =
+    adapter.fields.companyDomain
+      ? established<string>(adapter.fields.companyDomain, "exact", siteSource)
+      : absent<string>();
   const deadline = posting ? readDeadline(posting) : undefined;
   const salary = posting ? readSalary(posting) : undefined;
 
@@ -1023,21 +1029,19 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
           ),
     companyDomain:
       site === "workday"
-        ? selectedCompanyDomainField.state === "established"
+        ? workdayCompanyDomainField.state === "established"
           ? workdayField(
-              selectedCompanyDomainField.value,
-              selectedCompanyDomainField.source,
+              workdayCompanyDomainField.value,
+              workdayCompanyDomainField.source,
               structuredCompanyDomainCandidate,
               structuredSource,
             )
-          : selectedCompanyDomainField.state === "ambiguous"
-            ? selectedCompanyDomainField
-            : workdayField(
-                undefined,
-                undefined,
-                structuredCompanyDomainCandidate,
-                structuredSource,
-              )
+          : workdayField(
+              undefined,
+              undefined,
+              structuredCompanyDomainCandidate,
+              structuredSource,
+            )
         : structuredCompanyDomain
           ? established(structuredCompanyDomain, "exact", structuredSource)
           : selectedCompanyDomainField,
@@ -1088,7 +1092,8 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
     company: adapter.rejected.company,
     jobTitle: adapter.rejected.jobTitle,
     location: adapter.rejected.location,
-    companyDomain: adapter.rejected.selectedLinks,
+    companyDomain:
+      adapter.rejected.companyDomain ?? adapter.rejected.selectedLinks,
     jobDescription: adapter.rejected.jobDescription,
   } as const;
   for (const name of Object.keys(adapterRejections) as Array<

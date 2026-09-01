@@ -36,6 +36,10 @@ const JOB_B =
   "https://www.linkedin.com/jobs/search/?currentJobId=222&keywords=intern";
 /** An ordinary employer posting: no recognized site, no split pane. */
 const DIRECT = "https://careers.example.com/postings/data-intern";
+const WORKDAY_A =
+  "https://bdo.wd3.myworkdayjobs.com/en-US/BDO/details/Analyst_JR6403";
+const WORKDAY_B =
+  "https://bdo.wd3.myworkdayjobs.com/en-US/BDO/details/Intern_JR6803";
 
 function identityOf(url: string, tabId = TAB): PageIdentity {
   const identity = readPageIdentity(tabId, url);
@@ -133,6 +137,32 @@ describe("capture session identity guard", () => {
     });
     // Job A's title and company existed and were thrown away rather than filed
     // under job B.
+    expect(carriesJob(result)).toBe(false);
+  });
+
+  it("applies the same capture-session cancellation when a Workday split pane changes", async () => {
+    const session = createCaptureSession({ sessionId: "workday" });
+    const attempt = session.begin(identityOf(WORKDAY_A));
+    let showing = WORKDAY_A;
+
+    const result = await runCapture({
+      session,
+      attempt,
+      observeIdentity: async () => readPageIdentity(TAB, showing),
+      runner: {
+        read: async () => {
+          showing = WORKDAY_B;
+          return job({ company: "Stale A", jobTitle: "Stale A title" });
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "changed_during_capture",
+      stage: "page_read",
+      from: { jobId: "JR6403" },
+      to: { jobId: "JR6803" },
+    });
     expect(carriesJob(result)).toBe(false);
   });
 

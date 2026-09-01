@@ -3,15 +3,18 @@ import {
   worstObservedIdentity,
   type EvidenceFieldName,
   type EvidenceIdentityState,
+  type EvidenceMethod,
   type EvidenceRejectionCode,
   type FieldEvidence,
 } from "./evidence.js";
 import { correlateObservedPosting, routeIdentityFor } from "./identity.js";
 import { readSiteFields, siteFor, type SiteFieldKey } from "./sites.js";
-import type { PageSignals } from "./types.js";
+import { employerDomainFromUrl } from "./source.js";
+import type { ObservedPostingField, PageSignals } from "./types.js";
 
 export type CaptureAdapterId =
   | "linkedin_identity_aware"
+  | "workday_identity_aware"
   | "legacy_site_fields"
   | "generic_page";
 
@@ -21,6 +24,7 @@ type AdapterFields = {
   location?: string;
   jobDescription?: string;
   workplaceType?: string;
+  companyDomain?: string;
 };
 
 export type CaptureAdapterResult = {
@@ -43,7 +47,10 @@ export type CaptureAdapter = {
   collect: (signals: PageSignals) => CaptureAdapterResult;
 };
 
-const RAW_FIELD_FOR: Record<keyof AdapterFields, SiteFieldKey> = {
+const RAW_FIELD_FOR: Record<
+  Exclude<keyof AdapterFields, "companyDomain">,
+  SiteFieldKey
+> = {
   company: "company",
   jobTitle: "title",
   location: "location",
@@ -51,9 +58,21 @@ const RAW_FIELD_FOR: Record<keyof AdapterFields, SiteFieldKey> = {
   workplaceType: "workplaceType",
 };
 
+/** Final trust-boundary check for a Workday logo's bounded accessible name. */
+function plausibleBoardEmployerName(value: string): boolean {
+  return (
+    value.length <= 160 &&
+    /[a-z]/i.test(value) &&
+    !/^(?:canada|united states|usa|us|global|english|fran[cç]ais|company|logo|careers?|jobs?|home(?:page)?)$/i.test(
+      value,
+    ) &&
+    !/^https?:|\.[a-z]{2,}(?:\/|$)/i.test(value)
+  );
+}
+
 function observationsFor(
   signals: PageSignals,
-  field: SiteFieldKey | "selectedLinks",
+  field: ObservedPostingField,
 ): readonly (readonly string[])[] {
   return (signals.observedPosting?.fields ?? [])
     .filter((observation) => observation.field === field)
@@ -62,14 +81,14 @@ function observationsFor(
 
 function observedIdsFor(
   signals: PageSignals,
-  field: SiteFieldKey | "selectedLinks",
+  field: ObservedPostingField,
 ): string[] {
   return [...new Set(observationsFor(signals, field).flat())];
 }
 
 function identityForField(
   signals: PageSignals,
-  field: SiteFieldKey | "selectedLinks",
+  field: ObservedPostingField,
   expectedJobId: string | undefined,
 ) {
   const observations = observationsFor(signals, field);
@@ -81,15 +100,25 @@ function identityForField(
   return correlateObservedPosting(observations.flat(), expectedJobId);
 }
 
-function linkedInResult(signals: PageSignals): CaptureAdapterResult {
-  const raw = readSiteFields("linkedin", signals.siteFields);
+function identityAwareResult(
+  signals: PageSignals,
+  site: Extract<ReturnType<typeof siteFor>, "linkedin" | "workday">,
+  adapter: Extract<
+    CaptureAdapterId,
+    "linkedin_identity_aware" | "workday_identity_aware"
+  >,
+): CaptureAdapterResult {
+  const raw = readSiteFields(site, signals.siteFields);
   const candidates: Array<{
     field: keyof AdapterFields | "selectedLinks";
     value: string;
-    rawField: SiteFieldKey | "selectedLinks";
+    rawField: ObservedPostingField;
+    method?: EvidenceMethod;
   }> = [];
 
-  for (const field of Object.keys(RAW_FIELD_FOR) as Array<keyof AdapterFields>) {
+  for (const field of Object.keys(RAW_FIELD_FOR) as Array<
+    Exclude<keyof AdapterFields, "companyDomain">
+  >) {
     const value = raw[field];
     if (value) candidates.push({ field, value, rawField: RAW_FIELD_FOR[field] });
   }
@@ -99,6 +128,39 @@ function linkedInResult(signals: PageSignals): CaptureAdapterResult {
       value: "present",
       rawField: "selectedLinks",
     });
+  }
+  if (site === "workday" && signals.boardEmployer) {
+    const companyDomain = employerDomainFromUrl(signals.boardEmployer.url);
+    if (
+      companyDomain &&
+      plausibleBoardEmployerName(signals.boardEmployer.name)
+    ) {
+      candidates.push({
+        field: "company",
+        value: signals.boardEmployer.name,
+        rawField: "boardEmployer",
+        method: "board_branding",
+      });
+      candidates.push({
+        field: "companyDomain",
+        value: companyDomain,
+        rawField: "boardEmployer",
+        method: "board_branding",
+      });
+    }
+  }
+  if (site === "workday" && signals.selectedLinks?.employerUrl) {
+    const companyDomain = employerDomainFromUrl(
+      signals.selectedLinks.employerUrl,
+    );
+    if (companyDomain) {
+      candidates.push({
+        field: "companyDomain",
+        value: companyDomain,
+        rawField: "selectedLinks",
+        method: "board_branding",
+      });
+    }
   }
 
   // All roots that contributed usable evidence participate in the ambiguity
@@ -119,9 +181,10 @@ function linkedInResult(signals: PageSignals): CaptureAdapterResult {
         field: candidate.field,
         value: candidate.value,
         method:
-          candidate.field === "selectedLinks"
+          candidate.method ??
+          (candidate.field === "selectedLinks"
             ? "selected_posting_links"
-            : "site_dom",
+            : "site_dom"),
         identity,
         decision: "accepted",
       };
@@ -137,9 +200,10 @@ function linkedInResult(signals: PageSignals): CaptureAdapterResult {
       field: candidate.field,
       value: candidate.value,
       method:
-        candidate.field === "selectedLinks"
+        candidate.method ??
+        (candidate.field === "selectedLinks"
           ? "selected_posting_links"
-          : "site_dom",
+          : "site_dom"),
       identity,
       decision: "rejected",
       reason,
@@ -150,7 +214,7 @@ function linkedInResult(signals: PageSignals): CaptureAdapterResult {
   const values = projection.values;
 
   return {
-    adapter: "linkedin_identity_aware",
+    adapter,
     fields: {
       ...(values.company ? { company: values.company } : {}),
       ...(values.jobTitle ? { jobTitle: values.jobTitle } : {}),
@@ -160,6 +224,9 @@ function linkedInResult(signals: PageSignals): CaptureAdapterResult {
         : {}),
       ...(values.workplaceType
         ? { workplaceType: values.workplaceType }
+        : {}),
+      ...(values.companyDomain
+        ? { companyDomain: values.companyDomain }
         : {}),
     },
     rejected: projection.rejected,
@@ -210,7 +277,17 @@ export const CAPTURE_ADAPTERS: readonly CaptureAdapter[] = [
   {
     id: "linkedin_identity_aware",
     matches: (signals) => siteFor(signals.pageUrl) === "linkedin",
-    collect: linkedInResult,
+    collect: (signals) =>
+      identityAwareResult(signals, "linkedin", "linkedin_identity_aware"),
+  },
+  {
+    id: "workday_identity_aware",
+    matches: (signals) => {
+      const route = routeIdentityFor(signals.pageUrl);
+      return route.site === "workday" && route.jobId !== undefined;
+    },
+    collect: (signals) =>
+      identityAwareResult(signals, "workday", "workday_identity_aware"),
   },
   {
     id: "legacy_site_fields",
