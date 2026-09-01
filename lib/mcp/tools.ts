@@ -37,7 +37,6 @@ import {
   toApplicationCreationValues,
   updateJobInputSchema,
   updateJobOutputSchema,
-  type JobSummary,
 } from "@/lib/validation/mcp";
 
 /** A read that failed, in the only shape the tools care about. */
@@ -91,20 +90,6 @@ function toolError(message: string) {
     isError: true,
     content: [{ type: "text" as const, text: message }],
   };
-}
-
-/** A short line per application, for clients that read only the text block. */
-function summaryLine(job: JobSummary): string {
-  const details = [
-    job.status,
-    job.work_term,
-    job.location,
-    job.date_applied ? `applied ${job.date_applied}` : null,
-    job.deadline ? `deadline ${job.deadline}` : null,
-    job.archived ? "archived" : null,
-  ].filter(Boolean);
-
-  return `${job.company} — ${job.job_title} (${details.join(", ")}) [${job.application_id}]`;
 }
 
 /**
@@ -242,10 +227,8 @@ export function registerJobTrackTools(
       inputSchema: listJobsInputSchema,
       outputSchema: listJobsOutputSchema,
       // The only change this tool needed to gain a ChatGPT app: a pointer to
-      // the view that renders its result. The arguments, the repository call,
-      // the text block and the structured content below are all untouched, so
-      // a client that ignores this key — or a host whose view failed to load —
-      // still gets exactly the tool it had before.
+      // the view that renders its result. The arguments, repository call and
+      // structured content below stay shared with every MCP client.
       _meta: appViewToolMeta(APPLICATION_LIST_VIEW_URI),
     },
     async (args, ctx) => {
@@ -270,9 +253,8 @@ export function registerJobTrackTools(
         returned: result.applications.length,
         has_more: result.hasMore,
       };
-      const text = result.applications.length
-        ? result.applications.map(summaryLine).join("\n")
-        : "No applications match.";
+      const count = result.applications.length;
+      const text = `${count} application${count === 1 ? "" : "s"} found.`;
 
       return {
         content: [{ type: "text" as const, text }],

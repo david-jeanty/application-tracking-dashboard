@@ -470,7 +470,7 @@ describe("list_jobs served by the real server", () => {
       returned: 0,
       has_more: false,
     });
-    expect(result.content[0].text).toBe("No applications match.");
+    expect(result.content[0].text).toBe("0 applications found.");
     await connection.close();
   });
 
@@ -1403,15 +1403,18 @@ describe("Apps SDK view served by the real server", () => {
     await connection.close();
   });
 
-  it("still answers list_jobs with text and structured content", async () => {
+  it("keeps full list records in structured content only", async () => {
     const connection = await connectServer();
 
     const result = await connection.callTool("list_jobs", {});
 
-    // The view is metadata, not a replacement: a client that never reads a
-    // resource is served exactly what it was served before.
-    expect(result.content[0].type).toBe("text");
-    expect(result.content[0].text).toContain("RBC");
+    expect(result.content).toEqual([
+      { type: "text", text: "2 applications found." },
+    ]);
+    const content = result.content.map((item) => item.text).join("\n");
+    expect(content).not.toContain("RBC");
+    expect(content).not.toContain("Shopify");
+    expect(content).not.toMatch(/^\s*\|?.+\|.+$/m);
     expect(result.structuredContent).toHaveProperty("applications");
     expect(result.structuredContent).toHaveProperty("has_more");
     await connection.close();
