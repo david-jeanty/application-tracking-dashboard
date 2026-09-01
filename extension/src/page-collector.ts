@@ -1,5 +1,5 @@
 import type { PageReadRules } from "./sites.js";
-import type { PageSignals } from "./types.js";
+import type { ObservedPostingField, PageSignals } from "./types.js";
 
 /**
  * Reads the posting the student explicitly asked Interndex to capture.
@@ -53,6 +53,8 @@ export function collectPageSignals(
   const MAXIMUM_MICRODATA_ROOTS = 5;
   const MAXIMUM_APPLY_CANDIDATES = 400;
   const MAXIMUM_SELECTED_LINKS = 20;
+  const MAXIMUM_OBSERVED_FIELDS = 24;
+  const MAXIMUM_OBSERVED_JOB_IDS = 8;
   const MAXIMUM_URL_LENGTH = 2_048;
   const MAXIMUM_LABELLED_CANDIDATES = 400;
   const MAXIMUM_HEADING_CANDIDATES = 200;
@@ -108,6 +110,73 @@ export function collectPageSignals(
   const selectedDescriptionUrls = new Set<string>();
   const selectedApplyUrls = new Set<string>();
   let descriptionUrlOverflow = false;
+  const observedPostingFields: Array<{
+    field: ObservedPostingField;
+    jobIds: string[];
+  }> = [];
+  const identityAwareLinkedIn =
+    rules.strategy === "linkedin-job-detail" ||
+    rules.strategy === "linkedin-split-pane";
+  const POSTING_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+  const POSTING_LINK_ID_PATTERN = /\/jobs\/view\/([A-Za-z0-9_-]+)/;
+  const ENTITY_URN_ID_PATTERN = /(?:jobPosting|fsd_jobPosting):([A-Za-z0-9_-]+)/i;
+
+  function addPostingId(ids: Set<string>, value: string | null): void {
+    const trimmed = value?.trim();
+    if (trimmed && POSTING_ID_PATTERN.test(trimmed)) ids.add(trimmed);
+  }
+
+  function addIdentityWrittenOn(ids: Set<string>, element: Element): void {
+    addPostingId(ids, element.getAttribute("data-job-id"));
+    addPostingId(ids, element.getAttribute("data-occludable-job-id"));
+
+    const entity = element.getAttribute("data-entity-urn") ?? "";
+    addPostingId(ids, ENTITY_URN_ID_PATTERN.exec(entity)?.[1] ?? null);
+
+    // A link is identity only when it is the field's element, an ancestor of
+    // that element, or an establishing anchor explicitly supplied below. No
+    // descendant or document-wide link scan is allowed to verify a field.
+    const linked = POSTING_LINK_ID_PATTERN.exec(element.getAttribute("href") ?? "")?.[1];
+    addPostingId(ids, linked ?? null);
+  }
+
+  /** Posting ids written on the value's own bounded ancestor path. */
+  function postingIdsAt(
+    element: Element | null,
+    establishingAnchor?: Element | null,
+  ): string[] {
+    const ids = new Set<string>();
+    let node = element;
+
+    for (
+      let depth = 0;
+      node && node !== document.body && depth <= MAXIMUM_ANCESTOR_DEPTH;
+      depth += 1
+    ) {
+      addIdentityWrittenOn(ids, node);
+      node = node.parentElement;
+    }
+    if (establishingAnchor) addIdentityWrittenOn(ids, establishingAnchor);
+
+    return [...ids].slice(0, MAXIMUM_OBSERVED_JOB_IDS);
+  }
+
+  function observePostingField(
+    field: ObservedPostingField,
+    element: Element | null,
+    establishingAnchor?: Element | null,
+  ): void {
+    if (
+      !identityAwareLinkedIn ||
+      observedPostingFields.length >= MAXIMUM_OBSERVED_FIELDS
+    ) {
+      return;
+    }
+    observedPostingFields.push({
+      field,
+      jobIds: postingIdsAt(element, establishingAnchor),
+    });
+  }
 
   function absoluteHttpUrl(value: string | null): string | undefined {
     if (!value) return undefined;
@@ -121,8 +190,12 @@ export function collectPageSignals(
     }
   }
 
-  function recordDescriptionLinks(container: Element | null): void {
+  function recordDescriptionLinks(
+    container: Element | null,
+    establishingAnchor?: Element | null,
+  ): void {
     if (!container) return;
+    const before = selectedDescriptionUrls.size;
     const links = Array.from(container.querySelectorAll("a[href]"));
     if (links.length > MAXIMUM_SELECTED_LINKS) {
       // A partial list could hide a conflicting employer domain. This is an
@@ -134,10 +207,17 @@ export function collectPageSignals(
       const url = absoluteHttpUrl(link.getAttribute("href"));
       if (url) selectedDescriptionUrls.add(url);
     }
+    if (selectedDescriptionUrls.size > before) {
+      observePostingField("selectedLinks", container, establishingAnchor);
+    }
   }
 
-  function recordApplyLink(container: Element | null): void {
+  function recordApplyLink(
+    container: Element | null,
+    establishingAnchor?: Element | null,
+  ): void {
     if (!container) return;
+    const before = selectedApplyUrls.size;
     for (const link of Array.from(container.querySelectorAll("a[href]")).slice(
       0,
       MAXIMUM_APPLY_CANDIDATES,
@@ -148,6 +228,9 @@ export function collectPageSignals(
       if (!label || !APPLY_PATTERN.test(label)) continue;
       const url = absoluteHttpUrl(link.getAttribute("href"));
       if (url) selectedApplyUrls.add(url);
+    }
+    if (selectedApplyUrls.size > before) {
+      observePostingField("selectedLinks", container, establishingAnchor);
     }
   }
 
@@ -237,6 +320,15 @@ export function collectPageSignals(
   }
 
   const siteFields: Record<string, string> = {};
+  function recordLinkedInField(
+    key: Exclude<ObservedPostingField, "selectedLinks">,
+    value: string,
+    element: Element | null,
+    establishingAnchor?: Element | null,
+  ): void {
+    siteFields[key] = clamp(value, MAXIMUM_FIELD_CHARACTERS);
+    observePostingField(key, element, establishingAnchor);
+  }
   for (const rule of rules.fields) {
     for (const selector of rule.selectors) {
       let found: Element | null = null;
@@ -395,12 +487,18 @@ export function collectPageSignals(
    * any others: disagreement ends the field. Picking the first would be a coin
    * toss written into a record the student has no reason to doubt.
    */
-  function recordArrangements(values: readonly string[]): void {
+  function recordArrangements(
+    values: readonly string[],
+    root: Element,
+    establishingAnchor?: Element | null,
+  ): void {
     if (values.length === 0) return;
 
-    siteFields["workplaceType"] = clamp(
+    recordLinkedInField(
+      "workplaceType",
       values.join(", "),
-      MAXIMUM_FIELD_CHARACTERS,
+      root,
+      establishingAnchor,
     );
   }
 
@@ -487,7 +585,7 @@ export function collectPageSignals(
     const anchor = findCompanyAnchor();
     if (!anchor) return;
 
-    siteFields["company"] = clamp(anchor.name, MAXIMUM_FIELD_CHARACTERS);
+    recordLinkedInField("company", anchor.name, anchor.element);
 
     const topCard = findTopCard(anchor.element);
     if (topCard) {
@@ -508,7 +606,7 @@ export function collectPageSignals(
 
         const value = markupOf(candidate);
         if (value && trimmedText(candidate) !== anchor.name) {
-          siteFields["title"] = value;
+          recordLinkedInField("title", value, candidate);
           titleText = trimmedText(candidate);
           break;
         }
@@ -535,14 +633,17 @@ export function collectPageSignals(
           continue;
         }
 
-        siteFields["location"] = value;
+        recordLinkedInField("location", value, candidate);
         locationElement = candidate;
         break;
       }
 
       // The arrangement, read only inside the card the employer, the title and
       // the location all came from. Nothing outside that card is consulted.
-      recordArrangements(statedArrangements(topCard, locationElement));
+      recordArrangements(
+        statedArrangements(topCard, locationElement),
+        topCard,
+      );
       recordApplyLink(topCard);
     }
 
@@ -552,7 +653,7 @@ export function collectPageSignals(
     const description = about ? descriptionUnder([about]) : null;
     const descriptionValue = markupOf(description);
     if (descriptionValue) {
-      siteFields["description"] = descriptionValue;
+      recordLinkedInField("description", descriptionValue, description);
       recordDescriptionLinks(description);
     }
   }
@@ -723,8 +824,8 @@ export function collectPageSignals(
           return;
         }
 
-        siteFields["title"] = clamp(title, MAXIMUM_FIELD_CHARACTERS);
-        siteFields["company"] = clamp(company.name, MAXIMUM_FIELD_CHARACTERS);
+        recordLinkedInField("title", title, link, link);
+        recordLinkedInField("company", company.name, company.element, link);
 
         const locationLine = Array.from(header.children).find(
           (child) => child.tagName === "P",
@@ -736,7 +837,7 @@ export function collectPageSignals(
           location.length <= MAXIMUM_LOCATION_CHARACTERS &&
           !location.includes("\n")
         ) {
-          siteFields["location"] = clamp(location, MAXIMUM_FIELD_CHARACTERS);
+          recordLinkedInField("location", location, locationLine ?? header, link);
         }
 
         /**
@@ -899,22 +1000,22 @@ export function collectPageSignals(
             if (isALandmark(node) || namesAnotherPosting(node)) return;
 
             const before = selectedApplyUrls.size;
-            recordApplyLink(node);
+            recordApplyLink(node, link);
             if (selectedApplyUrls.size > before) return;
 
             node = node.parentElement;
           }
         }
 
-        recordArrangements(selectedArrangements());
+        recordArrangements(selectedArrangements(), header, link);
         selectedApply();
 
         const [about] = aboutTheJobHeadings();
         const description = about ? descriptionUnder([about]) : null;
         const descriptionValue = markupOf(description);
         if (descriptionValue) {
-          siteFields["description"] = descriptionValue;
-          recordDescriptionLinks(description);
+          recordLinkedInField("description", descriptionValue, description, link);
+          recordDescriptionLinks(description, link);
         }
 
         return;
@@ -950,7 +1051,12 @@ export function collectPageSignals(
       });
       const title = titleNode ? trimmedText(titleNode) : "";
       if (!title) return;
-      siteFields["title"] = clamp(title, MAXIMUM_FIELD_CHARACTERS);
+      recordLinkedInField(
+        "title",
+        title,
+        titleNode ?? exactPostingLink,
+        exactPostingLink,
+      );
 
       /** The card's sibling blocks: title wrapper, company, then location. */
       function nextElementSibling(node: Element): Element | null {
@@ -991,7 +1097,12 @@ export function collectPageSignals(
         company !== title &&
         !/\bwith verification\b/i.test(company)
       ) {
-        siteFields["company"] = clamp(company, MAXIMUM_FIELD_CHARACTERS);
+        recordLinkedInField(
+          "company",
+          company,
+          companyElement ?? companyBlock,
+          exactPostingLink,
+        );
       }
 
       const locationList = locationBlock
@@ -1019,7 +1130,12 @@ export function collectPageSignals(
           .replace(/\s+\((?:on-site|hybrid|remote)\)\s*$/i, "")
           .trim();
         if (location) {
-          siteFields["location"] = clamp(location, MAXIMUM_FIELD_CHARACTERS);
+          recordLinkedInField(
+            "location",
+            location,
+            locationElement,
+            exactPostingLink,
+          );
         }
       }
 
@@ -1034,8 +1150,8 @@ export function collectPageSignals(
         );
         if (!known) arrangements.push(stated);
       }
-      recordArrangements(arrangements);
-      recordApplyLink(root);
+      recordArrangements(arrangements, root, exactPostingLink);
+      recordApplyLink(root, exactPostingLink);
 
       const details = document.querySelector("#job-details");
       const about = details
@@ -1051,8 +1167,13 @@ export function collectPageSignals(
         }
         const description = markupOf(copy);
         if (description) {
-          siteFields["description"] = description;
-          recordDescriptionLinks(details);
+          recordLinkedInField(
+            "description",
+            description,
+            details,
+            exactPostingLink,
+          );
+          recordDescriptionLinks(details, exactPostingLink);
         }
       }
 
@@ -1150,7 +1271,7 @@ export function collectPageSignals(
     if (!anchor) return;
 
     const company = anchor;
-    siteFields["company"] = clamp(company.name, MAXIMUM_FIELD_CHARACTERS);
+    recordLinkedInField("company", company.name, company.element);
 
     // The title and the location: the card the employer belongs to, read
     // exactly the way the verified job-detail route reads its own.
@@ -1179,7 +1300,7 @@ export function collectPageSignals(
 
         const value = markupOf(candidate);
         if (value && trimmedText(candidate) !== company.name) {
-          siteFields["title"] = value;
+          recordLinkedInField("title", value, candidate);
           titleText = trimmedText(candidate);
           break;
         }
@@ -1200,13 +1321,16 @@ export function collectPageSignals(
           continue;
         }
 
-        siteFields["location"] = value;
+        recordLinkedInField("location", value, candidate);
         locationElement = candidate;
         break;
       }
 
       // The arrangement, from the detail pane's own card and never the rail's.
-      recordArrangements(statedArrangements(card, locationElement, inTheRail));
+      recordArrangements(
+        statedArrangements(card, locationElement, inTheRail),
+        card,
+      );
       recordApplyLink(card);
     }
 
@@ -1230,7 +1354,7 @@ export function collectPageSignals(
 
       const value = markupOf(box ?? null);
       if (value) {
-        siteFields["description"] = value;
+        recordLinkedInField("description", value, box ?? block);
         recordDescriptionLinks(box ?? null);
         break;
       }
@@ -1256,7 +1380,7 @@ export function collectPageSignals(
 
           const value = markupOf(box ?? null);
           if (value) {
-            siteFields["description"] = value;
+            recordLinkedInField("description", value, box ?? node);
             recordDescriptionLinks(box ?? null);
             break;
           }
@@ -1514,6 +1638,9 @@ export function collectPageSignals(
       : {}),
     ...(microdata.length > 0 ? { microdata } : {}),
     ...(Object.keys(siteFields).length > 0 ? { siteFields } : {}),
+    ...(observedPostingFields.length > 0
+      ? { observedPosting: { fields: observedPostingFields } }
+      : {}),
     ...(selectedApplyUrls.size === 1 ||
     (!descriptionUrlOverflow && selectedDescriptionUrls.size > 0)
       ? {

@@ -308,6 +308,10 @@ extension/
     page-collector.ts    the injected reader — self-contained, by necessity;
                          its rules arrive as an argument and it never decides
                          which site it is on
+    adapters.ts          deterministic adapter registry; LinkedIn is the only
+                         identity-aware adapter in P1.1
+    evidence.ts          field-level acceptance/rejection ledger and the one
+                         evidence-to-value projection
     extractor.ts         structured data, then a recognized site, then a
                          corroborated title; json-ld.ts, html-text.ts,
                          source.ts and sites.ts are its parts
@@ -383,8 +387,10 @@ in that page.
 extractJobReport(pageSignals)
         │
         ├── structured data the publisher asserts   (JSON-LD, then microdata)
-        │
-        ├── a recognized site's own read path       (LinkedIn, Indeed, Workday)
+        ├── deterministic capture adapter
+        │       ├── LinkedIn identity-aware evidence
+        │       ├── Indeed / Workday compatibility
+        │       └── generic-page compatibility
         │
         └── a conservative generic fallback         (a title, with corroboration)
         │
@@ -404,6 +410,31 @@ fields below.
 Nothing below the first level knows that Interndex, Supabase, OAuth,
 `applicationCreationSchema` or MCP exist; site rules extract facts from a page
 and stop there.
+
+#### P1.1 adapter and page-local evidence boundary
+
+Adapter selection is based only on the invoked page URL and the registry's
+declared order. It does not inspect document order. LinkedIn is the only P1.1
+adapter that claims page-local posting-identity support; Indeed and Workday use
+their unchanged site-field compatibility path, while Greenhouse, Lever,
+SmartRecruiters and unrecognized pages use the unchanged generic path. Those
+compatibility adapters report identity as unsupported, not unobserved.
+
+For LinkedIn, the collector records each field beside the posting ids written
+on the same bounded root that supplied it. A matching root may project. A root
+that names another posting, names none, or contributes alongside a root naming
+a different posting is rejected. One matching job id elsewhere in the document
+cannot verify another root. Rejected evidence has no value-bearing path through
+the centralized evidence projection, so it cannot reappear through the popup or
+save payload.
+
+Selected Apply and description links are judged at the same boundary before
+they may participate in employer-domain resolution. This matters because the
+stored `company_domain` drives the dashboard logo: a stale LinkedIn link must
+not make the correct job display a previous or unrelated employer's logo.
+Posting hosts and employer domains remain distinct, and the existing
+applicant-tracking/job-board rejection list remains the final host safety floor.
+P1.1 adds no domain guessing and no coverage heuristics.
 
 1. **`schema.org` JobPosting.** As JSON-LD — a single object, a top-level array,
    `@graph`, several script blocks, `@type` as a string or an array, a full IRI
@@ -878,6 +909,17 @@ never a wrong one.
 
 A site that still extracts nothing is a finding for PR #29. A site that extracts
 something **wrong** is a bug in this one.
+
+**P1.2 follow-up fixtures, documented but not fixed in P1.1**
+
+- TD direct Workday posting: title, location, description and duration correct;
+  employer missing.
+- Greenhouse-hosted posting: title and description correct; employer and
+  location missing.
+- BDO Workday search-results split pane at `/details/...`: the selected job is
+  visible, but company, title, location and description are missing; the
+  correct original-posting URL is retained and no neighbouring result leaks
+  into capture.
 
 ### The least-privilege question
 

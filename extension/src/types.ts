@@ -9,7 +9,19 @@
  * them, and `messages.ts` is where they are re-validated on arrival.
  */
 
-import type { StructuredSelectionStatus } from "./identity.js";
+import type {
+  ObservedIdentityState,
+  StructuredSelectionStatus,
+} from "./identity.js";
+import type { EvidenceRejectionCode } from "./evidence.js";
+
+export type ObservedPostingField =
+  | "title"
+  | "company"
+  | "location"
+  | "description"
+  | "workplaceType"
+  | "selectedLinks";
 
 /** Raw material read from the page, before any interpretation. */
 export type PageSignals = {
@@ -67,6 +79,13 @@ export type PageSignals = {
     applyUrl?: string;
     descriptionUrls?: readonly string[];
   };
+  /** Posting ids observed at the same roots that supplied LinkedIn evidence. */
+  observedPosting?: {
+    fields: readonly {
+      field: ObservedPostingField;
+      jobIds: readonly string[];
+    }[];
+  };
 };
 
 /** Why a field could not be filled, so the popup can say so honestly. */
@@ -123,7 +142,8 @@ export type EvidenceRejectionReason =
   /** Several JobPostings, and none of them uniquely named the current one. */
   | "structured_identity_ambiguous"
   /** A JobPosting was published that never said which posting it was. */
-  | "structured_identity_unverified";
+  | "structured_identity_unverified"
+  | EvidenceRejectionCode;
 
 export type RejectedEvidence = {
   source: ExtractionSource;
@@ -199,6 +219,10 @@ export type ExtractionReport = {
     /** How structured candidates correlated with the route, for diagnostics. */
     identity: StructuredSelectionStatus;
   };
+  postingIdentity: {
+    support: "supported" | "unsupported";
+    observed: ObservedIdentityState | "unsupported";
+  };
   pageHost?: string;
 };
 
@@ -207,6 +231,7 @@ export type ExtractionDiagnostics = {
   recognizedSite?: ExtractionReport["recognizedSite"];
   selectedStrategy?: ExtractionSource;
   structuredData: ExtractionReport["structuredData"];
+  postingIdentity: ExtractionReport["postingIdentity"];
   pageHost?: string;
   warnings: ExtractionWarning[];
   fields: {
@@ -225,6 +250,16 @@ export type ExtractionDiagnostics = {
 
 const MAXIMUM_SELECTED_LINKS = 20;
 const MAXIMUM_URL_LENGTH = 2_048;
+const MAXIMUM_OBSERVED_FIELDS = 24;
+const MAXIMUM_OBSERVED_JOB_IDS = 8;
+const OBSERVED_POSTING_FIELDS: readonly ObservedPostingField[] = [
+  "title",
+  "company",
+  "location",
+  "description",
+  "workplaceType",
+  "selectedLinks",
+];
 
 function isStringRecord(value: unknown): value is Record<string, string> {
   return value !== null &&
@@ -264,19 +299,62 @@ export function isPageSignals(value: unknown): value is PageSignals {
   }
 
   const links = candidate.selectedLinks;
-  if (links === undefined) return true;
-  if (!links || typeof links !== "object" || Array.isArray(links)) return false;
-  const selected = links as Record<string, unknown>;
-  if (!Object.keys(selected).every((key) => key === "applyUrl" || key === "descriptionUrls")) {
+  if (links !== undefined) {
+    if (!links || typeof links !== "object" || Array.isArray(links)) return false;
+    const selected = links as Record<string, unknown>;
+    if (
+      !Object.keys(selected).every(
+        (key) => key === "applyUrl" || key === "descriptionUrls",
+      )
+    ) {
+      return false;
+    }
+    if (selected.applyUrl !== undefined && !isHttpUrl(selected.applyUrl)) {
+      return false;
+    }
+    if (
+      selected.descriptionUrls !== undefined &&
+      (!Array.isArray(selected.descriptionUrls) ||
+        selected.descriptionUrls.length > MAXIMUM_SELECTED_LINKS ||
+        !selected.descriptionUrls.every(isHttpUrl))
+    ) {
+      return false;
+    }
+  }
+
+  const observedPosting = candidate.observedPosting;
+  if (observedPosting === undefined) return true;
+  if (
+    !observedPosting ||
+    typeof observedPosting !== "object" ||
+    Array.isArray(observedPosting)
+  ) {
     return false;
   }
-  if (selected.applyUrl !== undefined && !isHttpUrl(selected.applyUrl)) return false;
-  return (
-    selected.descriptionUrls === undefined ||
-    (Array.isArray(selected.descriptionUrls) &&
-      selected.descriptionUrls.length <= MAXIMUM_SELECTED_LINKS &&
-      selected.descriptionUrls.every(isHttpUrl))
-  );
+  const observed = observedPosting as Record<string, unknown>;
+  if (!Object.keys(observed).every((key) => key === "fields")) return false;
+  if (
+    !Array.isArray(observed.fields) ||
+    observed.fields.length > MAXIMUM_OBSERVED_FIELDS
+  ) {
+    return false;
+  }
+
+  return observed.fields.every((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const field = entry as Record<string, unknown>;
+    return (
+      Object.keys(field).every((key) => key === "field" || key === "jobIds") &&
+      typeof field.field === "string" &&
+      OBSERVED_POSTING_FIELDS.includes(field.field as ObservedPostingField) &&
+      Array.isArray(field.jobIds) &&
+      field.jobIds.length <= MAXIMUM_OBSERVED_JOB_IDS &&
+      field.jobIds.every(
+        (id) =>
+          typeof id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(id),
+      )
+    );
+  });
 }
 
 /**

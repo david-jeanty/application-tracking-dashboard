@@ -20,19 +20,25 @@ import {
 
 const JNJ_LINKEDIN_POSTING = `<head></head><body>
   <aside><a href="https://other.example/careers">Neighbouring role</a></aside>
-  <main><section>
+  <main data-job-id="123"><section>
     <div aria-label="Company, Johnson &amp; Johnson MedTech.">Johnson &amp; Johnson MedTech</div>
     <div data-display-contents="true"><p>Marketing Co-Op</p></div>
     <p><span>Toronto, ON</span></p>
-  </section></main>
+  </section>
   <section><h2>About the job</h2><div data-testid="expandable-text-box">
     <a href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.jnj.com%2Fmedtech&amp;trk=test">jnj.com</a>
-  </div></section>
+  </div></section></main>
 </body>`;
 
 const KPMG_SELECTED_APPLY = {
   applyUrl: "https://kpmg.com/ca/en/home/careers.html",
 } as const;
+
+const VERIFIED_LINKEDIN_LINKS = {
+  observedPosting: {
+    fields: [{ field: "selectedLinks" as const, jobIds: ["123"] }],
+  },
+};
 
 /**
  * What the extension is willing to claim about a page.
@@ -289,6 +295,7 @@ describe("the employer's domain", () => {
         jsonLdBlocks: [],
         meta: {},
         pageUrl: "https://www.linkedin.com/jobs/view/123",
+        ...VERIFIED_LINKEDIN_LINKS,
         selectedLinks,
       }).companyDomain,
     ).toBe(expected);
@@ -316,6 +323,7 @@ describe("the employer's domain", () => {
         jsonLdBlocks: [],
         meta: {},
         pageUrl: "https://www.linkedin.com/jobs/view/123",
+        ...VERIFIED_LINKEDIN_LINKS,
         selectedLinks: { descriptionUrls: [url] },
       }).companyDomain,
     ).toBe(expected);
@@ -327,6 +335,7 @@ describe("the employer's domain", () => {
         jsonLdBlocks: [],
         meta: {},
         pageUrl: "https://www.linkedin.com/jobs/view/123",
+        ...VERIFIED_LINKEDIN_LINKS,
         selectedLinks: {
           applyUrl:
             "https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fkpmg.com%2Fca%2Fen%2Fhome%2Fcareers.html&trk=test",
@@ -359,6 +368,7 @@ describe("the employer's domain", () => {
         jsonLdBlocks: [],
         meta: {},
         pageUrl: "https://www.linkedin.com/jobs/view/123",
+        ...VERIFIED_LINKEDIN_LINKS,
         selectedLinks: { descriptionUrls: [url] },
       }).companyDomain,
     ).toBeUndefined();
@@ -369,6 +379,7 @@ describe("the employer's domain", () => {
       jsonLdBlocks: [],
       meta: {},
       pageUrl: "https://www.linkedin.com/jobs/view/123",
+      ...VERIFIED_LINKEDIN_LINKS,
       selectedLinks: {
         descriptionUrls: [
           "https://careers.example.com/jobs/1",
