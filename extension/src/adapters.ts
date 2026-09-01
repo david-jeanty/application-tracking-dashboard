@@ -15,6 +15,7 @@ import type { ObservedPostingField, PageSignals } from "./types.js";
 export type CaptureAdapterId =
   | "linkedin_identity_aware"
   | "workday_identity_aware"
+  | "greenhouse_identity_aware"
   | "legacy_site_fields"
   | "generic_page";
 
@@ -58,7 +59,7 @@ const RAW_FIELD_FOR: Record<
   workplaceType: "workplaceType",
 };
 
-/** Final trust-boundary check for a Workday logo's bounded accessible name. */
+/** Final trust-boundary check for a board logo's bounded accessible name. */
 function plausibleBoardEmployerName(value: string): boolean {
   return (
     value.length <= 160 &&
@@ -102,10 +103,12 @@ function identityForField(
 
 function identityAwareResult(
   signals: PageSignals,
-  site: Extract<ReturnType<typeof siteFor>, "linkedin" | "workday">,
+  site: Extract<ReturnType<typeof siteFor>, "linkedin" | "workday" | "greenhouse">,
   adapter: Extract<
     CaptureAdapterId,
-    "linkedin_identity_aware" | "workday_identity_aware"
+    | "linkedin_identity_aware"
+    | "workday_identity_aware"
+    | "greenhouse_identity_aware"
   >,
 ): CaptureAdapterResult {
   const raw = readSiteFields(site, signals.siteFields);
@@ -129,7 +132,7 @@ function identityAwareResult(
       rawField: "selectedLinks",
     });
   }
-  if (site === "workday" && signals.boardEmployer) {
+  if ((site === "workday" || site === "greenhouse") && signals.boardEmployer) {
     /**
      * The destination and the name are judged apart, because they answer
      * different questions and fail for different reasons.
@@ -250,7 +253,11 @@ function identityAwareResult(
       observed:
         evidence.length === 0 ? "unobserved" : worstObservedIdentity(evidence),
     },
-    admitsSelectedLinks: values.selectedLinks !== undefined,
+    // Greenhouse's application action is useful posting evidence but remains
+    // an ATS URL, and arbitrary description links do not become employer
+    // identity. Its domain path is the verified linked board logo above only.
+    admitsSelectedLinks:
+      site !== "greenhouse" && values.selectedLinks !== undefined,
     evidence,
   };
 }
@@ -303,6 +310,15 @@ export const CAPTURE_ADAPTERS: readonly CaptureAdapter[] = [
     },
     collect: (signals) =>
       identityAwareResult(signals, "workday", "workday_identity_aware"),
+  },
+  {
+    id: "greenhouse_identity_aware",
+    matches: (signals) => {
+      const route = routeIdentityFor(signals.pageUrl);
+      return route.site === "greenhouse" && route.jobId !== undefined;
+    },
+    collect: (signals) =>
+      identityAwareResult(signals, "greenhouse", "greenhouse_identity_aware"),
   },
   {
     id: "legacy_site_fields",

@@ -82,7 +82,7 @@ export type PageSignals = {
     employerUrl?: string;
   };
   /**
-   * What one Workday board logo link states about the employer.
+   * What one verified board logo link states about the employer.
    *
    * The destination is the load-bearing half and is always present: it is the
    * board's own statement of where the employer's site is. The name is whatever
@@ -128,6 +128,7 @@ export type ExtractionSource =
   | "linkedin_selected_posting"
   | "indeed_site"
   | "workday_selected_posting"
+  | "greenhouse_selected_posting"
   | "selected_posting_apply"
   | "selected_posting_description"
   | "generic_fallback"
@@ -226,7 +227,7 @@ export type ExtractionFields = {
 export type ExtractionReport = {
   fields: ExtractionFields;
   warnings: ExtractionWarning[];
-  recognizedSite?: "linkedin" | "indeed" | "workday";
+  recognizedSite?: "linkedin" | "indeed" | "workday" | "greenhouse";
   selectedStrategy?: ExtractionSource;
   structuredData: {
     jsonLdJobPosting: boolean;

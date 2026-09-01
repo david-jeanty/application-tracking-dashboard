@@ -19,12 +19,10 @@ import type { ObservedPostingField, PageSignals } from "./types.js";
  * popup could not see — nothing site-specific is collected and the result is
  * the honest generic one.
  *
- * The strategies it implements are LinkedIn's, because LinkedIn's live markup
- * puts the title and the location in unattributed leaves whose classes are
- * generated hashes, and the only way to reach them without guessing is through
- * their relationship to an element that *is* semantically labelled. There are
- * two because a job page and a split pane are different documents: one shows a
- * posting, the other shows a rail of other people's postings beside it.
+ * LinkedIn's strategies are relational because its live markup puts the title
+ * and location in unattributed leaves whose classes are generated hashes.
+ * Workday and Greenhouse instead expose narrow selected-root strategies whose
+ * roots repeat the stable posting id from their direct routes.
  *
  * It does not decide which *document* it runs in either. On a LinkedIn split
  * pane the popup resolves that first, and this function is then injected into
@@ -121,10 +119,12 @@ export function collectPageSignals(
     rules.strategy === "linkedin-job-detail" ||
     rules.strategy === "linkedin-split-pane" ||
     rules.strategy === "workday-job-detail" ||
-    rules.strategy === "workday-split-pane";
+    rules.strategy === "workday-split-pane" ||
+    rules.strategy === "greenhouse-job-detail";
   const identityAwareWorkday =
     rules.strategy === "workday-job-detail" ||
     rules.strategy === "workday-split-pane";
+  const identityAwareGreenhouse = rules.strategy === "greenhouse-job-detail";
   const POSTING_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
   const POSTING_LINK_ID_PATTERN = /\/jobs\/view\/([A-Za-z0-9_-]+)/;
   const ENTITY_URN_ID_PATTERN = /(?:jobPosting|fsd_jobPosting):([A-Za-z0-9_-]+)/i;
@@ -162,6 +162,23 @@ export function collectPageSignals(
         ),
       )) {
         addPostingId(ids, requisition.textContent);
+      }
+      return [...ids].slice(0, MAXIMUM_OBSERVED_JOB_IDS);
+    }
+
+    if (identityAwareGreenhouse && establishingAnchor) {
+      for (const form of Array.from(
+        establishingAnchor.querySelectorAll("form#application-form[action]"),
+      )) {
+        const action = form.getAttribute("action");
+        if (!action) continue;
+        try {
+          const path = new URL(action, window.location.href).pathname;
+          const match = /^\/[^/]+\/jobs\/([^/]+)\/?$/.exec(path);
+          addPostingId(ids, match?.[1] ?? null);
+        } catch {
+          // An invalid action establishes no posting identity.
+        }
       }
       return [...ids].slice(0, MAXIMUM_OBSERVED_JOB_IDS);
     }
@@ -1732,10 +1749,87 @@ export function collectPageSignals(
     }
   }
 
+  /**
+   * Greenhouse's current direct renderer keeps one posting and its application
+   * form in one `main.job-post` root. The form action repeats the route's stable
+   * job-post id, so every field can reuse the same page-local identity ledger as
+   * LinkedIn and Workday without consulting title, company, DOM order or the
+   * board's tenant slug.
+   */
+  function readGreenhouseJobDetail(): void {
+    const postingRoots = Array.from(document.querySelectorAll("main.job-post"));
+    // A board index has no root; multiple roots cannot be resolved by order.
+    if (postingRoots.length !== 1) return;
+    const [posting] = postingRoots;
+    if (!posting) return;
+
+    const title = posting.querySelector(".job__title h1");
+    const titleValue = markupOf(title);
+    if (titleValue) {
+      recordIdentityAwareField("title", titleValue, title, posting);
+    }
+
+    const location = posting.querySelector(".job__header .job__location");
+    const locationValue = markupOf(location);
+    if (locationValue) {
+      recordIdentityAwareField("location", locationValue, location, posting);
+    }
+
+    const description = posting.querySelector(".job__description");
+    const descriptionValue = markupOf(description);
+    if (descriptionValue) {
+      recordIdentityAwareField(
+        "description",
+        descriptionValue,
+        description,
+        posting,
+      );
+    }
+
+    // The application form is the apply destination on the current renderer.
+    // It is retained as selected-link evidence for capture diagnostics, but the
+    // Greenhouse adapter never lets this ATS URL establish an employer domain.
+    for (const form of Array.from(
+      posting.querySelectorAll("form#application-form[action]"),
+    )) {
+      const url = absoluteHttpUrl(form.getAttribute("action"));
+      if (url) selectedApplyUrls.add(url);
+    }
+    if (selectedApplyUrls.size > 0) {
+      observePostingField("selectedLinks", posting, posting);
+    }
+
+    /**
+     * Explicit board branding, not a tenant inference.
+     *
+     * Observed Greenhouse boards optionally render a linked logo inside the
+     * posting root (`<a class="logo" href="https://employer.example"><img
+     * alt="Employer Logo">`). The label and destination are two direct board
+     * statements. A generic label establishes no company, while a destination
+     * still has to pass the shared ATS/social/redirector filter in the adapter.
+     */
+    for (const logoLink of Array.from(posting.querySelectorAll("a.logo[href]"))) {
+      const url = absoluteHttpUrl(logoLink.getAttribute("href"));
+      if (!url) continue;
+      boardEmployerUrls.add(url);
+
+      const alt = logoLink.querySelector("img[alt]")?.getAttribute("alt") ?? "";
+      const name = alt
+        .trim()
+        .replace(/(?:\s+(?:logo|careers?|jobs?))+\s*$/i, "")
+        .trim();
+      if (name && name.length <= 160) boardEmployerNames.add(name);
+    }
+    if (boardEmployerUrls.size === 1 && boardEmployerNames.size <= 1) {
+      observePostingField("boardEmployer", posting, posting);
+    }
+  }
+
   if (rules.strategy === "linkedin-job-detail") readLinkedInJobDetail();
   if (rules.strategy === "linkedin-split-pane") readLinkedInSplitPane();
   if (rules.strategy === "workday-job-detail") readWorkdayJobDetail();
   if (rules.strategy === "workday-split-pane") readWorkdayJobDetail();
+  if (rules.strategy === "greenhouse-job-detail") readGreenhouseJobDetail();
 
   let applyAffordance = false;
   const candidates = Array.from(

@@ -583,7 +583,10 @@ describe("adapter compatibility around Workday", () => {
   it("leaves LinkedIn identity-aware and other pages on their prior adapters", () => {
     const urls = [
       ["https://www.linkedin.com/jobs/view/222/", "linkedin_identity_aware"],
-      ["https://boards.greenhouse.io/acme/jobs/1", "generic_page"],
+      [
+        "https://boards.greenhouse.io/acme/jobs/1",
+        "greenhouse_identity_aware",
+      ],
       ["https://careers.ibm.com/job/1", "generic_page"],
       ["https://careers.example.com/jobs/1", "generic_page"],
     ] as const;

@@ -390,6 +390,7 @@ extractJobReport(pageSignals)
         ├── deterministic capture adapter
         │       ├── LinkedIn identity-aware evidence
         │       ├── Workday identity-aware evidence
+        │       ├── Greenhouse identity-aware evidence
         │       ├── Indeed compatibility
         │       └── generic-page compatibility
         │
@@ -412,14 +413,14 @@ Nothing below the first level knows that Interndex, Supabase, OAuth,
 `applicationCreationSchema` or MCP exist; site rules extract facts from a page
 and stop there.
 
-#### P1.1/P1.2 adapter and page-local evidence boundary
+#### P1.1–P1.3 adapter and page-local evidence boundary
 
 Adapter selection is based only on the invoked page URL and the registry's
-declared order. It does not inspect document order. LinkedIn was the first
-adapter to claim page-local posting-identity support; Workday is the second.
-Indeed keeps its unchanged site-field compatibility path, while Greenhouse,
-Lever, SmartRecruiters and unrecognized pages keep the unchanged generic path.
-Those compatibility adapters report identity as unsupported, not unobserved.
+declared order. It does not inspect document order. LinkedIn, Workday and direct
+Greenhouse postings have page-local posting-identity support. Indeed keeps its
+unchanged site-field compatibility path, while Lever, SmartRecruiters and
+unrecognized pages keep the unchanged generic path. Those compatibility
+adapters report identity as unsupported, not unobserved.
 
 For LinkedIn, the collector records each field beside the posting ids written
 on the same bounded root that supplied it. A matching root may project. A root
@@ -438,6 +439,16 @@ mismatched root identity projects no automatic values. A requisition id in a
 search-result card cannot verify fields from the selected detail root, and
 multiple candidate roots are never resolved by document order.
 
+For supported Greenhouse routes, the address names one stable job-post id at
+`/<board>/jobs/<id>`, and the one `main.job-post` root repeats it in the action
+of `form#application-form`. Title, location, description, the application URL
+and optional linked-logo employer evidence are read only from that bounded root
+and attached to the repeated id. A missing, different or conflicting root id —
+or zero or several posting roots — projects no automatic Greenhouse fields. The
+board slug, document title and generic logo labels are never employer identity.
+The optional logo destination must pass the shared employer-domain filter, and
+Greenhouse application or description links cannot establish a domain.
+
 Selected Apply and description links are judged at the same boundary before
 they may participate in employer-domain resolution. This matters because the
 stored `company_domain` drives the dashboard logo: a stale LinkedIn link must
@@ -452,9 +463,9 @@ P1.1 adds no domain guessing and no coverage heuristics.
    attributes under the posting's own `itemscope` and flattened to the same
    property paths. Employer careers sites publish microdata far more often than
    job boards do, and reading it costs no site knowledge.
-2. **A recognized site.** `extension/src/sites.ts` names LinkedIn, Indeed and
-   Workday, and nothing else. It holds a table of selectors, two named
-   relational strategies (both LinkedIn's), and a little URL arithmetic. The
+2. **A recognized site.** `extension/src/sites.ts` names LinkedIn, Indeed,
+   Workday and Greenhouse, and nothing else. It holds a table of selectors,
+   narrow named strategies and a little URL arithmetic. The
    injected collector receives the rules for the current address as an argument,
    so it never decides which site — or which route — it is on, and every site is
    described in exactly one file.
@@ -465,7 +476,7 @@ Below that, nothing — and on a recognized site level 3 does not run at all. A
 named read path that finds nothing has found nothing, and the page's first
 heading is not a second opinion.
 
-#### Why three sites and not none
+#### Why four sites and not none
 
 Site-specific extraction was deliberately absent from the first version, and
 real-Chrome testing showed the boundary was drawn one notch too tight. The
@@ -474,10 +485,10 @@ it stored "Welcome back" from a signed-in Indeed page and "Search for Jobs" from
 a Workday page as job titles. A confident wrong title is worse than the blank it
 replaced.
 
-LinkedIn, Indeed and Workday carry most of a student's search. Greenhouse,
-Lever and everything else stay out: the adapter seam exists now, so adding one
-later is a table entry, and adding one now without evidence would be inventing
-selectors.
+LinkedIn, Indeed and Workday carry most of a student's search. Greenhouse joined
+only after read-only inspection established a stable direct route, a bounded
+posting root and a page-local repetition of the route's job id. Lever and
+everything else stay out until equally specific evidence exists.
 
 #### Selector rules
 
@@ -582,6 +593,17 @@ or nesting depth. A site that cannot be read reliably returns blanks.
   not where a student found the opportunity. **A Workday hostname is never a
   company domain**, and the employer is left empty unless the posting itself
   establishes it — a tenant hostname names whoever bought Workday.
+- **Greenhouse.** Direct `boards.greenhouse.io` and
+  `job-boards.greenhouse.io` routes only. The current renderer places the
+  posting header, location, description and application form inside one
+  `main.job-post`; the form action repeats the route job id. That repeated id,
+  not the board slug, title or employer text, establishes current-posting
+  identity. One observed optional `a.logo` can state an employer name in its
+  image alt and an employer-owned destination in its href. The name is accepted
+  only when it is specific rather than decorative, and the destination passes
+  the existing ATS/job-board/social/redirect/CDN filter. With no explicit linked
+  logo, Company and company domain stay blank. The direct posting URL is the
+  captured application link; it is never treated as the employer domain.
 
 #### The generic fallback, and what stops it
 
@@ -607,9 +629,10 @@ answer.
 
 Specific rules worth stating:
 
-- **Employer domain** comes only from `hiringOrganization.url` or `sameAs`,
-  never from the address bar, and an applicant-tracking or job-board host is
-  rejected even when the posting names one there.
+- **Employer domain** comes only from explicit employer URL evidence already
+  tied to the posting or verified board context, never from the address bar,
+  and an applicant-tracking or job-board host is rejected even when the page
+  names one there.
 - **Descriptions** are converted from HTML to plain text by string handling
   with no `innerHTML`, no `DOMParser`, and no element built from posting
   content. A description over Interndex's 50,000-character limit is shortened
@@ -894,7 +917,7 @@ confident wrong title is worse than the blank it replaced.
 
 **What changed as a result**
 
-- Named read paths for LinkedIn, Indeed and Workday, and the generic heading
+- Named read paths for LinkedIn, Indeed, Workday and direct Greenhouse postings, and the generic heading
   fallback switched off on all three.
 - JobPosting microdata read generically, which is the class of signal an
   employer careers page such as L3Harris is most likely to publish.
@@ -956,8 +979,9 @@ something **wrong** is a bug in this one.
 - TD direct Workday posting: the prior title/location/description/duration
   capture remains covered; P1.2 adds identity-gated board-name and `logoLink`
   evidence for employer and domain. Real-Chrome confirmation is still required.
-- Greenhouse-hosted posting: title and description correct; employer and
-  location missing. This remains outside P1.2.
+- Greenhouse-hosted posting: the P1.2 gap was title/description present while
+  employer/location were missing. P1.3 adds the identity-gated direct-route
+  path described below; real-Chrome confirmation remains required.
 - BDO Workday search-results split pane at `/details/...`: the selected job is
   now represented by a matching-requisition fixture with title, three
   locations, employer, description and safe employer-domain coverage. A stale
@@ -985,6 +1009,18 @@ something **wrong** is a bug in this one.
   called by the extension: P1.2 adds no request, permission, host permission,
   background fetch, dependency or network-architecture change.
 
+**Read-only Greenhouse DOM inspection (1 September 2026)**
+
+- Current public Canonical and Greenhouse direct postings rendered one
+  `main.job-post` containing `.job__title h1`, `.job__location`,
+  `.job__description` and `form#application-form`.
+- The form action repeated the route board and job-post id. Canonical's optional
+  linked logo explicitly named Canonical and pointed to `canonical.com`; the
+  Greenhouse posting demonstrated that a board may omit that logo entirely.
+- Page-title prose and serialized Remix route data were observed but are not
+  read. No ATS API, CXS endpoint, network request, permission or dependency was
+  added. The fixtures reproduce the observed structure with invented prose.
+
 ### The least-privilege question
 
 Supabase OAuth scopes affect what an identity token contains, not what Postgres
@@ -1005,9 +1041,9 @@ warranted, remain deferred to PR #29 along with Chrome Web Store submission.
 ## Explicitly deferred
 
 Not part of the server foundation and not part of the extension: read paths for
-any site other than LinkedIn, Indeed and Workday — Greenhouse, Lever, Glassdoor
-and the rest wait for evidence, and the table in `sites.ts` is where one would
-go; a generalized scraping framework; background monitoring; built-in AI;
+any site other than LinkedIn, Indeed, Workday and direct Greenhouse postings —
+Lever, Glassdoor and the rest wait for evidence, and the table in `sites.ts` is
+where one would go; a generalized scraping framework; background monitoring; built-in AI;
 classification; resume matching or tailoring; cover letters; autofill;
 auto-apply; submission detection; recommendations; job discovery;
 email or calendar integration; notifications; fuzzy deduplication; global URL

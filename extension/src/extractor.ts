@@ -51,7 +51,7 @@ import type {
  * 1. **Structured data the publisher formally asserts** — `schema.org`
  *    JobPosting, as JSON-LD or as microdata. This wins outright except on
  *    Workday, where live pages can retain a stale backend posting.
- * 2. **A recognized site's own read path** — LinkedIn, Indeed and Workday
+ * 2. **A recognized site's own read path** — LinkedIn, Indeed, Workday and Greenhouse
  *    publish no structured posting data on the pages a student actually reads,
  *    and between them they carry most of a student's search. `sites.ts` names
  *    them and nothing else.
@@ -640,6 +640,8 @@ function sourceForSite(site: ReturnType<typeof siteFor>): ExtractionSource | und
       return "indeed_site";
     case "workday":
       return "workday_selected_posting";
+    case "greenhouse":
+      return "greenhouse_selected_posting";
     default:
       return undefined;
   }
@@ -873,7 +875,12 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   // no selected posting at all. Correlation does not soften this: a Workday
   // record that correlates is still not trusted, because what went stale there
   // was the record's contents rather than its identity.
-  const posting = site === "workday" ? undefined : structuredPosting;
+  const greenhouseRootVerified =
+    site !== "greenhouse" || adapter.postingIdentity.observed === "verified";
+  const posting =
+    site === "workday" || !greenhouseRootVerified
+      ? undefined
+      : structuredPosting;
 
   const fromSite = adapter.fields;
 
@@ -983,7 +990,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
       : undefined,
     siteSource,
   );
-  const workdayCompanyDomainField: CapturedField<string> =
+  const adapterCompanyDomainField: CapturedField<string> =
     adapter.fields.companyDomain
       ? established<string>(adapter.fields.companyDomain, "exact", siteSource)
       : absent<string>();
@@ -1029,10 +1036,10 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
           ),
     companyDomain:
       site === "workday"
-        ? workdayCompanyDomainField.state === "established"
+        ? adapterCompanyDomainField.state === "established"
           ? workdayField(
-              workdayCompanyDomainField.value,
-              workdayCompanyDomainField.source,
+              adapterCompanyDomainField.value,
+              adapterCompanyDomainField.source,
               structuredCompanyDomainCandidate,
               structuredSource,
             )
@@ -1044,7 +1051,9 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
             )
         : structuredCompanyDomain
           ? established(structuredCompanyDomain, "exact", structuredSource)
-          : selectedCompanyDomainField,
+          : adapterCompanyDomainField.state === "established"
+            ? adapterCompanyDomainField
+            : selectedCompanyDomainField,
     jobDescription:
       site === "workday"
         ? workdayField(
@@ -1289,7 +1298,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   /**
    * A labelled compensation statement, as a fallback for the structured
    * salary above and only where the structured value did not already answer
-   * it. LinkedIn, Indeed and Workday publish no structured posting data on
+   * it. LinkedIn, Indeed, Workday and Greenhouse publish no structured posting data on
    * the pages a student actually reads at all — the same reason the other
    * three rich fields exist — so an explicit rate stated in plain text has no
    * other path into the record.

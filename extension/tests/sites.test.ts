@@ -21,7 +21,7 @@ import type { PageSignals } from "../src/types.js";
 import { jsonLd, readSitePage } from "./fixtures.js";
 
 /**
- * The three surfaces Interndex Capture reads by name.
+ * The recognized surfaces Interndex Capture reads by name.
  *
  * The markup below is synthetic and minimal: the container, the attribute and
  * the nesting each read path depends on, and invented words inside them. No
@@ -52,13 +52,15 @@ const LINKEDIN_SIMILAR = `https://www.linkedin.com/jobs/collections/similar-jobs
 const INDEED_JOB = "https://ca.indeed.com/viewjob?jk=a1b2c3d4e5f6a7b8";
 const WORKDAY_JOB =
   "https://kpmg.wd3.myworkdayjobs.com/en-US/External/job/Toronto/Senior-Consultant_12345";
+const GREENHOUSE_JOB =
+  "https://job-boards.greenhouse.io/acme/jobs/4123456789";
 
 describe("recognizing a site", () => {
-  it("names the three surfaces it reads and nothing else", () => {
+  it("names the four surfaces it reads and nothing else", () => {
     expect(siteFor(LINKEDIN_JOB)).toBe("linkedin");
     expect(siteFor(INDEED_JOB)).toBe("indeed");
     expect(siteFor(WORKDAY_JOB)).toBe("workday");
-    expect(siteFor("https://boards.greenhouse.io/acme/jobs/1")).toBeUndefined();
+    expect(siteFor(GREENHOUSE_JOB)).toBe("greenhouse");
     expect(siteFor("https://careers.example.com/job/1")).toBeUndefined();
   });
 

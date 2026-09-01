@@ -4,14 +4,14 @@ import { arrangementWord } from "./rich-fields.js";
 import type { ExtractedJob, PageSignals } from "./types.js";
 
 /**
- * The three job surfaces Interndex Capture recognizes by name, and nothing else.
+ * The job surfaces Interndex Capture recognizes by name, and nothing else.
  *
  * Site knowledge was deliberately absent from the first version, on the theory
  * that a selector guess is worse than a blank field. Manual testing in real
  * Chrome showed the theory was half right: the blanks were correct, but the
  * generic fallback beneath them was not conservative enough, and on LinkedIn,
  * Indeed and Workday it confidently turned page furniture — "Welcome back",
- * "Search for Jobs" — into job titles. Those three carry most of a student's
+ * "Search for Jobs" — into job titles. Those sites carry most of a student's
  * search, so they get narrow, deterministic read paths here, and the generic
  * fallback is switched off on them entirely: a recognized site that yields
  * nothing yields blanks, never the page's first heading.
@@ -25,7 +25,9 @@ import type { ExtractedJob, PageSignals } from "./types.js";
  * Selector preference, highest first: structured data (handled before this file
  * is reached), semantic and accessibility attributes, stable data attributes
  * the site itself maintains for its own automation, then narrowly scoped
- * component containers. Nothing here keys off generated class hashes,
+ * component containers. Greenhouse was added only after its direct renderer
+ * exposed one bounded posting root whose application form repeats the route's
+ * stable job id. Nothing here keys off generated class hashes,
  * `nth-child`, colour, or nesting depth.
  *
  * Indeed and Workday are selector tables and Workday is confirmed working in
@@ -48,7 +50,7 @@ import type { ExtractedJob, PageSignals } from "./types.js";
  * fact that the route needs it, and which posting id it must corroborate.
  */
 
-export type SiteId = "linkedin" | "indeed" | "workday";
+export type SiteId = "linkedin" | "indeed" | "workday" | "greenhouse";
 
 /** One field the injected collector should try to read, in preference order. */
 export type FieldRule = { key: SiteFieldKey; selectors: string[] };
@@ -97,7 +99,8 @@ export type SiteStrategy =
   | "linkedin-job-detail"
   | "linkedin-split-pane"
   | "workday-job-detail"
-  | "workday-split-pane";
+  | "workday-split-pane"
+  | "greenhouse-job-detail";
 
 /**
  * How to find the document that is actually showing the selected posting.
@@ -293,6 +296,22 @@ function workdayRoute(url: URL): RoutedRead {
   };
 }
 
+/**
+ * One direct Greenhouse posting: `/<board>/jobs/<job-post-id>`.
+ *
+ * The board segment is routing, never employer identity. Only the final stable
+ * job-post id is returned, and only for the exact direct-posting shape observed
+ * on both `boards.greenhouse.io` and the current `job-boards.greenhouse.io`
+ * renderer. Board indexes, embedded application forms and error routes do not
+ * receive a posting strategy.
+ */
+function greenhouseRoute(url: URL): RoutedRead {
+  const match = /^\/[^/]+\/jobs\/([^/]+)\/?$/.exec(url.pathname);
+  const jobId = match ? jobIdentifier(match[1]) : undefined;
+
+  return jobId ? { strategy: "greenhouse-job-detail", jobId } : {};
+}
+
 const SITE_RULES: readonly SiteRule[] = [
   {
     id: "linkedin",
@@ -347,6 +366,12 @@ const SITE_RULES: readonly SiteRule[] = [
     hosts: ["myworkdayjobs.com", "myworkdaysite.com", "wd1.myworkdaycdn.com"],
     fields: [],
     route: workdayRoute,
+  },
+  {
+    id: "greenhouse",
+    hosts: ["boards.greenhouse.io", "job-boards.greenhouse.io"],
+    fields: [],
+    route: greenhouseRoute,
   },
 ];
 
@@ -458,6 +483,13 @@ export function canonicalPostingUrl(pageUrl: string): string | undefined {
       jobIdentifier(parsed.searchParams.get("vjk"));
 
     return key ? `${parsed.origin}/viewjob?jk=${key}` : undefined;
+  }
+
+  if (site === "greenhouse") {
+    const selected = readRulesFor(pageUrl).jobId;
+    return selected
+      ? `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`
+      : undefined;
   }
 
   // Workday job detail URLs already address one posting.

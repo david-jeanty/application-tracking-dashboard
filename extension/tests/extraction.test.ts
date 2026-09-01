@@ -407,10 +407,11 @@ describe("the employer's domain", () => {
           },
         }),
       ),
+      '<main class="job-post"><form id="application-form" action="/northwind/jobs/4001"></form></main>',
     );
 
     const job = extractJob(
-      readPage(html, "https://boards.greenhouse.io/northwind/jobs/4001"),
+      readSitePage(html, "https://boards.greenhouse.io/northwind/jobs/4001"),
     );
 
     expect(job.company).toBe("Northwind");

@@ -37,6 +37,9 @@ const JOB_A = "https://www.linkedin.com/jobs/search/?currentJobId=111";
 const JOB_B = "https://www.linkedin.com/jobs/search/?currentJobId=222";
 const WORKDAY_B =
   "https://bdo.wd3.myworkdayjobs.com/en-US/BDO/details/Capital-Markets-Intern_JR6803";
+const GREENHOUSE_ID = "3752633";
+const GREENHOUSE_B =
+  `https://job-boards.greenhouse.io/northbridge/jobs/${GREENHOUSE_ID}`;
 
 /** A page whose JSON-LD names one posting, as a real job page would. */
 function signalsFor(company: string, title: string, url: string): PageSignals {
@@ -66,6 +69,34 @@ function frameEvidence(url: string): LinkedInFrameEvidence {
     dataJobId: true,
     dataOccludableJobId: false,
     dataEntityUrn: false,
+  };
+}
+
+/** The collector contract produced by one verified direct Greenhouse root. */
+function greenhouseSignals(): PageSignals {
+  return {
+    jsonLdBlocks: [],
+    meta: {},
+    pageUrl: GREENHOUSE_B,
+    siteFields: {
+      title: "Platform Reliability Engineer",
+      location: "Home based - Worldwide",
+      description: "Build dependable systems with the selected platform team.",
+    },
+    selectedLinks: { applyUrl: GREENHOUSE_B },
+    boardEmployer: {
+      name: "Northbridge Robotics",
+      url: "https://www.northbridgerobotics.example/careers",
+    },
+    observedPosting: {
+      fields: [
+        { field: "title", jobIds: [GREENHOUSE_ID] },
+        { field: "location", jobIds: [GREENHOUSE_ID] },
+        { field: "description", jobIds: [GREENHOUSE_ID] },
+        { field: "selectedLinks", jobIds: [GREENHOUSE_ID] },
+        { field: "boardEmployer", jobIds: [GREENHOUSE_ID] },
+      ],
+    },
   };
 }
 
@@ -212,6 +243,37 @@ describe("popup capture, end to end", () => {
     expect(harness.captures[0]?.record).toMatchObject({
       company: "Northwind",
       job_title: "Data Intern",
+    });
+  });
+
+  it("shows and saves verified Greenhouse fields, apply URL, and safe employer domain", async () => {
+    const harness = install({
+      url: GREENHOUSE_B,
+      collect: async () => greenhouseSignals(),
+    });
+
+    await openPopup();
+
+    expect(visiblePanels()).toEqual(["ready"]);
+    expect(companyField()).toBe("Northbridge Robotics");
+    expect(document.querySelector<HTMLInputElement>("#job-title")?.value).toBe(
+      "Platform Reliability Engineer",
+    );
+    expect(document.querySelector<HTMLInputElement>("#location")?.value).toBe(
+      "Home based - Worldwide",
+    );
+
+    submit();
+    await settle();
+
+    expect(harness.captures).toHaveLength(1);
+    expect(harness.captures[0]?.record).toMatchObject({
+      company: "Northbridge Robotics",
+      job_title: "Platform Reliability Engineer",
+      location: "Home based - Worldwide",
+      company_domain: "northbridgerobotics.example",
+      job_description: expect.stringContaining("selected platform team"),
+      job_url: GREENHOUSE_B,
     });
   });
 
