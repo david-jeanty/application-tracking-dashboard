@@ -1458,17 +1458,20 @@ function workdayDetail({
   location,
   description,
   sidebar,
+  requisition = "123",
 }: {
   title: string;
   location: string;
   description: string;
   sidebar: string;
+  requisition?: string;
 }) {
   return `<body>
       <div data-automation-id="similarJobsCard"><h2>Similar Jobs title</h2><div data-automation-id="locations"><dl><dd>Wrong before location</dd></dl></div></div>
       <div data-automation-id="jobPostingPage">
         <h2 data-automation-id="jobPostingHeader">${title}</h2>
         <div data-automation-id="job-posting-details"><div data-automation-id="locations"><dl><dt>locations</dt><dd>${location}</dd></dl></div></div>
+        <div data-automation-id="requisitionId"><dl><dt>job requisition id</dt><dd>${requisition}</dd></dl></div>
         <div data-automation-id="jobPostingDescription"><p>${description}</p></div>
       </div>
       <div data-automation-id="similarJobsCard"><h2>Another similar title</h2><div data-automation-id="locations"><dl><dd>Wrong after location</dd></dl></div></div>
@@ -1482,6 +1485,7 @@ describe("Workday", () => {
      <div data-automation-id="jobPostingPage">
        <h2 data-automation-id="jobPostingHeader">Senior Consultant, Internship</h2>
        <div data-automation-id="job-posting-details"><div data-automation-id="locations"><dl><dt>locations</dt><dd>Toronto, Ontario</dd></dl></div></div>
+       <div data-automation-id="requisitionId"><dl><dt>job requisition id</dt><dd>12345</dd></dl></div>
        <div data-automation-id="jobPostingDescription"><p>Join the consulting practice.</p></div>
      </div>
    </body>`;
@@ -1811,6 +1815,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
   it("corroborates a legal name that contains the tenant slug as a prefix", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -1829,6 +1834,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
     // be about it, not just contain the letters somewhere.
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-1",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -1843,6 +1849,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
     // equals a short company name still corroborates.
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-1",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar: '<img data-automation-id="image" alt="Acme logo" />',
@@ -1854,6 +1861,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
   it("does not fabricate a company from the tenant slug alone, with no sidebar evidence at all", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar: "",
@@ -1865,6 +1873,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
   it("reads a corroborating declaration after an introductory marketing sentence", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -1879,6 +1888,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
   it("reads a corroborating declaration introduced by a comma clause, not a full sentence", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -1893,6 +1903,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
   it("picks the one candidate that corroborates when another organization is also named", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -1907,6 +1918,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
   it("returns blank rather than choosing between two differently-worded corroborating candidates", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -1919,6 +1931,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
   it("leaves an abbreviation-only logo insufficient with no full-name evidence anywhere", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -1931,6 +1944,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
   it("reads the full name from rich text alongside an abbreviation-only logo", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -1945,6 +1959,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
   it("falls back to the selected description when the sidebar establishes nothing", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description:
         "Recognized industry-wide, Northbridge Robotics is a global leader in automation. Apply today.",
@@ -1959,6 +1974,7 @@ describe("Workday company corroboration beyond an exact tenant match", () => {
   it("leaves company blank with a sidebar present but no corroborating evidence in it", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -1976,6 +1992,7 @@ describe("Workday employer domain from the sidebar's own link", () => {
   it("accepts an explicit employer-owned link in the About Us sidebar", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -1990,6 +2007,7 @@ describe("Workday employer domain from the sidebar's own link", () => {
   it("rejects a Workday-hosted URL even if one appears in the sidebar", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -2002,6 +2020,7 @@ describe("Workday employer domain from the sidebar's own link", () => {
   it("rejects a social-media link", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -2014,6 +2033,7 @@ describe("Workday employer domain from the sidebar's own link", () => {
   it("rejects an ATS-hosted URL, per the existing rejection policy", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -2026,6 +2046,7 @@ describe("Workday employer domain from the sidebar's own link", () => {
   it("leaves company domain unset with no employer URL evidence at all", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -2045,6 +2066,7 @@ describe("Workday employer domain from the sidebar's own link", () => {
   it("populates the domain from an explicit link even when the company name stays unresolved", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Selected description.",
       sidebar:
@@ -2065,6 +2087,7 @@ describe("Workday salary from the selected posting's own description", () => {
   it("captures an explicit hourly compensation statement", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description:
         "The expected compensation for this position in Ontario is: $24/hr",
@@ -2077,6 +2100,7 @@ describe("Workday salary from the selected posting's own description", () => {
   it("captures an explicit compensation range", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Compensation for this position ranges from $20 to $25 per hour.",
       sidebar: "",
@@ -2090,6 +2114,7 @@ describe("Workday salary from the selected posting's own description", () => {
   it("ignores an unrelated dollar amount with no compensation context", () => {
     const html = workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "Our team has supported over $2 million in community grants.",
       sidebar: "",
@@ -2108,6 +2133,7 @@ describe("Workday salary from the selected posting's own description", () => {
       baseSalary: { currency: "CAD", value: { value: "999999", unitText: "YEAR" } },
     })}</head>${workdayDetail({
       title: "Operations Intern",
+      requisition: "R-4821",
       location: "Toronto, ON",
       description: "The expected compensation for this position is: $24/hr",
       sidebar: "",
@@ -2140,6 +2166,7 @@ describe("the Live Nation Workday posting found in production QA", () => {
 
   const html = workdayDetail({
     title: "Brand Partnerships Intern (Fall 2026)",
+    requisition: "JR-92460",
     location: "Toronto, ON",
     description: [
       "Fall 2026 Internship - Brand Partnerships",

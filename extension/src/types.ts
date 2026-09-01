@@ -21,7 +21,8 @@ export type ObservedPostingField =
   | "location"
   | "description"
   | "workplaceType"
-  | "selectedLinks";
+  | "selectedLinks"
+  | "boardEmployer";
 
 /** Raw material read from the page, before any interpretation. */
 export type PageSignals = {
@@ -70,16 +71,30 @@ export type PageSignals = {
     jobPostingMicrodata?: boolean;
   };
   /**
-   * URLs already scoped to the posting the collector proved was selected.
+   * Link evidence already scoped to the posting the collector proved selected.
    *
-   * They are absolute HTTP(S) URLs only, bounded before they leave the page,
-   * and deliberately contain no surrounding markup or link text.
+   * URLs are absolute HTTP(S) values bounded before they leave the page.
    */
   selectedLinks?: {
     applyUrl?: string;
     descriptionUrls?: readonly string[];
+    /** Employer-owned destination explicitly stated in bounded page copy. */
+    employerUrl?: string;
   };
-  /** Posting ids observed at the same roots that supplied LinkedIn evidence. */
+  /**
+   * What one Workday board logo link states about the employer.
+   *
+   * The destination is the load-bearing half and is always present: it is the
+   * board's own statement of where the employer's site is. The name is whatever
+   * label the board put on its logo, and boards routinely put a decorative one
+   * there — so it is optional, and its absence withholds the employer's name
+   * without withholding the destination.
+   */
+  boardEmployer?: {
+    name?: string;
+    url: string;
+  };
+  /** Posting ids observed at the same roots that supplied identity-aware evidence. */
   observedPosting?: {
     fields: readonly {
       field: ObservedPostingField;
@@ -259,6 +274,7 @@ const OBSERVED_POSTING_FIELDS: readonly ObservedPostingField[] = [
   "description",
   "workplaceType",
   "selectedLinks",
+  "boardEmployer",
 ];
 
 function isStringRecord(value: unknown): value is Record<string, string> {
@@ -304,7 +320,10 @@ export function isPageSignals(value: unknown): value is PageSignals {
     const selected = links as Record<string, unknown>;
     if (
       !Object.keys(selected).every(
-        (key) => key === "applyUrl" || key === "descriptionUrls",
+        (key) =>
+          key === "applyUrl" ||
+          key === "descriptionUrls" ||
+          key === "employerUrl",
       )
     ) {
       return false;
@@ -312,11 +331,36 @@ export function isPageSignals(value: unknown): value is PageSignals {
     if (selected.applyUrl !== undefined && !isHttpUrl(selected.applyUrl)) {
       return false;
     }
+    if (selected.employerUrl !== undefined && !isHttpUrl(selected.employerUrl)) {
+      return false;
+    }
     if (
       selected.descriptionUrls !== undefined &&
       (!Array.isArray(selected.descriptionUrls) ||
         selected.descriptionUrls.length > MAXIMUM_SELECTED_LINKS ||
         !selected.descriptionUrls.every(isHttpUrl))
+    ) {
+      return false;
+    }
+  }
+
+  const boardEmployer = candidate.boardEmployer;
+  if (boardEmployer !== undefined) {
+    if (
+      !boardEmployer ||
+      typeof boardEmployer !== "object" ||
+      Array.isArray(boardEmployer)
+    ) {
+      return false;
+    }
+    const board = boardEmployer as Record<string, unknown>;
+    if (
+      !Object.keys(board).every((key) => key === "name" || key === "url") ||
+      (board.name !== undefined &&
+        (typeof board.name !== "string" ||
+          board.name.length === 0 ||
+          board.name.length > 160)) ||
+      !isHttpUrl(board.url)
     ) {
       return false;
     }

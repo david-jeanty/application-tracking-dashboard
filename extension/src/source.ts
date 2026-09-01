@@ -22,6 +22,7 @@ const APPLICANT_TRACKING_HOSTS = [
   "myworkdaysite.com",
   "workday.com",
   "workdayjobs.com",
+  "myworkdaycdn.com",
   "icims.com",
   "smartrecruiters.com",
   "ashbyhq.com",
@@ -79,11 +80,20 @@ const SOCIAL_MEDIA_HOSTS = [
   "pinterest.com",
 ];
 
+/** Redirect services observed inside posting prose, never employer websites. */
+const REDIRECTOR_HOSTS = [
+  "safelinks.protection.outlook.com",
+  "lnkd.in",
+  "bit.ly",
+  "t.co",
+];
+
 /** Every host that must never become an employer domain. */
 const NEVER_EMPLOYER_HOSTS = [
   ...APPLICANT_TRACKING_HOSTS,
   ...JOB_BOARD_SOURCES.map((entry) => entry.suffix),
   ...SOCIAL_MEDIA_HOSTS,
+  ...REDIRECTOR_HOSTS,
 ];
 
 /**

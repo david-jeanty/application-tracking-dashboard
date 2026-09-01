@@ -109,14 +109,22 @@ export function collectPageSignals(
   /** URLs from a region already established as the selected posting only. */
   const selectedDescriptionUrls = new Set<string>();
   const selectedApplyUrls = new Set<string>();
+  const selectedEmployerUrls = new Set<string>();
+  const boardEmployerUrls = new Set<string>();
+  const boardEmployerNames = new Set<string>();
   let descriptionUrlOverflow = false;
   const observedPostingFields: Array<{
     field: ObservedPostingField;
     jobIds: string[];
   }> = [];
-  const identityAwareLinkedIn =
+  const identityAwarePosting =
     rules.strategy === "linkedin-job-detail" ||
-    rules.strategy === "linkedin-split-pane";
+    rules.strategy === "linkedin-split-pane" ||
+    rules.strategy === "workday-job-detail" ||
+    rules.strategy === "workday-split-pane";
+  const identityAwareWorkday =
+    rules.strategy === "workday-job-detail" ||
+    rules.strategy === "workday-split-pane";
   const POSTING_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
   const POSTING_LINK_ID_PATTERN = /\/jobs\/view\/([A-Za-z0-9_-]+)/;
   const ENTITY_URN_ID_PATTERN = /(?:jobPosting|fsd_jobPosting):([A-Za-z0-9_-]+)/i;
@@ -146,6 +154,18 @@ export function collectPageSignals(
     establishingAnchor?: Element | null,
   ): string[] {
     const ids = new Set<string>();
+
+    if (identityAwareWorkday && establishingAnchor) {
+      for (const requisition of Array.from(
+        establishingAnchor.querySelectorAll(
+          '[data-automation-id="requisitionId"] dd',
+        ),
+      )) {
+        addPostingId(ids, requisition.textContent);
+      }
+      return [...ids].slice(0, MAXIMUM_OBSERVED_JOB_IDS);
+    }
+
     let node = element;
 
     for (
@@ -167,7 +187,7 @@ export function collectPageSignals(
     establishingAnchor?: Element | null,
   ): void {
     if (
-      !identityAwareLinkedIn ||
+      !identityAwarePosting ||
       observedPostingFields.length >= MAXIMUM_OBSERVED_FIELDS
     ) {
       return;
@@ -320,8 +340,8 @@ export function collectPageSignals(
   }
 
   const siteFields: Record<string, string> = {};
-  function recordLinkedInField(
-    key: Exclude<ObservedPostingField, "selectedLinks">,
+  function recordIdentityAwareField(
+    key: Exclude<ObservedPostingField, "selectedLinks" | "boardEmployer">,
     value: string,
     element: Element | null,
     establishingAnchor?: Element | null,
@@ -494,7 +514,7 @@ export function collectPageSignals(
   ): void {
     if (values.length === 0) return;
 
-    recordLinkedInField(
+    recordIdentityAwareField(
       "workplaceType",
       values.join(", "),
       root,
@@ -585,7 +605,7 @@ export function collectPageSignals(
     const anchor = findCompanyAnchor();
     if (!anchor) return;
 
-    recordLinkedInField("company", anchor.name, anchor.element);
+    recordIdentityAwareField("company", anchor.name, anchor.element);
 
     const topCard = findTopCard(anchor.element);
     if (topCard) {
@@ -606,7 +626,7 @@ export function collectPageSignals(
 
         const value = markupOf(candidate);
         if (value && trimmedText(candidate) !== anchor.name) {
-          recordLinkedInField("title", value, candidate);
+          recordIdentityAwareField("title", value, candidate);
           titleText = trimmedText(candidate);
           break;
         }
@@ -633,7 +653,7 @@ export function collectPageSignals(
           continue;
         }
 
-        recordLinkedInField("location", value, candidate);
+        recordIdentityAwareField("location", value, candidate);
         locationElement = candidate;
         break;
       }
@@ -653,7 +673,7 @@ export function collectPageSignals(
     const description = about ? descriptionUnder([about]) : null;
     const descriptionValue = markupOf(description);
     if (descriptionValue) {
-      recordLinkedInField("description", descriptionValue, description);
+      recordIdentityAwareField("description", descriptionValue, description);
       recordDescriptionLinks(description);
     }
   }
@@ -824,8 +844,8 @@ export function collectPageSignals(
           return;
         }
 
-        recordLinkedInField("title", title, link, link);
-        recordLinkedInField("company", company.name, company.element, link);
+        recordIdentityAwareField("title", title, link, link);
+        recordIdentityAwareField("company", company.name, company.element, link);
 
         const locationLine = Array.from(header.children).find(
           (child) => child.tagName === "P",
@@ -837,7 +857,7 @@ export function collectPageSignals(
           location.length <= MAXIMUM_LOCATION_CHARACTERS &&
           !location.includes("\n")
         ) {
-          recordLinkedInField("location", location, locationLine ?? header, link);
+          recordIdentityAwareField("location", location, locationLine ?? header, link);
         }
 
         /**
@@ -1014,7 +1034,7 @@ export function collectPageSignals(
         const description = about ? descriptionUnder([about]) : null;
         const descriptionValue = markupOf(description);
         if (descriptionValue) {
-          recordLinkedInField("description", descriptionValue, description, link);
+          recordIdentityAwareField("description", descriptionValue, description, link);
           recordDescriptionLinks(description, link);
         }
 
@@ -1051,7 +1071,7 @@ export function collectPageSignals(
       });
       const title = titleNode ? trimmedText(titleNode) : "";
       if (!title) return;
-      recordLinkedInField(
+      recordIdentityAwareField(
         "title",
         title,
         titleNode ?? exactPostingLink,
@@ -1097,7 +1117,7 @@ export function collectPageSignals(
         company !== title &&
         !/\bwith verification\b/i.test(company)
       ) {
-        recordLinkedInField(
+        recordIdentityAwareField(
           "company",
           company,
           companyElement ?? companyBlock,
@@ -1130,7 +1150,7 @@ export function collectPageSignals(
           .replace(/\s+\((?:on-site|hybrid|remote)\)\s*$/i, "")
           .trim();
         if (location) {
-          recordLinkedInField(
+          recordIdentityAwareField(
             "location",
             location,
             locationElement,
@@ -1167,7 +1187,7 @@ export function collectPageSignals(
         }
         const description = markupOf(copy);
         if (description) {
-          recordLinkedInField(
+          recordIdentityAwareField(
             "description",
             description,
             details,
@@ -1271,7 +1291,7 @@ export function collectPageSignals(
     if (!anchor) return;
 
     const company = anchor;
-    recordLinkedInField("company", company.name, company.element);
+    recordIdentityAwareField("company", company.name, company.element);
 
     // The title and the location: the card the employer belongs to, read
     // exactly the way the verified job-detail route reads its own.
@@ -1300,7 +1320,7 @@ export function collectPageSignals(
 
         const value = markupOf(candidate);
         if (value && trimmedText(candidate) !== company.name) {
-          recordLinkedInField("title", value, candidate);
+          recordIdentityAwareField("title", value, candidate);
           titleText = trimmedText(candidate);
           break;
         }
@@ -1321,7 +1341,7 @@ export function collectPageSignals(
           continue;
         }
 
-        recordLinkedInField("location", value, candidate);
+        recordIdentityAwareField("location", value, candidate);
         locationElement = candidate;
         break;
       }
@@ -1354,7 +1374,7 @@ export function collectPageSignals(
 
       const value = markupOf(box ?? null);
       if (value) {
-        recordLinkedInField("description", value, box ?? block);
+        recordIdentityAwareField("description", value, box ?? block);
         recordDescriptionLinks(box ?? null);
         break;
       }
@@ -1380,7 +1400,7 @@ export function collectPageSignals(
 
           const value = markupOf(box ?? null);
           if (value) {
-            recordLinkedInField("description", value, box ?? node);
+            recordIdentityAwareField("description", value, box ?? node);
             recordDescriptionLinks(box ?? null);
             break;
           }
@@ -1395,26 +1415,44 @@ export function collectPageSignals(
 
   /** Workday's selected posting is the only safe scope for its automation ids. */
   function readWorkdayJobDetail(): void {
-    const posting = document.querySelector(
-      '[data-automation-id="jobPostingPage"]',
-    );
-    // Search results also expose titles and locations, but not a posting root.
+    const rootSelector =
+      rules.strategy === "workday-split-pane"
+        ? '[data-automation-id="jobDetails"]'
+        : '[data-automation-id="jobPostingPage"]';
+    const postingRoots = Array.from(document.querySelectorAll(rootSelector));
+    // Zero selected roots is a loading/search state. More than one cannot be
+    // attributed without document order, so both states deliberately stay blank.
+    if (postingRoots.length !== 1) return;
+    const [posting] = postingRoots;
     if (!posting) return;
 
     const title = posting.querySelector(
       '[data-automation-id="jobPostingHeader"]',
     );
     const titleValue = markupOf(title);
-    if (titleValue) siteFields["title"] = titleValue;
+    if (titleValue) {
+      siteFields["title"] = titleValue;
+      observePostingField("title", title, posting);
+    }
 
-    const details = posting.querySelector(
-      '[data-automation-id="job-posting-details"]',
-    );
-    const locations = details?.querySelector(
-      '[data-automation-id="locations"]',
-    );
-    const locationValue = markupOf(locations?.querySelector("dd") ?? null);
-    if (locationValue) siteFields["location"] = locationValue;
+    // Direct pages nest this under `job-posting-details`; the live selected
+    // split pane places the same automation marker directly under jobDetails.
+    // Querying from the verified posting root supports both without touching
+    // the separate jobResults rail.
+    const locations = posting.querySelector('[data-automation-id="locations"]');
+    const locationValues = locations
+      ? Array.from(locations.querySelectorAll("dd"))
+          .map((location) => trimmedText(location))
+          .filter(Boolean)
+      : [];
+    const distinctLocations = [...new Set(locationValues)];
+    if (distinctLocations.length > 0) {
+      siteFields["location"] = clamp(
+        distinctLocations.join(" • "),
+        MAXIMUM_FIELD_CHARACTERS,
+      );
+      observePostingField("location", locations ?? null, posting);
+    }
 
     const description = posting.querySelector(
       '[data-automation-id="jobPostingDescription"]',
@@ -1422,9 +1460,93 @@ export function collectPageSignals(
     const descriptionValue = markupOf(description);
     if (descriptionValue) {
       siteFields["description"] = descriptionValue;
-      recordDescriptionLinks(description);
+      observePostingField("description", description, posting);
+      recordDescriptionLinks(description, posting);
     }
-    recordApplyLink(posting);
+    recordApplyLink(posting, posting);
+
+    // The logo link is Workday's explicit board-level employer destination.
+    // It is stronger than arbitrary links in posting prose, and remains
+    // subject to the adapter's same-root identity gate and host blocklist.
+    const genericAccessibleName =
+      /^(?:canada|united states|usa|us|global|english|fran[cç]ais|company|logo|careers?|jobs?|home(?:page)?)$/i;
+
+    /**
+     * The employer one logo link names, from the first source that states one.
+     *
+     * One link commonly carries more than one accessible name: the image's
+     * `alt` describes the mark, and the anchor's `aria-label` describes where
+     * the link goes. Those are two descriptions of one employer, not two
+     * employers — collecting both and then requiring the set to hold exactly
+     * one entry made a board that labels its logo twice look like a board that
+     * could not decide who it belonged to, and blanked the company on a page
+     * that stated it plainly. Live BDO is exactly that page.
+     *
+     * So one name is chosen per link, and disagreement is judged across links
+     * where it is a real conflict. The image's own description comes first
+     * because it names the mark; a link label such as `Careers home` names a
+     * destination. A source that is generic, empty or address-shaped is passed
+     * over rather than accepted, so a plain `alt="logo"` still falls through to
+     * a label that does name the employer.
+     */
+    const boardEmployerNameFrom = (logoLink: Element): string | undefined => {
+      const sources = [
+        logoLink.querySelector("img[alt]")?.getAttribute("alt"),
+        logoLink
+          .querySelector('[role="img"][aria-label]')
+          ?.getAttribute("aria-label"),
+        logoLink.getAttribute("aria-label"),
+      ];
+
+      for (const source of sources) {
+        const candidate = (source?.trim() ?? "")
+          .replace(/(?:\s+(?:logo|careers?|jobs?|home(?:page)?))+\s*$/i, "")
+          .replace(/^careers?\s+at\s+/i, "")
+          .trim();
+
+        if (
+          candidate &&
+          candidate.length <= 160 &&
+          /[a-z]/i.test(candidate) &&
+          !genericAccessibleName.test(candidate) &&
+          !/^https?:|\.[a-z]{2,}(?:\/|$)/i.test(candidate)
+        ) {
+          return candidate;
+        }
+      }
+
+      return undefined;
+    };
+
+    for (const logoLink of Array.from(
+      document.querySelectorAll('a[data-automation-id="logoLink"][href]'),
+    )) {
+      const url = absoluteHttpUrl(logoLink.getAttribute("href"));
+      if (!url) continue;
+      boardEmployerUrls.add(url);
+
+      const name = boardEmployerNameFrom(logoLink);
+      if (name) boardEmployerNames.add(name);
+    }
+    /**
+     * One board, one destination — a name is a bonus rather than a condition.
+     *
+     * The destination and the name answer different questions. Where the
+     * employer's own site is, is stated by the board's own link; who the
+     * employer is called, is stated by whatever label the board happens to put
+     * on its logo. Requiring both before either could be used meant a board
+     * that names no employer also published no domain, and the dashboard fell
+     * back to a lettermark on a page whose employer site was stated plainly.
+     * Live BDO is that board: its logo carries a decorative label and an
+     * employer-owned destination.
+     *
+     * Two destinations remain a conflict, because then it is not clear whose
+     * board this is. Two names across two links are the same conflict. A
+     * single link with no usable name is neither.
+     */
+    if (boardEmployerUrls.size === 1 && boardEmployerNames.size <= 1) {
+      observePostingField("boardEmployer", posting, posting);
+    }
 
     // Workday tenancy corroborates branded sidebar copy but never originates an
     // employer: a page with no specific sidebar signal still has no company.
@@ -1557,6 +1679,11 @@ export function collectPageSignals(
 
     const sidebarCandidates: string[] = [];
 
+    const boardHeading = /^(.{1,100}?)\s+(?:careers?|jobs?)\s*$/i.exec(
+      trimmedText(document.querySelector("h1")),
+    )?.[1]?.trim();
+    if (boardHeading) sidebarCandidates.push(boardHeading);
+
     if (sidebar) {
       // The "About Us" block can carry the one piece of employer-domain
       // evidence Workday exposes — a direct link to the employer's own site —
@@ -1565,7 +1692,16 @@ export function collectPageSignals(
       // `employerDomainFromUrl`'s host rejection list, not by name-matching,
       // so this is recorded regardless of what company resolution finds.
       const richText = sidebar.querySelector('[data-automation-id="richText"]');
-      recordDescriptionLinks(richText);
+      recordDescriptionLinks(richText, posting);
+      if (selectedEmployerUrls.size === 0 && richText) {
+        for (const link of Array.from(richText.querySelectorAll("a[href]"))) {
+          const url = absoluteHttpUrl(link.getAttribute("href"));
+          if (url) selectedEmployerUrls.add(url);
+        }
+        if (selectedEmployerUrls.size > 0) {
+          observePostingField("selectedLinks", posting, posting);
+        }
+      }
 
       sidebarCandidates.push(
         ...Array.from(sidebar.querySelectorAll('[data-automation-id="image"][alt]'))
@@ -1578,6 +1714,7 @@ export function collectPageSignals(
     const fromSidebar = corroboratedCompany(sidebarCandidates);
     if (fromSidebar) {
       siteFields["company"] = clamp(fromSidebar, MAXIMUM_FIELD_CHARACTERS);
+      observePostingField("company", posting, posting);
       return;
     }
 
@@ -1591,12 +1728,14 @@ export function collectPageSignals(
     );
     if (fromDescription) {
       siteFields["company"] = clamp(fromDescription, MAXIMUM_FIELD_CHARACTERS);
+      observePostingField("company", posting, posting);
     }
   }
 
   if (rules.strategy === "linkedin-job-detail") readLinkedInJobDetail();
   if (rules.strategy === "linkedin-split-pane") readLinkedInSplitPane();
   if (rules.strategy === "workday-job-detail") readWorkdayJobDetail();
+  if (rules.strategy === "workday-split-pane") readWorkdayJobDetail();
 
   let applyAffordance = false;
   const candidates = Array.from(
@@ -1641,7 +1780,18 @@ export function collectPageSignals(
     ...(observedPostingFields.length > 0
       ? { observedPosting: { fields: observedPostingFields } }
       : {}),
+    ...(boardEmployerUrls.size === 1 && boardEmployerNames.size <= 1
+      ? {
+          boardEmployer: {
+            ...(boardEmployerNames.size === 1
+              ? { name: [...boardEmployerNames][0]! }
+              : {}),
+            url: [...boardEmployerUrls][0]!,
+          },
+        }
+      : {}),
     ...(selectedApplyUrls.size === 1 ||
+    selectedEmployerUrls.size === 1 ||
     (!descriptionUrlOverflow && selectedDescriptionUrls.size > 0)
       ? {
           selectedLinks: {
@@ -1650,6 +1800,9 @@ export function collectPageSignals(
               : {}),
             ...(!descriptionUrlOverflow && selectedDescriptionUrls.size > 0
               ? { descriptionUrls: [...selectedDescriptionUrls] }
+              : {}),
+            ...(selectedEmployerUrls.size === 1
+              ? { employerUrl: [...selectedEmployerUrls][0] }
               : {}),
           },
         }
