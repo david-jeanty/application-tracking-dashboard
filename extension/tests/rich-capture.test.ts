@@ -438,7 +438,7 @@ describe("work term", () => {
 
   it("reads the term of the selected LinkedIn posting, not a neighbour's", () => {
     const selected = `
-      <div class="_c753af09">
+      <div class="_c753af09" data-job-id="4123456789">
         <div data-display-contents="true"><p class="_0508a270">Summer 2027 Marketing Intern</p></div>
         <div class="_72963fa6" aria-label="Company, Northwind Photonics.">
           <a href="/company/northwind-photonics">Northwind Photonics</a>

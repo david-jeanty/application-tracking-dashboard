@@ -40,6 +40,29 @@ export type RouteIdentity = {
   canonicalUrl?: string;
 };
 
+/** What a page-local root says about the posting it belongs to. */
+export type ObservedIdentityState =
+  | "verified"
+  | "mismatched"
+  | "unobserved"
+  | "ambiguous";
+
+/**
+ * Correlates ids observed at one evidence root with the id in the route.
+ *
+ * Seeing the expected id among several ids is ambiguous, not verification:
+ * the matching token cannot explain which posting supplied the field.
+ */
+export function correlateObservedPosting(
+  observedJobIds: readonly string[],
+  expectedJobId: string | undefined,
+): ObservedIdentityState {
+  const distinct = new Set(observedJobIds.filter(Boolean));
+  if (distinct.size === 0 || !expectedJobId) return "unobserved";
+  if (distinct.size > 1) return "ambiguous";
+  return distinct.has(expectedJobId) ? "verified" : "mismatched";
+}
+
 export function routeIdentityFor(pageUrl: string): RouteIdentity {
   const site = siteFor(pageUrl);
   const rules = readRulesFor(pageUrl);

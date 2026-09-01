@@ -3,6 +3,7 @@ import {
   looksLikeHtml,
   normalizeWhitespace,
 } from "./html-text.js";
+import { collectAdapterEvidence } from "./adapters.js";
 import {
   isAuthoritative,
   isIdentityConflict,
@@ -26,7 +27,6 @@ import {
 } from "./rich-fields.js";
 import {
   canonicalPostingUrl,
-  readSiteFields,
   siteFor,
 } from "./sites.js";
 import { employerDomainFromUrl, sourceForUrl } from "./source.js";
@@ -782,6 +782,26 @@ function withStructuredConflict<T>(
     : field;
 }
 
+/** Records a refused adapter candidate without giving it a value-bearing path. */
+function withAdapterConflict<T>(
+  field: CapturedField<T>,
+  source: ExtractionSource | undefined,
+  reason: EvidenceRejectionReason | undefined,
+): CapturedField<T> {
+  if (!source || !reason) return field;
+
+  if (field.state === "established") {
+    return {
+      ...field,
+      rejected: [...(field.rejected ?? []), { source, reason }],
+    };
+  }
+
+  return field.state === "absent"
+    ? { state: "ambiguous", confidence: "ambiguous", source, reason }
+    : field;
+}
+
 /**
  * Reads one page's signals into an evidence-aware internal result.
  *
@@ -794,6 +814,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   const source = sourceForUrl(signals.pageUrl);
   const site = siteFor(signals.pageUrl);
   const siteSource = sourceForSite(site);
+  const adapter = collectAdapterEvidence(signals);
 
   /**
    * Which structured record, if any, is about the posting this route names.
@@ -854,7 +875,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   // was the record's contents rather than its identity.
   const posting = site === "workday" ? undefined : structuredPosting;
 
-  const fromSite = site ? readSiteFields(site, signals.siteFields) : {};
+  const fromSite = adapter.fields;
 
   const structuredOrganization = structuredPosting
     ? firstRecord(structuredPosting["hiringOrganization"])
@@ -957,7 +978,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
     : undefined;
   const structuredCompanyDomain = readCompanyDomain(organization);
   const selectedCompanyDomainField = selectedCompanyDomain(
-    signals.selectedLinks,
+    adapter.admitsSelectedLinks ? signals.selectedLinks : undefined,
     siteSource,
   );
   const deadline = posting ? readDeadline(posting) : undefined;
@@ -1061,6 +1082,23 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
         structuredRejection,
       ) as never;
     }
+  }
+
+  const adapterRejections = {
+    company: adapter.rejected.company,
+    jobTitle: adapter.rejected.jobTitle,
+    location: adapter.rejected.location,
+    companyDomain: adapter.rejected.selectedLinks,
+    jobDescription: adapter.rejected.jobDescription,
+  } as const;
+  for (const name of Object.keys(adapterRejections) as Array<
+    keyof typeof adapterRejections
+  >) {
+    fields[name] = withAdapterConflict(
+      fields[name],
+      siteSource,
+      adapterRejections[name],
+    ) as never;
   }
 
   /**
@@ -1235,6 +1273,14 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
     "workArrangement" | "workTerm" | "duration"
   >;
 
+  if (adapter.rejected.workplaceType) {
+    richFields.workArrangement = withAdapterConflict(
+      richFields.workArrangement,
+      siteSource,
+      adapter.rejected.workplaceType,
+    );
+  }
+
   /**
    * A labelled compensation statement, as a fallback for the structured
    * salary above and only where the structured value did not already answer
@@ -1306,6 +1352,7 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
       microdataJobPosting: microdataCandidates.length > 0,
       identity: selection.status,
     },
+    postingIdentity: adapter.postingIdentity,
     ...(hostnameOf(signals.pageUrl) ? { pageHost: hostnameOf(signals.pageUrl) } : {}),
   };
 }
@@ -1381,6 +1428,7 @@ export function extractionDiagnostics(
     ...(report.recognizedSite ? { recognizedSite: report.recognizedSite } : {}),
     ...(report.selectedStrategy ? { selectedStrategy: report.selectedStrategy } : {}),
     structuredData: report.structuredData,
+    postingIdentity: report.postingIdentity,
     ...(report.pageHost ? { pageHost: report.pageHost } : {}),
     warnings: report.warnings,
     fields: {

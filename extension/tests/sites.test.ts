@@ -232,7 +232,7 @@ describe("LinkedIn", () => {
     </ul>`;
 
   const detail = (...parts: string[]) =>
-    `<body><main><h1>Jobs</h1>${parts.join("")}</main></body>`;
+    `<body><main data-job-id="4123456789"><h1>Jobs</h1>${parts.join("")}</main></body>`;
 
   /**
    * The same page as a split pane, which is what a search route really is.
@@ -244,7 +244,7 @@ describe("LinkedIn", () => {
    */
   const searchPane = (...parts: string[]) =>
     `<body><main><h1>Jobs</h1>
-       <section aria-label="Primary content">${parts.join("")}</section>
+       <section aria-label="Primary content" data-job-id="4123456789">${parts.join("")}</section>
      </main></body>`;
 
   it("reads the selected posting from a job detail page", () => {
@@ -1058,15 +1058,16 @@ describe("LinkedIn search, where the selected posting measures nothing", () => {
    * route reads its own top document — bounded to Primary content — rather than
    * falling back to the global scan that returned blanks.
    */
-  it("reads the top document's Primary content when no frame establishes the job", () => {
+  it("refuses Primary content when no root establishes the posting", () => {
     const { plan, job } = search(unidentifiedTab);
 
     expect(plan).toEqual({ strategy: true });
-    expect(job.company).toBe("GE Vernova");
-    expect(job.jobTitle).toBe(GE_TITLE);
-    expect(job.location).toBe("Greenville, SC");
-    expect(job.jobDescription).toBe(GE_DESCRIPTION);
+    expect(job.company).toBeUndefined();
+    expect(job.jobTitle).toBeUndefined();
+    expect(job.location).toBeUndefined();
+    expect(job.jobDescription).toBeUndefined();
     expect(job.jobUrl).toBe(`https://www.linkedin.com/jobs/view/${GE_JOB}/`);
+    expect(job.warnings).toContain("no_job_posting_found");
   });
 
   it("still refuses a search page with no bounded detail region", () => {
