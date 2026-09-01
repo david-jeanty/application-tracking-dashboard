@@ -4,10 +4,9 @@ import { InterndexLogo } from "@/components/branding/interndex-logo";
 /**
  * The foot of the public site.
  *
- * One line about what Interndex is for, the three links the header already
- * offers, and the public privacy explanation for somebody who read to the
- * bottom. Terms, Contact and Careers stay absent because those pages do not
- * exist.
+ * One line about what Interndex is for, the links the header already offers,
+ * and the Privacy, Terms and Support pages for somebody who read to the
+ * bottom. Careers stays absent because that page does not exist.
  */
 export function PublicFooter() {
   return (
@@ -25,6 +24,8 @@ export function PublicFooter() {
             { href: "/login", label: "Sign in" },
             { href: "/signup", label: "Create account" },
             { href: "/privacy", label: "Privacy" },
+            { href: "/terms", label: "Terms" },
+            { href: "/support", label: "Support" },
           ].map((link) => (
             <li key={link.href}>
               <Link
