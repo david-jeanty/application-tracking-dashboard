@@ -73,22 +73,35 @@ test("the public homepage is the front door for a signed-out visitor", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "Find the role. Give it one place. Always know what’s next.",
+      name: "The job tracker your AI can use.",
     }),
   ).toBeVisible();
 });
 
-test("the homepage's primary CTA and 'no account required' are reachable without scrolling on mobile", async ({
+test("the homepage's first fold holds the message, both CTAs and the product on mobile", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
   const hero = page.getByRole("heading", { level: 1 }).locator("..");
+  await expect(hero.getByRole("heading", { level: 1 })).toBeInViewport();
   await expect(
-    hero.getByRole("link", { name: "Try the demo" }),
+    page.getByText(/Save every posting and application in one place/),
   ).toBeInViewport();
-  await expect(page.getByText(/No account required/)).toBeInViewport();
+  await expect(
+    hero.getByRole("link", { name: "Connect your AI" }),
+  ).toBeInViewport();
+  await expect(
+    hero.getByRole("link", { name: "Explore the demo" }),
+  ).toBeInViewport();
+  await expect(
+    page.getByText("Works with ChatGPT · Claude · MCP-compatible AI"),
+  ).toBeInViewport();
+  // A recognizable part of the real product, not only the copy above it.
+  await expect(
+    page.locator('ul[aria-label="Applications"] > li').first(),
+  ).toBeInViewport();
 });
 
 test("the homepage header stays a single compact line on mobile", async ({
@@ -171,6 +184,6 @@ test("the demo offers the way back to the homepage", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "Find the role",
+    "The job tracker your AI can use.",
   );
 });

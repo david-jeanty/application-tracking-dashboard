@@ -5,9 +5,9 @@ import { hasSupabaseEnvironment } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
-  title: "Interndex — Internship and co-op application tracker",
+  title: "Interndex — The job tracker your AI can use",
   description:
-    "Track internship and co-op applications, deadlines, statuses and next actions, and connect the AI assistant you already use. Try the demo without an account.",
+    "Save every posting and application in one place, and connect Interndex to ChatGPT, Claude, or another MCP-compatible AI so it can find, update, and remember your job-search context. Explore the demo without an account.",
 };
 
 /**

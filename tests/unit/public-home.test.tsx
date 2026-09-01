@@ -17,8 +17,10 @@ vi.mock("@/lib/supabase/server", () => ({
 
 const { default: RootPage } = await import("@/app/page");
 const { HomePage } = await import("@/components/public/home-page");
+const { ASSISTANT_CAN, ASSISTANT_CANNOT, ASSISTANT_OWNERSHIP_NOTE } =
+  await import("@/lib/mcp/capabilities");
 
-const HERO_HEADING = "Find the role. Give it one place. Always know what’s next.";
+const HERO_HEADING = "The job tracker your AI can use.";
 
 function signedOut() {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
@@ -80,7 +82,60 @@ describe("the root route", () => {
 });
 
 describe("the homepage's front door", () => {
-  it("leads with the demo, in the header and the hero", () => {
+  it("names the job tracker and the AI connection in the hero itself", () => {
+    render(<HomePage />);
+
+    const hero = screen
+      .getByRole("heading", { level: 1 })
+      .closest("section") as HTMLElement;
+
+    expect(
+      within(hero).getByRole("heading", { level: 1, name: HERO_HEADING }),
+    ).toBeInTheDocument();
+    expect(
+      within(hero).getByText("Your AI’s job-search context"),
+    ).toBeInTheDocument();
+    // ChatGPT and Claude are named before a visitor has to decode an acronym.
+    expect(
+      within(hero).getByText(/Connect Interndex to ChatGPT, Claude, or another/),
+    ).toBeInTheDocument();
+  });
+
+  it("leads with connecting an AI and keeps the demo beside it", () => {
+    render(<HomePage />);
+
+    const hero = screen
+      .getByRole("heading", { level: 1 })
+      .closest("section") as HTMLElement;
+
+    expect(
+      within(hero).getByRole("link", { name: "Connect your AI" }),
+    ).toHaveAttribute("href", "/signup");
+    expect(
+      within(hero).getByRole("link", { name: "Explore the demo" }),
+    ).toHaveAttribute("href", "/demo");
+    expect(
+      within(hero).getByRole("link", { name: "Already have an account? Sign in" }),
+    ).toHaveAttribute("href", "/login");
+  });
+
+  it("says which AI clients work, right under the hero actions", () => {
+    render(<HomePage />);
+
+    const hero = screen
+      .getByRole("heading", { level: 1 })
+      .closest("section") as HTMLElement;
+    const heroCta = within(hero).getByRole("link", { name: "Connect your AI" });
+    const ctaRow = heroCta.closest("div") as HTMLElement;
+
+    // The compatibility line answers "which AI?" immediately after the button
+    // that raises the question, rather than somewhere further down the page.
+    expect(ctaRow.nextElementSibling?.textContent).toBe(
+      "Works with ChatGPT · Claude · MCP-compatible AI",
+    );
+  });
+
+  it("keeps the header's demo route and account links", () => {
     render(<HomePage />);
 
     const header = screen.getByRole("navigation", { name: "Public navigation" });
@@ -105,52 +160,15 @@ describe("the homepage's front door", () => {
       .getAllByRole("link")
       .filter((link) => link.getAttribute("href") === "/demo");
 
-    // Header, hero, and the call to action at the foot: a visitor should not
-    // have to scroll back up to find it.
+    // Header, hero, the connect section, and the call to action at the foot: a
+    // visitor should not have to scroll back up to find it.
     expect(demoLinks.length).toBeGreaterThanOrEqual(3);
   });
 
-  it("says out loud that no account is required", () => {
+  it("says out loud that the demo needs no account", () => {
     render(<HomePage />);
 
-    expect(screen.getByText(/No account required/)).toBeInTheDocument();
-  });
-
-  it("keeps 'No account required' right beside the primary CTA", () => {
-    render(<HomePage />);
-
-    const hero = screen
-      .getByRole("heading", { level: 1 })
-      .closest("section") as HTMLElement;
-    const heroCta = within(hero).getByRole("link", { name: "Try the demo" });
-    const ctaRow = heroCta.closest("div") as HTMLElement;
-
-    // The next thing after the CTA row, not a caption buried somewhere else
-    // on the page, so a visitor sees both without scrolling.
-    expect(ctaRow.nextElementSibling?.textContent).toMatch(
-      /No account required/,
-    );
-  });
-
-  it("puts what to do beside why to do it, and keeps sign-up and sign-in secondary", () => {
-    render(<HomePage />);
-
-    const hero = screen
-      .getByRole("heading", { level: 1 })
-      .closest("section") as HTMLElement;
-
-    expect(
-      within(hero).getByText("Internship and co-op applications"),
-    ).toBeInTheDocument();
-    expect(
-      within(hero).getByRole("link", { name: "Try the demo" }),
-    ).toHaveAttribute("href", "/demo");
-    expect(
-      within(hero).getByRole("link", { name: "Create account" }),
-    ).toHaveAttribute("href", "/signup");
-    expect(
-      within(hero).getByRole("link", { name: "Already have an account? Sign in" }),
-    ).toHaveAttribute("href", "/login");
+    expect(screen.getByText(/The demo needs no account/)).toBeInTheDocument();
   });
 
   it("offers both ways into an account", () => {
@@ -173,22 +191,30 @@ describe("the homepage's front door", () => {
 
     expect(closing).not.toBeNull();
     expect(
-      within(closing).getByRole("link", { name: "Try the demo" }),
+      within(closing).getByRole("link", { name: "Explore the demo" }),
     ).toHaveAttribute("href", "/demo");
   });
 });
 
 describe("what the homepage claims", () => {
-  it("shows the Save, Track, Act sequence across the connected workspace", () => {
+  it("keeps the Save the posting, Track the process promise below the hero", () => {
+    render(<HomePage />);
+
+    expect(
+      screen.getByRole("heading", { name: "Save the posting. Track the process." }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the Capture, Track, Connect sequence across the connected workspace", () => {
     render(<HomePage />);
 
     const workflow = screen
-      .getByRole("heading", { name: "One workspace, from first application to offer." })
+      .getByRole("heading", { name: "Save the posting. Track the process." })
       .closest("section") as HTMLElement;
     const steps = within(workflow).getAllByRole("listitem");
 
     expect(steps).toHaveLength(3);
-    for (const [index, title] of ["Save", "Track", "Act"].entries()) {
+    for (const [index, title] of ["Capture", "Track", "Connect"].entries()) {
       expect(
         within(steps[index] as HTMLElement).getByRole("heading", { name: title }),
       ).toBeInTheDocument();
@@ -199,7 +225,7 @@ describe("what the homepage claims", () => {
     render(<HomePage />);
 
     const workflow = screen
-      .getByRole("heading", { name: "One workspace, from first application to offer." })
+      .getByRole("heading", { name: "Save the posting. Track the process." })
       .closest("section") as HTMLElement;
 
     expect(within(workflow).getByText("Title · Employer · Deadline")).toBeInTheDocument();
@@ -215,7 +241,7 @@ describe("what the homepage claims", () => {
     render(<HomePage />);
 
     const workflow = screen
-      .getByRole("heading", { name: "One workspace, from first application to offer." })
+      .getByRole("heading", { name: "Save the posting. Track the process." })
       .closest("section") as HTMLElement;
 
     expect(
@@ -232,12 +258,12 @@ describe("what the homepage claims", () => {
     ).toHaveAttribute("href", "/demo/analytics");
   });
 
-  it("draws the line between the assistant and the record", () => {
+  it("draws the line between the AI and the record", () => {
     render(<HomePage />);
 
     expect(
       screen.getByRole("heading", {
-        name: "Interndex keeps the record. Your assistant is optional.",
+        name: "Your applications stay in Interndex. Your AI gets the context.",
       }),
     ).toBeInTheDocument();
     expect(
@@ -245,18 +271,24 @@ describe("what the homepage claims", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the assistant section's record as real fields, not an AI diagram", () => {
+  it("states the connection's permissions in the same words the consent screen uses", () => {
     render(<HomePage />);
 
-    const assistant = screen
+    const connect = screen
       .getByRole("heading", {
-        name: "Interndex keeps the record. Your assistant is optional.",
+        name: "Your applications stay in Interndex. Your AI gets the context.",
       })
       .closest("section") as HTMLElement;
 
-    for (const label of ["Role", "Employer", "Status", "Work term"]) {
-      expect(within(assistant).getByText(label)).toBeInTheDocument();
+    for (const capability of ASSISTANT_CAN) {
+      expect(within(connect).getByText(capability)).toBeInTheDocument();
     }
+    for (const limit of ASSISTANT_CANNOT) {
+      expect(within(connect).getByText(limit)).toBeInTheDocument();
+    }
+    expect(
+      within(connect).getByText(ASSISTANT_OWNERSHIP_NOTE),
+    ).toBeInTheDocument();
   });
 
   it("never claims an AI of its own", () => {
@@ -270,34 +302,48 @@ describe("what the homepage claims", () => {
     expect(text).toMatch(/Interndex does not include an assistant/);
   });
 
-  it("does not lead the assistant section with AI or use MCP jargon", () => {
+  it("names ChatGPT and Claude before it explains MCP", () => {
     const { container } = render(<HomePage />);
     const text = container.textContent ?? "";
 
-    expect(text).not.toMatch(/\bMCP\b/);
-
-    const assistantHeading = screen.getByRole("heading", {
-      name: "Interndex keeps the record. Your assistant is optional.",
-    });
-    // "Interndex" leads the section, not "AI".
-    expect(assistantHeading.textContent?.trim().startsWith("Interndex")).toBe(
-      true,
-    );
+    // The benefit leads; the acronym is supporting proof further down, and it
+    // is spelled out as a standard rather than dropped as jargon.
+    expect(text.indexOf("ChatGPT")).toBeGreaterThan(-1);
+    expect(text.indexOf("Claude")).toBeGreaterThan(-1);
+    expect(text).toMatch(/The connection uses MCP, the open standard/);
+    expect(text.indexOf("ChatGPT")).toBeLessThan(text.indexOf("The connection uses MCP"));
   });
 
-  it("names the one assistant it has verified, and nothing else", () => {
+  it("promises no AI client it has not verified, and says which one it tested", () => {
     const { container } = render(<HomePage />);
     const text = container.textContent ?? "";
 
-    expect(text).toContain("supported AI assistant");
     expect(text).toContain("tested with Claude");
-    expect(text).not.toMatch(/ChatGPT|Gemini|Copilot/i);
+    // ChatGPT and Claude are named as MCP-compatible clients; nothing on the
+    // page claims a listing in either one's app directory.
+    expect(text).not.toMatch(/app store|app directory|available in ChatGPT/i);
+    expect(text).not.toMatch(/Gemini|Copilot/i);
   });
 
   it("never promotes the browser extension", () => {
     const { container } = render(<HomePage />);
 
     expect(container.textContent ?? "").not.toMatch(/extension/i);
+  });
+
+  it("promises no action the connection cannot perform", () => {
+    const { container } = render(<HomePage />);
+    const text = container.textContent ?? "";
+
+    for (const absent of [
+      /applies for you|auto-?appl/i,
+      /resume builder|build your resume/i,
+      /career coach/i,
+      /ATS/,
+      /scans? your resume/i,
+    ]) {
+      expect(text).not.toMatch(absent);
+    }
   });
 
   it("sells nothing it does not have", () => {
@@ -313,6 +359,36 @@ describe("what the homepage claims", () => {
     ]) {
       expect(text).not.toMatch(absent);
     }
+  });
+});
+
+describe("the hero's AI panel", () => {
+  it("shows asks the registered tools can actually serve", () => {
+    render(<HomePage />);
+
+    for (const ask of [
+      "“Save this posting to Interndex.”",
+      "“Show jobs I have applied to.”",
+      "“Which applications need a follow-up this week?”",
+      "“Update this application to Interview.”",
+    ]) {
+      expect(screen.getByText(ask)).toBeInTheDocument();
+    }
+  });
+
+  it("ties each ask to the records shown beside it", () => {
+    const { container } = render(<HomePage />);
+    const panel = screen
+      .getByText(/Asked in ChatGPT or Claude, answered from these records/)
+      .closest("div") as HTMLElement;
+    const list = container.querySelector('ul[aria-label="Applications"]');
+
+    expect(panel).not.toBeNull();
+    expect(list).not.toBeNull();
+    // The panel is part of the same bordered product surface as the record
+    // list, not a separate floating card somewhere else on the page.
+    const surface = panel.closest('div[class*="rounded-surface"]');
+    expect(surface?.contains(list as Node)).toBe(true);
   });
 });
 
