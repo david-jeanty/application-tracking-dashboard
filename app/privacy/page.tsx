@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PublicFooter } from "@/components/public/public-footer";
 import { PublicHeader } from "@/components/public/public-header";
+import { formatDocumentVersion, PRIVACY_VERSION } from "@/lib/legal/document-versions";
 
 export const metadata: Metadata = {
   title: "Privacy",
@@ -35,7 +36,7 @@ export default function PrivacyPage() {
             an unpacked developer build.
           </p>
           <p className="mt-3 text-[13px] text-foreground-muted">
-            Effective date / last updated: September 1, 2026.
+            Effective date / last updated: {formatDocumentVersion(PRIVACY_VERSION)}.
           </p>
 
           <div className="mt-10 space-y-10 text-[15px] leading-7 text-foreground-secondary">

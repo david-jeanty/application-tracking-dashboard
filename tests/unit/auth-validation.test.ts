@@ -12,8 +12,30 @@ describe("authentication validation", () => {
       fullName: "  Alex Smith  ",
       email: "alex@example.com",
       password: "correct-horse",
+      termsAccepted: "on",
     });
     expect(result.fullName).toBe("Alex Smith");
+  });
+
+  it("rejects signup when the terms checkbox was never checked", () => {
+    // An unchecked HTML checkbox is simply absent from FormData, so the key
+    // is missing entirely rather than present with a falsy value.
+    const result = signupSchema.safeParse({
+      fullName: "Alex Smith",
+      email: "alex@example.com",
+      password: "correct-horse",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a forged non-'on' terms value the same way", () => {
+    const result = signupSchema.safeParse({
+      fullName: "Alex Smith",
+      email: "alex@example.com",
+      password: "correct-horse",
+      termsAccepted: "false",
+    });
+    expect(result.success).toBe(false);
   });
 
   it("rejects malformed login details", () => {
