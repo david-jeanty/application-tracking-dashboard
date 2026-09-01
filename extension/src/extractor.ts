@@ -4,6 +4,12 @@ import {
   normalizeWhitespace,
 } from "./html-text.js";
 import {
+  isAuthoritative,
+  isIdentityConflict,
+  routeIdentityFor,
+  selectStructuredCandidate,
+} from "./identity.js";
+import {
   findJobPostings,
   firstRecord,
   firstString,
@@ -27,6 +33,7 @@ import { employerDomainFromUrl, sourceForUrl } from "./source.js";
 import type {
   CapturedField,
   EvidenceConfidence,
+  EvidenceRejectionReason,
   ExtractionDiagnostics,
   ExtractionReport,
   ExtractionSource,
@@ -551,7 +558,8 @@ function acceptFromSite(
 }
 
 /**
- * A JobPosting the page published as microdata, as the JSON-LD reader sees it.
+ * Every JobPosting the page published as microdata, as the JSON-LD reader
+ * sees them.
  *
  * Attribute-based structured data is the same `schema.org` vocabulary written
  * on the elements instead of in a script block, and employer careers sites
@@ -559,10 +567,14 @@ function acceptFromSite(
  * shape means one set of field readers serves both, and no site knowledge is
  * involved either way.
  */
-function microdataPosting(signals: PageSignals): JsonLdNode | undefined {
-  const properties = signals.microdata;
-  if (!properties || Object.keys(properties).length === 0) return undefined;
+function microdataPostings(signals: PageSignals): JsonLdNode[] {
+  return (signals.microdata ?? [])
+    .filter((properties) => Object.keys(properties).length > 0)
+    .map(microdataNode);
+}
 
+/** One collected microdata root, reshaped into the node the readers expect. */
+function microdataNode(properties: Record<string, string>): JsonLdNode {
   const text = (key: string): string | undefined => {
     const raw = properties[key];
     if (!raw) return undefined;
@@ -587,6 +599,11 @@ function microdataPosting(signals: PageSignals): JsonLdNode | undefined {
 
   return {
     "@type": "JobPosting",
+    // Identity first: `url` and `identifier` are itemprops like any other, and
+    // the correlator needs them to tell one posting root from another.
+    url: properties["url"]?.trim(),
+    identifier:
+      text("identifier.value") ?? text("identifier") ?? undefined,
     title: text("title"),
     description: properties["description"],
     validThrough: text("validThrough"),
@@ -734,6 +751,38 @@ function workdayField<T>(
 }
 
 /**
+ * Records a structured-identity conflict on one field.
+ *
+ * The two cases are kept apart deliberately. A field that something else
+ * established keeps its value and gains a note saying a structured record was
+ * seen and refused — the same bookkeeping `workdayField` does, so the reason a
+ * value was *not* taken from structured data stays visible. A field that
+ * nothing established becomes ambiguous rather than absent, because "the page
+ * published a posting and it was not this one" is a different fact from "the
+ * page said nothing", and only one of them is a reason to look again.
+ *
+ * Ambiguous fields carry no value, so nothing here can reach a saved record.
+ */
+function withStructuredConflict<T>(
+  field: CapturedField<T>,
+  source: ExtractionSource | undefined,
+  reason: EvidenceRejectionReason,
+): CapturedField<T> {
+  if (!source) return field;
+
+  if (field.state === "established") {
+    return {
+      ...field,
+      rejected: [...(field.rejected ?? []), { source, reason }],
+    };
+  }
+
+  return field.state === "absent"
+    ? { state: "ambiguous", confidence: "ambiguous", source, reason }
+    : field;
+}
+
+/**
  * Reads one page's signals into an evidence-aware internal result.
  *
  * `extractJob` below is the only compatibility projection. New extraction
@@ -746,18 +795,63 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   const site = siteFor(signals.pageUrl);
   const siteSource = sourceForSite(site);
 
-  const [jsonLdPosting] = findJobPostings(signals.jsonLdBlocks);
-  const microdata = microdataPosting(signals);
-  const structuredPosting = jsonLdPosting ?? microdata;
-  const structuredSource: ExtractionSource | undefined = jsonLdPosting
-    ? "json_ld_job_posting"
-    : microdata
-      ? "microdata_job_posting"
-      : undefined;
+  /**
+   * Which structured record, if any, is about the posting this route names.
+   *
+   * Document order decides nothing here. Both vocabularies are correlated
+   * against the route, JSON-LD first because it is the richer one; microdata is
+   * consulted only when the page published no JSON-LD posting at all. A page
+   * whose JSON-LD contradicts itself does not get a second attempt through its
+   * microdata: a page that cannot say which posting it is about is not a page
+   * to take a posting from.
+   */
+  const route = routeIdentityFor(signals.pageUrl);
+  const jsonLdCandidates = findJobPostings(signals.jsonLdBlocks);
+  const microdataCandidates = microdataPostings(signals);
+
+  const jsonLdSelection = selectStructuredCandidate(jsonLdCandidates, route);
+  const selection =
+    jsonLdSelection.status === "absent"
+      ? selectStructuredCandidate(microdataCandidates, route)
+      : jsonLdSelection;
+  const structuredSource: ExtractionSource | undefined =
+    jsonLdSelection.status !== "absent"
+      ? "json_ld_job_posting"
+      : microdataCandidates.length > 0
+        ? "microdata_job_posting"
+        : undefined;
+
+  /**
+   * The record that established itself, and nothing else.
+   *
+   * Only a `matched` selection reaches this variable. A record that named no
+   * posting is not here either: being the only `JobPosting` on a page says
+   * nothing about whether it is the posting on screen, because a single-page
+   * application that has moved on can be holding exactly one stale record. No
+   * reader below can reach a value the page did not tie to this route, rather
+   * than values being carried along and filtered later.
+   */
+  const structuredPosting = isAuthoritative(selection) ? selection.node : undefined;
+
+  /**
+   * The page published postings and every one of them named a different job.
+   *
+   * That is a positive finding, not an absence, and the generic fallbacks below
+   * are not allowed to paper over it. A record that merely failed to identify
+   * itself is *not* this case: it has contradicted nothing, so the visible DOM
+   * keeps its ordinary role.
+   */
+  const structuredConflict = isIdentityConflict(selection);
+
+  /** A posting was published, and it never said which posting it was. */
+  const structuredUnverified = selection.status === "unique_unidentified";
+
   // Workday can retain a backend or previous SPA JobPosting after its visible
   // detail pane has changed. Its bounded site strategy is authoritative, and
   // structured fields must not revive a search-result state that established
-  // no selected posting at all.
+  // no selected posting at all. Correlation does not soften this: a Workday
+  // record that correlates is still not trusted, because what went stale there
+  // was the record's contents rather than its identity.
   const posting = site === "workday" ? undefined : structuredPosting;
 
   const fromSite = site ? readSiteFields(site, signals.siteFields) : {};
@@ -792,12 +886,22 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
     acceptFromSite(fromSite.jobTitle, signals, { site, field: "jobTitle" }),
     LIMITS.jobTitle,
   );
-  const fallbackCorroboration = site
-    ? []
-    : genericFallbackCorroboration(signals, Boolean(posting));
-  const fallback = site
-    ? undefined
-    : clamp(fallbackTitle(signals, fallbackCorroboration), LIMITS.jobTitle);
+  // A page that published postings none of which are this route's has told us
+  // something, and promoting its `<h1>` would be answering a question about
+  // identity with a guess about layout. The generic paths stand down; the
+  // recognized-site paths do not, because their evidence is bound to the
+  // selected posting by the site strategy rather than by the record.
+  const fallbackCorroboration =
+    site || structuredConflict
+      ? []
+      // That a JobPosting exists is evidence this is a job page, which is a
+      // different question from which job it is. An unverified record still
+      // corroborates the page's shape while establishing none of its fields.
+      : genericFallbackCorroboration(signals, selection.candidates > 0);
+  const fallback =
+    site || structuredConflict
+      ? undefined
+      : clamp(fallbackTitle(signals, fallbackCorroboration), LIMITS.jobTitle);
   const jobTitle =
     (posting ? clamp(firstString(posting["title"]), LIMITS.jobTitle) : undefined) ??
     siteTitle ??
@@ -823,11 +927,15 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   const structuredDescriptionCandidate = limitDescription(
     structuredPosting ? firstString(structuredPosting["description"]) : undefined,
   ).text;
+  const genericDescription =
+    site || structuredConflict
+      ? undefined
+      : (signals.meta["og:description"] ?? signals.meta["description"]);
   const descriptionSource = posting && firstString(posting["description"])
     ? structuredSource
     : fromSite.jobDescription
       ? siteSource
-      : !site && (signals.meta["og:description"] ?? signals.meta["description"])
+      : genericDescription
         ? "generic_metadata"
         : undefined;
   const description = limitDescription(
@@ -835,10 +943,9 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
       fromSite.jobDescription ??
       // Metadata describes the page rather than the job, so it is only used
       // when nothing described the job itself — and never on a recognized
-      // site, where it is the board's own boilerplate.
-      (site
-        ? undefined
-        : (signals.meta["og:description"] ?? signals.meta["description"])),
+      // site, where it is the board's own boilerplate, nor when structured
+      // identity is in conflict.
+      genericDescription,
   );
 
   const structuredCompanyDomainCandidate = readCompanyDomain(structuredOrganization);
@@ -855,6 +962,21 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
   );
   const deadline = posting ? readDeadline(posting) : undefined;
   const salary = posting ? readSalary(posting) : undefined;
+
+  /**
+   * The reason code a conflicted page carries, chosen from what was observed.
+   *
+   * `mismatched` means every candidate named some other posting on this host.
+   * `ambiguous` means the page offered several and none of them uniquely named
+   * this one. Neither leaks page content: they name the shape of the
+   * disagreement, not what any record said.
+   */
+  const structuredRejection: EvidenceRejectionReason =
+    selection.status === "mismatched"
+      ? "structured_identity_mismatch"
+      : selection.status === "unique_unidentified"
+        ? "structured_identity_unverified"
+        : "structured_identity_ambiguous";
 
   const fields = {
     company:
@@ -922,6 +1044,24 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
         ? workdayField(undefined, undefined, structuredSalaryCandidate, structuredSource)
         : established(salary, "exact", structuredSource),
   };
+
+  if (structuredConflict || structuredUnverified) {
+    for (const name of [
+      "company",
+      "jobTitle",
+      "location",
+      "companyDomain",
+      "jobDescription",
+      "deadline",
+      "salary",
+    ] as const) {
+      fields[name] = withStructuredConflict(
+        fields[name],
+        structuredSource,
+        structuredRejection,
+      ) as never;
+    }
+  }
 
   /**
    * Rich capture: three facts stated by the posting the student selected.
@@ -1162,8 +1302,9 @@ export function extractJobReport(signals: PageSignals): ExtractionReport {
       ? { selectedStrategy: siteSource ?? structuredSource ?? "generic_fallback" }
       : {}),
     structuredData: {
-      jsonLdJobPosting: Boolean(jsonLdPosting),
-      microdataJobPosting: Boolean(microdata),
+      jsonLdJobPosting: jsonLdCandidates.length > 0,
+      microdataJobPosting: microdataCandidates.length > 0,
+      identity: selection.status,
     },
     ...(hostnameOf(signals.pageUrl) ? { pageHost: hostnameOf(signals.pageUrl) } : {}),
   };

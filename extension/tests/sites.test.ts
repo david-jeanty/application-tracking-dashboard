@@ -1321,6 +1321,7 @@ describe("a structured street address, promoted only with high confidence", () =
     const html = `<head>${jsonLd({
       "@context": "https://schema.org",
       "@type": "JobPosting",
+      url: "https://careers.example.com/jobs/1",
       title: "Finance Intern",
       description: "Support the finance team.",
       hiringOrganization: { "@type": "Organization", name: "Northfield Analytics" },
@@ -1344,6 +1345,7 @@ describe("a structured street address, promoted only with high confidence", () =
     const html = `<head>${jsonLd({
       "@context": "https://schema.org",
       "@type": "JobPosting",
+      url: "https://careers.example.com/jobs/1",
       title: "Finance Intern",
       description: "Support the finance team.",
       hiringOrganization: { "@type": "Organization", name: "Northfield Analytics" },
@@ -1369,6 +1371,7 @@ describe("a structured street address, promoted only with high confidence", () =
     const html = `<head>${jsonLd({
       "@context": "https://schema.org",
       "@type": "JobPosting",
+      url: "https://careers.example.com/jobs/1",
       title: "Finance Intern",
       description:
         "This posting has received 123 Main Street applications so far this week.",
@@ -1491,6 +1494,9 @@ describe("Workday", () => {
     return {
       "@context": "https://schema.org",
       "@type": "JobPosting",
+      // Names the page it is on, so what rejects it below is Workday's
+      // freshness rule rather than the identity correlation.
+      url: BMO_JOB,
       title: "Stale backend title",
       description: "Conflicting structured description.",
       validThrough: "2026-09-25",
@@ -2095,6 +2101,7 @@ describe("Workday salary from the selected posting's own description", () => {
     const html = `<head>${jsonLd({
       "@context": "https://schema.org",
       "@type": "JobPosting",
+      url: NORTHBRIDGE_JOB,
       title: "Stale backend title",
       description: "Stale backend description.",
       baseSalary: { currency: "CAD", value: { value: "999999", unitText: "YEAR" } },

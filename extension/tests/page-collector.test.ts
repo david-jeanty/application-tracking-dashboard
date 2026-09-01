@@ -202,8 +202,8 @@ describe("the injected collector", () => {
        </body>`,
     );
 
-    expect(signals.microdata?.["title"]).toBe("Analytics Intern");
-    expect(signals.microdata?.["hiringOrganization.name"]).toBe(
+    expect(signals.microdata?.[0]?.["title"]).toBe("Analytics Intern");
+    expect(signals.microdata?.[0]?.["hiringOrganization.name"]).toBe(
       "Beacon Aerospace",
     );
     expect(signals.evidence?.jobPostingMicrodata).toBe(true);
@@ -221,7 +221,7 @@ describe("the injected collector", () => {
        </body>`,
     );
 
-    expect(signals.microdata).toEqual({ title: "Analytics Intern" });
+    expect(signals.microdata).toEqual([{ title: "Analytics Intern" }]);
   });
 
   it("notices an apply control without ever storing its words", () => {

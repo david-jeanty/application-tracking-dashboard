@@ -9,6 +9,8 @@
  * them, and `messages.ts` is where they are re-validated on arrival.
  */
 
+import type { StructuredSelectionStatus } from "./identity.js";
+
 /** Raw material read from the page, before any interpretation. */
 export type PageSignals = {
   /** The text of each `application/ld+json` block, unparsed. */
@@ -24,13 +26,18 @@ export type PageSignals = {
   /** The first non-empty `<h1>`, trimmed. */
   headingText?: string;
   /**
-   * `schema.org` JobPosting microdata, flattened to dotted property paths.
+   * Every `schema.org` JobPosting microdata root, flattened to dotted paths.
    *
    * The same vocabulary as the JSON-LD path, expressed in attributes on the
    * page instead of in a script block. Employer careers sites publish it far
    * more often than job boards do, and reading it costs no site knowledge.
+   *
+   * A list rather than one record because a page may carry more than one
+   * posting root, and which of them belongs to the student's route is a
+   * question of identity rather than of document order. Collecting only the
+   * first made that question impossible to ask.
    */
-  microdata?: Record<string, string>;
+  microdata?: readonly Record<string, string>[];
   /**
    * Markup read through a recognized site's selector table, by field name.
    *
@@ -110,7 +117,13 @@ export type GenericFallbackCorroboration =
  */
 export type EvidenceRejectionReason =
   | "workday_structured_data_untrusted"
-  | "conflicting_evidence";
+  | "conflicting_evidence"
+  /** Every JobPosting on the page named a different posting than the route. */
+  | "structured_identity_mismatch"
+  /** Several JobPostings, and none of them uniquely named the current one. */
+  | "structured_identity_ambiguous"
+  /** A JobPosting was published that never said which posting it was. */
+  | "structured_identity_unverified";
 
 export type RejectedEvidence = {
   source: ExtractionSource;
@@ -180,7 +193,12 @@ export type ExtractionReport = {
   warnings: ExtractionWarning[];
   recognizedSite?: "linkedin" | "indeed" | "workday";
   selectedStrategy?: ExtractionSource;
-  structuredData: { jsonLdJobPosting: boolean; microdataJobPosting: boolean };
+  structuredData: {
+    jsonLdJobPosting: boolean;
+    microdataJobPosting: boolean;
+    /** How structured candidates correlated with the route, for diagnostics. */
+    identity: StructuredSelectionStatus;
+  };
   pageHost?: string;
 };
 

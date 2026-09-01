@@ -388,6 +388,7 @@ describe("the employer's domain", () => {
     const html = page(
       jsonLd(
         jobPosting({
+          url: "https://boards.greenhouse.io/northwind/jobs/4001",
           hiringOrganization: {
             "@type": "Organization",
             name: "Northwind",
@@ -754,8 +755,10 @@ describe("the generic fallback", () => {
  * page that offered nothing to the first version can be read here.
  */
 describe("JobPosting microdata", () => {
+  const microdataPage = "https://careers.beaconaerospace.com/job/48213";
   const microdataPosting = `<body>
      <div itemscope itemtype="https://schema.org/JobPosting">
+       <link itemprop="url" href="${microdataPage}" />
        <h1 itemprop="title">Systems Engineering Intern</h1>
        <div itemprop="hiringOrganization" itemscope itemtype="https://schema.org/Organization">
          <span itemprop="name">Beacon Aerospace</span>
@@ -774,10 +777,7 @@ describe("JobPosting microdata", () => {
 
   it("reads a posting a page expressed in attributes", () => {
     const report = extractJobReport(
-      readPage(
-        `<head></head>${microdataPosting}`,
-        "https://careers.beaconaerospace.com/job/48213",
-      ),
+      readPage(`<head></head>${microdataPosting}`, microdataPage),
     );
     const job = toExtractedJob(report);
 
@@ -796,13 +796,14 @@ describe("JobPosting microdata", () => {
   });
 
   it("still prefers JSON-LD when the page publishes both", () => {
-    const html = `<head>${jsonLd(jobPosting())}</head>${microdataPosting}`;
-    const report = extractJobReport(readPage(html));
+    const html = `<head>${jsonLd(jobPosting({ url: microdataPage }))}</head>${microdataPosting}`;
+    const report = extractJobReport(readPage(html, microdataPage));
 
     expect(toExtractedJob(report).company).toBe("IBM");
     expect(report.structuredData).toEqual({
       jsonLdJobPosting: true,
       microdataJobPosting: true,
+      identity: "matched",
     });
   });
 });
