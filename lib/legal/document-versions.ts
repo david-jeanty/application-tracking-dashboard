@@ -10,8 +10,8 @@
  * should be asked to re-accept. A wording or formatting fix does not need a
  * bump.
  */
-export const TERMS_VERSION = "2026-09-01";
-export const PRIVACY_VERSION = "2026-09-01";
+export const TERMS_VERSION = "2026-09-02";
+export const PRIVACY_VERSION = "2026-09-02";
 
 /** Renders a `YYYY-MM-DD` version string as the long-form date shown on the page. */
 export function formatDocumentVersion(version: string): string {

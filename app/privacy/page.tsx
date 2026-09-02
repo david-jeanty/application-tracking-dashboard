@@ -48,16 +48,10 @@ export default function PrivacyPage() {
                 Who operates Interndex
               </h2>
               <p className="mt-4">
-                Interndex is currently built and operated by an individual
-                developer, not a registered company, based in Ontario,
-                Canada.{" "}
-                <em>
-                  That is stated here as the operator&apos;s working
-                  assumption, not a confirmed legal fact — it has not yet been
-                  reviewed by a lawyer.
-                </em>{" "}
-                If Interndex incorporates, changes ownership, or moves, this
-                page will say so and name the new operator.
+                Interndex is built and operated by an individual developer,
+                not a registered company, based in Ontario, Canada. If
+                Interndex ever incorporates, changes ownership, or moves,
+                this page will say so and name the new operator.
               </p>
               <p className="mt-3">
                 For anything about your privacy — a question, a correction, a
@@ -517,6 +511,11 @@ export default function PrivacyPage() {
               </p>
             </section>
           </div>
+
+          <p className="mt-10 text-[13px] text-foreground-muted">
+            This page is provided as-is and isn&apos;t a substitute for legal
+            advice.
+          </p>
         </article>
       </main>
 

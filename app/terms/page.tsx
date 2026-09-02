@@ -56,8 +56,8 @@ export default function TermsPage() {
                 Interndex is provided &ldquo;as is,&rdquo; without warranty of
                 any kind, and is not affiliated with any employer, job board,
                 or applicant-tracking system whose postings you may reference
-                while using it. It is currently built and operated by an
-                individual developer, not a registered company — see{" "}
+                while using it. It is built and operated by an individual
+                developer, not a registered company — see{" "}
                 <a
                   className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
                   href="/privacy"
@@ -147,10 +147,12 @@ export default function TermsPage() {
                 Pricing
               </h2>
               <p className="mt-4">
-                Interndex is currently free, with no paid tier. If that ever
-                changes, this page will be updated first to describe billing,
-                renewal, and cancellation before any charge applies to your
-                account — a price will never appear without notice.
+                Interndex is free. It is a non-monetized student project with
+                no paid tier, no revenue, and no plan to charge for the
+                service — there is no billing, renewal, or cancellation to
+                describe, because nothing is ever billed. Were that to change
+                at some point in the future, this page would be updated first
+                to describe it before any charge applied to your account.
               </p>
             </section>
 
@@ -239,18 +241,15 @@ export default function TermsPage() {
                 Limitation of liability
               </h2>
               <p className="mt-4">
-                Interndex is offered without charge, on a best-effort basis.
-                To the fullest extent the law allows, Interndex is not liable
-                for indirect, incidental, or consequential damages arising
-                from your use of it, including a missed deadline or an
-                inaccurate record entered by you, captured by the extension,
-                or written by a connected assistant you authorized. Because
-                no money changes hands today, Interndex&apos;s total
-                liability to you for anything arising from these terms is
-                capped at the amount you paid for the service in the past
-                twelve months — currently zero. If a paid tier is ever
-                introduced, this cap will be revisited and restated here
-                before it takes effect.
+                Interndex is a free service, offered on a best-effort basis by
+                an individual developer rather than a company. To the fullest
+                extent the law allows, Interndex is not liable for indirect,
+                incidental, or consequential damages arising from your use of
+                it, including a missed deadline or an inaccurate record
+                entered by you, captured by the extension, or written by a
+                connected assistant you authorized. No fee is ever charged
+                for Interndex, so there is no monetary cap to state here —
+                liability is limited to the fullest extent the law permits.
               </p>
             </section>
 
@@ -263,12 +262,8 @@ export default function TermsPage() {
               </h2>
               <p className="mt-4">
                 These terms are governed by the laws of Ontario, Canada,
-                without regard to conflict-of-law rules.{" "}
-                <em>
-                  That reflects the operator&apos;s home jurisdiction as of
-                  this writing and has not yet had a formal legal review —
-                  treat it as the working assumption until it does.
-                </em>
+                without regard to conflict-of-law rules — the operator&apos;s
+                home jurisdiction.
               </p>
             </section>
 
@@ -314,6 +309,11 @@ export default function TermsPage() {
               </p>
             </section>
           </div>
+
+          <p className="mt-10 text-[13px] text-foreground-muted">
+            This page is provided as-is and isn&apos;t a substitute for legal
+            advice.
+          </p>
         </article>
       </main>
 
