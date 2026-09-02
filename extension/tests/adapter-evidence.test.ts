@@ -73,7 +73,7 @@ describe("the deterministic capture-adapter registry", () => {
     [LINKEDIN_B, "linkedin_identity_aware"],
     ["https://ca.indeed.com/viewjob?jk=abc", "legacy_site_fields"],
     ["https://acme.wd5.myworkdayjobs.com/job/one", "legacy_site_fields"],
-    ["https://boards.greenhouse.io/acme/jobs/1", "generic_page"],
+    ["https://boards.greenhouse.io/acme/jobs/1", "legacy_site_fields"],
     ["https://jobs.lever.co/acme/1", "generic_page"],
     ["https://jobs.smartrecruiters.com/Acme/1", "generic_page"],
     ["https://careers.example.com/jobs/1", "generic_page"],
