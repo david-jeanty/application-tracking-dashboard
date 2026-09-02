@@ -640,6 +640,11 @@ function sourceForSite(site: ReturnType<typeof siteFor>): ExtractionSource | und
       return "indeed_site";
     case "workday":
       return "workday_selected_posting";
+    // Greenhouse is an applicant-tracking system, not where a student found
+    // the opportunity, and it has no site-DOM read of its own to name here.
+    // Falling to `undefined` leaves `source` unset, exactly as it does for
+    // every other unrecognized-as-a-source host.
+    case "greenhouse":
     default:
       return undefined;
   }

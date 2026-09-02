@@ -226,7 +226,7 @@ export type ExtractionFields = {
 export type ExtractionReport = {
   fields: ExtractionFields;
   warnings: ExtractionWarning[];
-  recognizedSite?: "linkedin" | "indeed" | "workday";
+  recognizedSite?: "linkedin" | "indeed" | "workday" | "greenhouse";
   selectedStrategy?: ExtractionSource;
   structuredData: {
     jsonLdJobPosting: boolean;

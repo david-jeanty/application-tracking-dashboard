@@ -58,7 +58,10 @@ describe("recognizing a site", () => {
     expect(siteFor(LINKEDIN_JOB)).toBe("linkedin");
     expect(siteFor(INDEED_JOB)).toBe("indeed");
     expect(siteFor(WORKDAY_JOB)).toBe("workday");
-    expect(siteFor("https://boards.greenhouse.io/acme/jobs/1")).toBeUndefined();
+    expect(siteFor("https://boards.greenhouse.io/acme/jobs/1")).toBe("greenhouse");
+    expect(siteFor("https://job-boards.greenhouse.io/acme/jobs/1")).toBe(
+      "greenhouse",
+    );
     expect(siteFor("https://careers.example.com/job/1")).toBeUndefined();
   });
 
