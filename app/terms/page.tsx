@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PublicFooter } from "@/components/public/public-footer";
 import { PublicHeader } from "@/components/public/public-header";
+import { formatDocumentVersion, TERMS_VERSION } from "@/lib/legal/document-versions";
 
 export const metadata: Metadata = {
   title: "Terms",
@@ -33,7 +34,7 @@ export default function TermsPage() {
             account. Creating an account means you accept them.
           </p>
           <p className="mt-3 text-[13px] text-foreground-muted">
-            Last updated September 1, 2026.
+            Effective date / last updated: {formatDocumentVersion(TERMS_VERSION)}.
           </p>
 
           <div className="mt-10 space-y-10 text-[15px] leading-7 text-foreground-secondary">
@@ -55,7 +56,38 @@ export default function TermsPage() {
                 Interndex is provided &ldquo;as is,&rdquo; without warranty of
                 any kind, and is not affiliated with any employer, job board,
                 or applicant-tracking system whose postings you may reference
-                while using it.
+                while using it. It is built and operated by an individual
+                developer, not a registered company — see{" "}
+                <a
+                  className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+                  href="/privacy"
+                >
+                  Privacy
+                </a>{" "}
+                for how that&apos;s described in more detail.
+              </p>
+              <p className="mt-3">
+                Interndex is a small, actively developed, student-built
+                project. Features can change, and a record you or a connected
+                assistant saved may be incomplete or wrong — verify anything
+                important, especially a deadline, before you rely on it.
+              </p>
+            </section>
+
+            <section aria-labelledby="eligibility">
+              <h2
+                className="border-b border-border pb-2 text-[20px] font-medium text-foreground"
+                id="eligibility"
+              >
+                Eligibility
+              </h2>
+              <p className="mt-4">
+                Interndex is built for students old enough to apply for
+                internships and co-ops. The signup form does not currently
+                verify your age. If you are old enough in your country to
+                agree to these terms on your own, you may create an account;
+                otherwise, a parent or guardian should do it for you and
+                supervise your use of Interndex.
               </p>
             </section>
 
@@ -77,6 +109,50 @@ export default function TermsPage() {
                 Do not use it to store data you do not have the right to
                 store, to attempt to access another student&apos;s account or
                 records, or to disrupt or overload the service.
+              </p>
+            </section>
+
+            <section aria-labelledby="license-content">
+              <h2
+                className="border-b border-border pb-2 text-[20px] font-medium text-foreground"
+                id="license-content"
+              >
+                License, and what you put into Interndex
+              </h2>
+              <p className="mt-4">
+                Interndex grants you a limited, non-exclusive, revocable
+                license to use the web app and the Interndex Capture extension
+                for your own job search. That license doesn&apos;t give you
+                ownership of Interndex&apos;s software, extension, or
+                underlying systems, and it ends if your account is closed or
+                these terms are terminated.
+              </p>
+              <p className="mt-3">
+                What you type or save into Interndex — company names, notes,
+                job descriptions you pasted in, anything else — stays yours.
+                Interndex only needs the license to store it, display it back
+                to you, and let a connected AI assistant you authorized read
+                and write it on your behalf, so it can run the service for
+                you. Interndex doesn&apos;t use your records to train a
+                model, and doesn&apos;t sell them or license them to anyone
+                else.
+              </p>
+            </section>
+
+            <section aria-labelledby="pricing">
+              <h2
+                className="border-b border-border pb-2 text-[20px] font-medium text-foreground"
+                id="pricing"
+              >
+                Pricing
+              </h2>
+              <p className="mt-4">
+                Interndex is free. It is a non-monetized student project with
+                no paid tier, no revenue, and no plan to charge for the
+                service — there is no billing, renewal, or cancellation to
+                describe, because nothing is ever billed. Were that to change
+                at some point in the future, this page would be updated first
+                to describe it before any charge applied to your account.
               </p>
             </section>
 
@@ -104,6 +180,13 @@ export default function TermsPage() {
                 validates it against the same rules the web app enforces.
                 Review what a connected assistant saves or changes; you remain
                 responsible for your own records.
+              </p>
+              <p className="mt-3">
+                The same applies to the Interndex Capture extension: what it
+                reads off a job posting page, or what an assistant infers from
+                one, can be incomplete or wrong. Neither is a substitute for
+                reading the actual posting before you apply, especially for a
+                deadline or a compensation figure.
               </p>
             </section>
 
@@ -135,7 +218,17 @@ export default function TermsPage() {
               </h2>
               <p className="mt-4">
                 You may stop using Interndex and delete your data at any time.
-                We may suspend or terminate access for a violation of these
+                Archiving and permanently deleting an individual application
+                is self-service, right in the app. Closing your account
+                entirely is currently a manual step: email{" "}
+                <a
+                  className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+                  href="mailto:support@interndex.dev"
+                >
+                  support@interndex.dev
+                </a>{" "}
+                and your account and every record tied to it are deleted. We
+                may suspend or terminate access for a violation of these
                 terms, including the acceptable-use rules above.
               </p>
             </section>
@@ -148,12 +241,29 @@ export default function TermsPage() {
                 Limitation of liability
               </h2>
               <p className="mt-4">
-                Interndex is offered without charge, on a best-effort basis.
-                To the fullest extent the law allows, Interndex is not liable
-                for indirect, incidental, or consequential damages arising
-                from your use of it, including a missed deadline or an
-                inaccurate record entered by you or by a connected assistant
-                you authorized.
+                Interndex is a free service, offered on a best-effort basis by
+                an individual developer rather than a company. To the fullest
+                extent the law allows, Interndex is not liable for indirect,
+                incidental, or consequential damages arising from your use of
+                it, including a missed deadline or an inaccurate record
+                entered by you, captured by the extension, or written by a
+                connected assistant you authorized. No fee is ever charged
+                for Interndex, so there is no monetary cap to state here —
+                liability is limited to the fullest extent the law permits.
+              </p>
+            </section>
+
+            <section aria-labelledby="governing-law">
+              <h2
+                className="border-b border-border pb-2 text-[20px] font-medium text-foreground"
+                id="governing-law"
+              >
+                Governing law
+              </h2>
+              <p className="mt-4">
+                These terms are governed by the laws of Ontario, Canada,
+                without regard to conflict-of-law rules — the operator&apos;s
+                home jurisdiction.
               </p>
             </section>
 
@@ -165,8 +275,10 @@ export default function TermsPage() {
                 Changes to these terms
               </h2>
               <p className="mt-4">
-                If these terms change materially, the &ldquo;last updated&rdquo;
-                date above will change with them. Continuing to use Interndex
+                If these terms change materially, the &ldquo;last
+                updated&rdquo; date above will change and Interndex will tell
+                you directly — an email or an in-app notice — rather than
+                only updating this page silently. Continuing to use Interndex
                 after a change means you accept the updated terms.
               </p>
             </section>
@@ -186,10 +298,22 @@ export default function TermsPage() {
                 >
                   support@interndex.dev
                 </a>
+                . For how Interndex handles your data specifically, see{" "}
+                <a
+                  className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+                  href="/privacy"
+                >
+                  Privacy
+                </a>
                 .
               </p>
             </section>
           </div>
+
+          <p className="mt-10 text-[13px] text-foreground-muted">
+            This page is provided as-is and isn&apos;t a substitute for legal
+            advice.
+          </p>
         </article>
       </main>
 

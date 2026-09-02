@@ -155,7 +155,7 @@ test("the privacy page is public and linked from the homepage footer", async ({
     }),
   ).toBeVisible();
   await expect(
-    page.getByText(/installed locally as an unpacked extension/i),
+    page.getByText(/loaded locally as an unpacked developer build/i),
   ).toBeVisible();
 });
 

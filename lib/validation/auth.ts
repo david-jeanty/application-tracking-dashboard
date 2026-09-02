@@ -14,6 +14,13 @@ export const loginSchema = z.object({
   password,
 });
 
+const TERMS_ACCEPTANCE_MESSAGE =
+  "You must agree to the Terms of Service and Privacy Policy to create an account.";
+
+const termsAccepted = z
+  .string({ error: TERMS_ACCEPTANCE_MESSAGE })
+  .refine((value) => value === "on", { message: TERMS_ACCEPTANCE_MESSAGE });
+
 export const signupSchema = z.object({
   fullName: z
     .string()
@@ -22,6 +29,7 @@ export const signupSchema = z.object({
     .max(120, "Full name must be 120 characters or fewer."),
   email,
   password,
+  termsAccepted,
 });
 
 export const forgotPasswordSchema = z.object({

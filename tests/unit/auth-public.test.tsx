@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // This suite does not run with Vitest globals, so Testing Library's automatic
@@ -135,5 +135,56 @@ describe("the forms themselves are untouched", () => {
     const accented = [...container.querySelectorAll('[class*="bg-accent"]')];
     expect(accented).toHaveLength(1);
     expect(accented[0]).toBe(screen.getByRole("button", { name: "Sign in" }));
+  });
+});
+
+describe("clickwrap consent on signup", () => {
+  it("starts unchecked and blocks account creation until it is checked", () => {
+    render(SignupPage());
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: /agree to the terms of service and privacy policy/i,
+    });
+    const submit = screen.getByRole("button", { name: "Create account" });
+
+    expect(checkbox).not.toBeChecked();
+    expect(submit).toBeDisabled();
+
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+    expect(submit).toBeEnabled();
+
+    fireEvent.click(checkbox);
+    expect(submit).toBeDisabled();
+  });
+
+  it("does not gate login, which has no consent checkbox at all", async () => {
+    render(await login());
+
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+  });
+
+  it("links Terms and Privacy so they open in a new tab, not the signup form", () => {
+    render(SignupPage());
+
+    const terms = screen.getByRole("link", { name: "Terms of Service" });
+    const privacy = screen.getByRole("link", { name: "Privacy Policy" });
+
+    expect(terms).toHaveAttribute("href", "/terms");
+    expect(terms).toHaveAttribute("target", "_blank");
+    expect(privacy).toHaveAttribute("href", "/privacy");
+    expect(privacy).toHaveAttribute("target", "_blank");
+  });
+
+  it("keeps the checkbox properly labelled and keyboard-operable", () => {
+    render(SignupPage());
+
+    const checkbox = screen.getByLabelText(
+      /agree to the terms of service and privacy policy/i,
+    );
+    expect(checkbox.tagName).toBe("INPUT");
+    expect(checkbox).toHaveAttribute("type", "checkbox");
+    expect(checkbox).toHaveAttribute("id", "termsAccepted");
   });
 });

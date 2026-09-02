@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import type { AuthActionState } from "@/lib/auth/state";
 import { initialAuthState } from "@/lib/auth/state";
@@ -57,8 +57,10 @@ export function AuthForm({ action, kind, nextPath }: AuthFormProps) {
     action,
     initialAuthState,
   );
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const showsEmail = kind !== "reset";
   const showsPassword = kind === "login" || kind === "signup" || kind === "reset";
+  const blockedOnConsent = kind === "signup" && !termsAccepted;
 
   return (
     <form action={formAction} className="space-y-5" noValidate>
@@ -180,7 +182,53 @@ export function AuthForm({ action, kind, nextPath }: AuthFormProps) {
         </div>
       ) : null}
 
-      <Button className="w-full" disabled={pending} type="submit">
+      {kind === "signup" ? (
+        <div>
+          <div className="flex items-start gap-2.5">
+            <input
+              checked={termsAccepted}
+              className="mt-0.5 size-4 shrink-0 rounded-sm border border-border-strong text-accent accent-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+              id="termsAccepted"
+              name="termsAccepted"
+              onChange={(event) => setTermsAccepted(event.target.checked)}
+              required
+              type="checkbox"
+              value="on"
+            />
+            <label
+              className="text-sm text-foreground-secondary"
+              htmlFor="termsAccepted"
+            >
+              I agree to the{" "}
+              <Link
+                className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                href="/terms"
+                rel="noreferrer"
+                target="_blank"
+              >
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link
+                className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                href="/privacy"
+                rel="noreferrer"
+                target="_blank"
+              >
+                Privacy Policy
+              </Link>
+              .
+            </label>
+          </div>
+          <FieldError errors={state.fieldErrors?.termsAccepted} id="termsAccepted" />
+        </div>
+      ) : null}
+
+      <Button
+        className="w-full"
+        disabled={pending || blockedOnConsent}
+        type="submit"
+      >
         {pending ? (
           <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
         ) : null}

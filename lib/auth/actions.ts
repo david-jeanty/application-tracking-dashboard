@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { getPublicEnvironment, hasSupabaseEnvironment } from "@/lib/env";
+import { PRIVACY_VERSION, TERMS_VERSION } from "@/lib/legal/document-versions";
 import { safePostAuthPath } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/server";
 import type { AuthActionState } from "@/lib/auth/state";
@@ -68,11 +69,24 @@ export async function signupAction(
 
   const environment = getPublicEnvironment();
   const supabase = await createClient();
+
+  // The checkbox only gates whether signup proceeds at all (enforced by
+  // `signupSchema` above); the timestamp and version actually recorded come
+  // from the server, never from client-supplied form fields, so a request
+  // cannot claim acceptance of a version this deployment doesn't display.
+  const acceptedAt = new Date().toISOString();
+
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
-      data: { full_name: parsed.data.fullName },
+      data: {
+        full_name: parsed.data.fullName,
+        terms_accepted_at: acceptedAt,
+        terms_version_accepted: TERMS_VERSION,
+        privacy_accepted_at: acceptedAt,
+        privacy_version_accepted: PRIVACY_VERSION,
+      },
       emailRedirectTo: `${environment.NEXT_PUBLIC_SITE_URL}/auth/callback?next=/dashboard`,
     },
   });

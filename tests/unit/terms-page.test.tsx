@@ -32,10 +32,13 @@ describe("the public terms route", () => {
   it("links a support contact", () => {
     render(<TermsPage />);
 
-    expect(screen.getByRole("link", { name: "support@interndex.dev" })).toHaveAttribute(
-      "href",
-      "mailto:support@interndex.dev",
-    );
+    const supportLinks = screen.getAllByRole("link", {
+      name: "support@interndex.dev",
+    });
+    expect(supportLinks.length).toBeGreaterThan(0);
+    for (const link of supportLinks) {
+      expect(link).toHaveAttribute("href", "mailto:support@interndex.dev");
+    }
   });
 
   it("keeps the public page accessible and linked home", () => {
