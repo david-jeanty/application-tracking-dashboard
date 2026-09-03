@@ -308,12 +308,7 @@ export const CAPTURE_ADAPTERS: readonly CaptureAdapter[] = [
     id: "legacy_site_fields",
     matches: (signals) => {
       const site = siteFor(signals.pageUrl);
-      // Greenhouse has no selectors of its own (see sites.ts) and so
-      // contributes no site-DOM fields here either; it shares this tier with
-      // Indeed because both are recognized sites without page-local identity
-      // evidence of their own. Every Greenhouse value still comes from the
-      // structured-data path ahead of adapter selection.
-      return site === "indeed" || site === "workday" || site === "greenhouse";
+      return site === "indeed" || site === "workday";
     },
     collect: (signals) => compatibilityResult(signals, "legacy_site_fields"),
   },
