@@ -739,6 +739,14 @@ Three editable fields — company, job title, location — a status control offe
 `Interested` and `Applied`, and one button. Not the full Add Application form:
 this is a confirmation, not data entry.
 
+A static disclosure sits above the form on every capture, regardless of
+site: "LinkedIn, Indeed, and Workday captures are verified. Capture on any
+other site is experimental — review every field below before saving." It is
+the same sentence every time — it does not know, and does not need to know,
+which site produced the current capture — so it adds no new data flow
+between the collector, the extractor, and the popup, and it is not a
+substitute for the field-level confidence work tracked separately.
+
 Status defaults to `Interested` and is never inferred; being on an application
 page does not mean the student submitted it. `date_applied` is not collected
 even when they choose `Applied`, because the extension does not know it and
