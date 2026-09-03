@@ -118,14 +118,43 @@ describe("dashboard composition", () => {
     ).toBeInTheDocument();
   });
 
-  it("lets adjacent dashboard modules keep their natural heights", () => {
+  it("stretches Saved opportunities and Recent activity to the same grid row height", () => {
+    const dashboard = {
+      ...readyDashboard(),
+      savedOpportunities: [savedOpportunity()],
+      activity: [
+        activityEntry({ applicationId: "app-1" }),
+        activityEntry({
+          applicationId: "app-2",
+          companyName: "Deloitte",
+          jobTitle: "Consulting Analyst",
+          description: "Saved as Interested",
+          day: "2026-08-25",
+          changedAt: "2026-08-25T12:00:00.000Z",
+        }),
+        activityEntry({
+          applicationId: "app-3",
+          companyName: "EY",
+          jobTitle: "Assurance Intern",
+          description: "Moved to Interview",
+          day: "2026-08-24",
+          changedAt: "2026-08-24T12:00:00.000Z",
+        }),
+      ],
+    };
     const { container } = render(
-      <DashboardView dashboard={readyDashboard()} today="2026-08-26" />,
+      <DashboardView dashboard={dashboard} today="2026-08-26" />,
     );
 
+    // Real layout isn't computed in jsdom, so this checks the mechanism
+    // (stretch, not each item's own content height) rather than pixels —
+    // the Playwright suite verifies the actual rendered heights match.
     expect(
       container.querySelector("[data-dashboard-secondary-grid]"),
-    ).toHaveClass("items-start");
+    ).toHaveClass("items-stretch");
+    expect(
+      container.querySelector("[data-dashboard-secondary-grid]"),
+    ).not.toHaveClass("items-start");
   });
 
   it("removes an empty Saved opportunities module and lets activity reflow", () => {

@@ -135,7 +135,7 @@ export function DashboardView({
       ) : null}
 
       <div
-        className={`grid items-start gap-8 ${
+        className={`grid items-stretch gap-8 ${
           dashboard.savedOpportunities.length > 0
             ? "xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:gap-10"
             : "grid-cols-1"
