@@ -1255,6 +1255,72 @@ describe("save_job reports what it created", () => {
 });
 
 /*
+ * The regression this pins: ChatGPT showed a student two existing RBC
+ * application cards from the generic list widget above the confirmation of
+ * a job that had just saved correctly. `save_job` carries no widget
+ * association of its own, so the widget could only have reached that
+ * response by ChatGPT separately calling `list_jobs` to put something
+ * visual next to a plain-text confirmation. These tests pin both halves of
+ * the fix: the tool's own result never carries the view, and its
+ * description tells the assistant not to reach for `list_jobs` at all.
+ */
+describe("save_job stays confirmation-only", () => {
+  it("never attaches the application-list widget to its own result", async () => {
+    const connection = await connectServer();
+
+    const saved = await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
+    });
+
+    expect(saved._meta?.["openai/outputTemplate"]).toBeUndefined();
+    expect(saved._meta?.ui).toBeUndefined();
+    await connection.close();
+  });
+
+  it("tells the assistant not to call list_jobs to confirm or check for a duplicate", async () => {
+    const connection = await connectServer();
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "save_job",
+    );
+
+    expect(tool!.description).toMatch(/never call list_jobs/i);
+    expect(tool!.description).toMatch(/whole confirmation/i);
+    await connection.close();
+  });
+
+  it("does not read the tracker at all through the tool's own orchestration", async () => {
+    // A save should invoke exactly one repository method. If ChatGPT's own
+    // reasoning decides to call list_jobs separately that is a second
+    // `tools/call`, not something this handler triggers — so what this
+    // proves is that `save_job` itself never reaches for the list read as
+    // part of saving, e.g. for a silent duplicate check that leaked a
+    // visible tool call.
+    let listCalls = 0;
+    const base = fakeRepositoryFactory();
+    const spiedFactory: JobTrackRepositoryFactory = (identity) => {
+      const repository = base(identity);
+      return {
+        ...repository,
+        listApplications: (filters) => {
+          listCalls += 1;
+          return repository.listApplications(filters);
+        },
+      };
+    };
+    const connection = await connectServer(spiedFactory);
+
+    await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
+    });
+
+    expect(listCalls).toBe(0);
+    await connection.close();
+  });
+});
+
+/*
  * The ChatGPT Apps SDK contract.
  *
  * These drive the same `registerJobTrackTools` the route serves, over a real

@@ -112,7 +112,7 @@ export function registerJobTrackTools(
     {
       title: "Save job application",
       description:
-        "Saves a job to the student's application tracker. Use this when they share a job posting and want it recorded, or say they have applied somewhere. Pass the full job description verbatim when it is available so they can reread it later. Fill in company_domain with the employer's own website whenever you can identify the employer, so the saved application shows its logo without the student having to ask for it.",
+        "Saves a job to the student's application tracker. Use this when they share a job posting and want it recorded, or say they have applied somewhere. Pass the full job description verbatim when it is available so they can reread it later. Fill in company_domain with the employer's own website whenever you can identify the employer, so the saved application shows its logo without the student having to ask for it. This tool's own text and structured result are the whole confirmation a save needs: never call list_jobs afterward merely to show what was just saved, and never call it first on your own initiative to check for a duplicate. list_jobs surfaces every other application the student has saved, which nobody asked to see just because one job was added.",
       inputSchema: saveJobInputSchema,
       outputSchema: saveJobOutputSchema,
     },

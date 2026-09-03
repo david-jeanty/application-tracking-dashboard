@@ -163,7 +163,12 @@ express would be a field the other quietly stored better.
 
 It returns structured output as well as its sentence:
 `{ application_id, company, job_title, status }`, so a client need not list the
-tracker again to find what it just created.
+tracker again to find what it just created. `save_job` carries no `_meta`
+pointing at the ChatGPT Apps SDK view either, and its description says plainly
+not to call `list_jobs` before or after saving — a save is not an invitation to
+show the student's whole tracker, and ChatGPT will otherwise reach for
+`list_jobs` on its own to put something visual next to a plain-text
+confirmation, surfacing every other application above the one just added.
 
 `work_term_season` is a required column that a posting rarely states, so it
 falls back to the same `Not specified` sentinel the web form uses.
