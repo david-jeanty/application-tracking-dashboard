@@ -71,13 +71,14 @@ test("the dashboard composition expands on desktop and stacks cleanly below it",
       upcoming.evaluate((node) => getComputedStyle(node).gridTemplateColumns),
     )
     .toMatch(/\S+\s+\S+/);
-  expect(
-    await savedOpportunities.evaluate(
-      (node) => node.getBoundingClientRect().height,
-    ),
-  ).toBeLessThan(
-    await activity.evaluate((node) => node.getBoundingClientRect().height),
-  );
+  // The demo's saved-opportunities list is shorter than its activity feed, so
+  // an uneven bottom edge here would mean the grid stopped stretching the
+  // shorter sibling to the row height of the taller one.
+  const [savedHeightDesktop, activityHeightDesktop] = await Promise.all([
+    savedOpportunities.evaluate((node) => node.getBoundingClientRect().height),
+    activity.evaluate((node) => node.getBoundingClientRect().height),
+  ]);
+  expect(savedHeightDesktop).toBeCloseTo(activityHeightDesktop, 0);
 
   await page.setViewportSize({ width: 900, height: 1000 });
   await expect
@@ -88,6 +89,13 @@ test("the dashboard composition expands on desktop and stacks cleanly below it",
       upcoming.evaluate((node) => getComputedStyle(node).gridTemplateColumns),
     )
     .toMatch(/\S+\s+\S+/);
+  // Stacked below `xl`, each card sits in its own grid row and keeps its own
+  // content height rather than being stretched to match its sibling.
+  expect(
+    await savedOpportunities.evaluate((node) => node.getBoundingClientRect().height),
+  ).toBeLessThan(
+    await activity.evaluate((node) => node.getBoundingClientRect().height),
+  );
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(grid).toBeVisible();
