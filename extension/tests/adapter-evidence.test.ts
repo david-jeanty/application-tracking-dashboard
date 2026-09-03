@@ -458,22 +458,38 @@ describe("selected links and company-domain safety", () => {
 });
 
 describe("collector same-root attribution", () => {
-  const topCard = (jobIdAttribute = "") => `
-    <div ${jobIdAttribute}>
+  /**
+   * Live LinkedIn (job 4461319262, 2 September 2026) no longer writes
+   * `data-job-id` — or any of the other markers `postingIdsAt`'s ordinary
+   * climb understands — anywhere near these fields. Identity for the direct
+   * route now comes from the page's one verified
+   * `section[aria-label="Primary content"]` region instead, so these
+   * fixtures name no id of their own; `readSitePage` resolves `LINKEDIN_B`'s
+   * job id from the route, exactly as the popup does.
+   */
+  const topCard = () => `
+    <div>
       <div data-display-contents="true"><p>Analyst Intern</p></div>
       <div aria-label="Company, Northwind.">Northwind</div>
       <p><span>Toronto, ON</span></p>
     </div>`;
 
-  it("records each collected value with the id on its own root", () => {
+  const aboutTheJob = `
+    <section><h2>About the job</h2>
+      <div data-testid="expandable-text-box">Selected description.</div>
+    </section>`;
+
+  const primaryContent = (...parts: string[]) =>
+    `<body><main><h1>Jobs</h1>
+       <section aria-label="Primary content">${parts.join("")}</section>
+     </main></body>`;
+
+  it("records each collected value against the route's own job id once the region is verified", () => {
     const signals = readSitePage(
-      `<body><main data-job-id="${JOB_B}">${topCard()}
-        <section><h2>About the job</h2>
-          <div data-testid="expandable-text-box">Selected description.</div>
-        </section>
-      </main></body>`,
+      primaryContent(topCard(), aboutTheJob),
       LINKEDIN_B,
     );
+
     expect(signals.observedPosting?.fields).toEqual(
       expect.arrayContaining([
         observation("company", JOB_B),
@@ -482,34 +498,38 @@ describe("collector same-root attribution", () => {
         observation("description", JOB_B),
       ]),
     );
+    expect(extractJob(signals)).toMatchObject({
+      company: "Northwind",
+      jobTitle: "Analyst Intern",
+      location: "Toronto, ON",
+      jobDescription: "Selected description.",
+    });
   });
 
-  it("does not use a matching id elsewhere in the document", () => {
-    const signals = readSitePage(
-      `<body><aside data-job-id="${JOB_B}">Unrelated result</aside>
-        <main>${topCard()}</main>
-      </body>`,
-      LINKEDIN_B,
-    );
-    expect(
-      signals.observedPosting?.fields.find((entry) => entry.field === "company"),
-    ).toEqual(observation("company"));
-    expect(extractJob(signals).company).toBeUndefined();
+  it("never attributes a lookalike label drawn outside the verified region", () => {
+    const html = `<body><main>
+        <header aria-label="Company, Impersonator.">Impersonator</header>
+        <section aria-label="Primary content">${topCard()}${aboutTheJob}</section>
+      </main></body>`;
+    const signals = readSitePage(html, LINKEDIN_B);
+
+    expect(extractJob(signals).company).toBe("Northwind");
+    expect(JSON.stringify(extractJob(signals))).not.toContain("Impersonator");
   });
 
-  it("makes mixed selected roots ambiguous even when one root matches", () => {
-    const signals = readSitePage(
-      `<body><main>
-        ${topCard(`data-job-id="${JOB_B}"`)}
-        <section data-job-id="${JOB_A}"><h2>About the job</h2>
+  it("reads nothing at all when the region cannot be resolved to exactly one", () => {
+    const html = `<body><main>
+        <section aria-label="Primary content">${topCard()}${aboutTheJob}</section>
+        <section aria-label="Primary content"><h2>About the job</h2>
           <div data-testid="expandable-text-box">Job A marker.</div>
         </section>
-      </main></body>`,
-      LINKEDIN_B,
-    );
+      </main></body>`;
+    const signals = readSitePage(html, LINKEDIN_B);
     const result = collectAdapterEvidence(signals);
-    expect(result.postingIdentity.observed).toBe("ambiguous");
+
     expect(result.fields).toEqual({});
+    expect(signals.observedPosting).toBeUndefined();
     expect(JSON.stringify(extractJob(signals))).not.toContain("Job A marker");
+    expect(JSON.stringify(extractJob(signals))).not.toContain("Northwind");
   });
 });

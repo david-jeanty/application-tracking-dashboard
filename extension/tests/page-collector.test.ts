@@ -275,7 +275,9 @@ describe("the injected collector", () => {
 
   it("runs the LinkedIn read only for the site that asks for it", () => {
     document.documentElement.innerHTML = `<head></head><body><main>
-       <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
+       <section aria-label="Primary content">
+         <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
+       </section>
      </main></body>`;
 
     const linkedin = collectPageSignals(
@@ -295,10 +297,6 @@ describe("the injected collector", () => {
    * genuinely differ, so the same markup gives different answers.
    */
   it("takes the strategy and the selected job as data", () => {
-    document.documentElement.innerHTML = `<head></head><body><main>
-       <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
-     </main></body>`;
-
     const splitPane = readRulesFor(
       "https://www.linkedin.com/jobs/collections/similar-jobs/?currentJobId=4446257399&referenceJobId=4443429701",
     );
@@ -306,10 +304,20 @@ describe("the injected collector", () => {
     expect(splitPane.strategy).toBe("linkedin-split-pane");
     expect(splitPane.jobId).toBe("4446257399");
 
-    // No Primary content region here, so the bounded read establishes nothing
-    // — which is correct, and not what the job-page read does with the same
-    // markup.
+    // No Primary content region and no exact posting link for the selected
+    // id, so the bounded split-pane read establishes nothing here — which is
+    // correct, and not what the job-page read does with an equivalent card.
+    document.documentElement.innerHTML = `<head></head><body><main>
+       <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
+     </main></body>`;
     expect(collectPageSignals(splitPane).siteFields).toBeUndefined();
+
+    // The job-page read requires its own verified Primary content region.
+    document.documentElement.innerHTML = `<head></head><body><main>
+       <section aria-label="Primary content">
+         <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
+       </section>
+     </main></body>`;
     expect(
       collectPageSignals(
         readRulesFor("https://www.linkedin.com/jobs/view/4446257399/"),
@@ -705,12 +713,14 @@ describe("the injected collector", () => {
 
     it("reads the pill inside a job page's own top card", () => {
       document.documentElement.innerHTML = `<head></head><body><main>
-        <div>
-          <div><div data-display-contents="true"><p>Analyst Intern</p></div></div>
-          <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
-          <p><span>Toronto, Ontario, Canada</span><span>2 weeks ago</span></p>
-          <ul><li>Hybrid</li><li>Full-time</li></ul>
-        </div>
+        <section aria-label="Primary content">
+          <div>
+            <div><div data-display-contents="true"><p>Analyst Intern</p></div></div>
+            <div aria-label="Company, Northwind Photonics.">Northwind Photonics</div>
+            <p><span>Toronto, Ontario, Canada</span><span>2 weeks ago</span></p>
+            <ul><li>Hybrid</li><li>Full-time</li></ul>
+          </div>
+        </section>
         <section><h3>More jobs for you</h3><ul><li><span>Remote</span></li></ul></section>
       </main></body>`;
 

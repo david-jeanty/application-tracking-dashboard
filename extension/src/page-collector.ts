@@ -125,6 +125,20 @@ export function collectPageSignals(
   const identityAwareWorkday =
     rules.strategy === "workday-job-detail" ||
     rules.strategy === "workday-split-pane";
+  /**
+   * Whether a field may be trusted on the strength of the direct route alone.
+   *
+   * `/jobs/view/<id>` names exactly one job by its own address, and — unlike
+   * `linkedin-split-pane` — shows no rail of other postings beside it, so
+   * there is no second posting on this route for a field to be confused
+   * with. `postingIdsAt` below still requires more than the strategy match:
+   * the field must be a descendant of the page's one verified `Primary
+   * content` region (`readLinkedInJobDetail` refuses to record anything at
+   * all when that region is missing or ambiguous), so a lookalike element
+   * drawn elsewhere on the page — a card in a rail LinkedIn adds later, a
+   * recommendation — still cannot borrow the route's identity.
+   */
+  const identityAwareLinkedInJobDetail = rules.strategy === "linkedin-job-detail";
   const POSTING_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
   const POSTING_LINK_ID_PATTERN = /\/jobs\/view\/([A-Za-z0-9_-]+)/;
   const ENTITY_URN_ID_PATTERN = /(?:jobPosting|fsd_jobPosting):([A-Za-z0-9_-]+)/i;
@@ -164,6 +178,28 @@ export function collectPageSignals(
         addPostingId(ids, requisition.textContent);
       }
       return [...ids].slice(0, MAXIMUM_OBSERVED_JOB_IDS);
+    }
+
+    // Live LinkedIn's direct job page no longer writes `data-job-id`,
+    // `data-occludable-job-id`, an entity urn, or a `/jobs/view/` link
+    // anywhere near its company, title, location or description leaves —
+    // the climb below finds nothing there today, and a field genuinely
+    // stops being verifiable rather than merely stops finding a marker.
+    // The route itself already names the one job this page can be, so a
+    // field bounded to the page's single verified `Primary content` region
+    // is trusted on the route's own id instead. This is deliberately not a
+    // relaxed version of the climb below: it requires the strategy match
+    // *and* an `establishingAnchor` that actually contains the element,
+    // and it never runs for `linkedin-split-pane`, where a rail of other
+    // postings makes that same trust unsafe.
+    if (
+      identityAwareLinkedInJobDetail &&
+      establishingAnchor &&
+      typeof rules.jobId === "string" &&
+      (element === establishingAnchor || establishingAnchor.contains(element))
+    ) {
+      addPostingId(ids, rules.jobId);
+      return [...ids];
     }
 
     let node = element;
@@ -394,6 +430,17 @@ export function collectPageSignals(
   const HEADING_SELECTOR = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
   const RESULT_CARD_SELECTOR = 'li, [role="listitem"]';
   const MAXIMUM_LOCATION_CHARACTERS = 120;
+  /**
+   * The one region holding the posting the student is looking at.
+   *
+   * Shared by the split-pane read below and the direct-page read: both
+   * routes show exactly one selected posting, and both need to tell that
+   * region apart from a rail of other people's postings drawn beside it.
+   */
+  const PRIMARY_CONTENT_SELECTORS = [
+    'section[aria-label="Primary content"]',
+    '[aria-label="Primary content"]',
+  ];
 
   function trimmedText(node: Element | null): string {
     return (node?.textContent ?? "").trim();
@@ -559,6 +606,35 @@ export function collectPageSignals(
     return null;
   }
 
+  /**
+   * `/jobs/view/<id>`: one posting at its own address, read from its one
+   * verified region.
+   *
+   * Real-Chrome evidence (2 September 2026, job 4461319262) found the labelled
+   * company, the title leaf, and the "About the job" heading all still exactly
+   * where they always were — `readLinkedInJobDetail` itself was never the
+   * problem. What live LinkedIn no longer writes anywhere near them is
+   * `data-job-id`, `data-occludable-job-id`, an entity urn, or a `/jobs/view/`
+   * link, which is the only vocabulary `postingIdsAt`'s ordinary climb
+   * understands — so every field it found was recorded as belonging to no
+   * posting at all, and the evidence ledger correctly refused every one of
+   * them. Relaxing that climb, or accepting an unmarked field anywhere on the
+   * page, would be exactly the shortcut this codebase's identity model exists
+   * to refuse.
+   *
+   * What this route has instead is the address itself: `directPostingRoute`
+   * already established that this page shows exactly one job, the one named
+   * in the URL, with no rail of other postings beside it — a guarantee
+   * `linkedin-split-pane` does not have. So identity here is bound to the
+   * page's one verified `section[aria-label="Primary content"]` region
+   * instead of to a marker inside it: if that region does not resolve to
+   * exactly one element, nothing is read at all, and every field recorded
+   * from inside it is bound to the route's own job id
+   * (`identityAwareLinkedInJobDetail` in `postingIdsAt`, above). A lookalike
+   * label drawn outside that region — a future rail, a recommendation block —
+   * is invisible to every search below, because every search is scoped to the
+   * region and nowhere else.
+   */
   function readLinkedInJobDetail(): void {
     /**
      * The labelled company, and the element carrying the label.
@@ -568,9 +644,11 @@ export function collectPageSignals(
      * Taking one of them would store the job the student did not select — the
      * exact failure the scoping in this file exists to prevent.
      */
-    function findCompanyAnchor(): { element: Element; name: string } | null {
+    function findCompanyAnchor(
+      scope: Element,
+    ): { element: Element; name: string } | null {
       const labelled = Array.from(
-        document.querySelectorAll("[aria-label]"),
+        scope.querySelectorAll("[aria-label]"),
       ).slice(0, MAXIMUM_LABELLED_CANDIDATES);
 
       let fallback: { element: Element; name: string } | null = null;
@@ -589,25 +667,39 @@ export function collectPageSignals(
       return fallback;
     }
 
-    /** The smallest bounded ancestor of the company that holds a title leaf. */
-    function findTopCard(anchor: Element): Element | null {
+    /**
+     * The smallest bounded ancestor of the company that holds a title leaf,
+     * never climbing past the verified region itself.
+     */
+    function findTopCard(anchor: Element, scope: Element): Element | null {
       let node: Element | null = anchor.parentElement;
 
       for (let depth = 0; node && depth < MAXIMUM_ANCESTOR_DEPTH; depth += 1) {
-        if (node === document.body || node.tagName === "MAIN") return null;
         if (node.querySelector(TITLE_SELECTOR)) return node;
+        if (node === scope || node === document.body || node.tagName === "MAIN") {
+          return null;
+        }
         node = node.parentElement;
       }
 
       return null;
     }
 
-    const anchor = findCompanyAnchor();
-    if (!anchor) return;
+    // Exactly one region, or nothing is read. Zero means the page has not
+    // drawn it yet — the popup's own retry schedule asks again — and more
+    // than one is an ambiguity no document-order guess is allowed to settle.
+    const regions = Array.from(
+      document.querySelectorAll(PRIMARY_CONTENT_SELECTORS.join(",")),
+    );
+    if (regions.length !== 1) return;
+    const region = regions[0] as Element;
 
-    recordIdentityAwareField("company", anchor.name, anchor.element);
+    const anchor = findCompanyAnchor(region);
+    if (!anchor || !region.contains(anchor.element)) return;
 
-    const topCard = findTopCard(anchor.element);
+    recordIdentityAwareField("company", anchor.name, anchor.element, region);
+
+    const topCard = findTopCard(anchor.element, region);
     if (topCard) {
       // The title: the first leaf in the card standing in the one relationship
       // the live markup actually exposes, and never the company's own element.
@@ -626,7 +718,7 @@ export function collectPageSignals(
 
         const value = markupOf(candidate);
         if (value && trimmedText(candidate) !== anchor.name) {
-          recordIdentityAwareField("title", value, candidate);
+          recordIdentityAwareField("title", value, candidate, region);
           titleText = trimmedText(candidate);
           break;
         }
@@ -653,7 +745,7 @@ export function collectPageSignals(
           continue;
         }
 
-        recordIdentityAwareField("location", value, candidate);
+        recordIdentityAwareField("location", value, candidate, region);
         locationElement = candidate;
         break;
       }
@@ -663,18 +755,33 @@ export function collectPageSignals(
       recordArrangements(
         statedArrangements(topCard, locationElement),
         topCard,
+        region,
       );
-      recordApplyLink(topCard);
+      recordApplyLink(topCard, region);
     }
 
-    // The first "About the job" heading on the page, and only that one: on
-    // these routes the page shows one posting, so a second would be furniture.
-    const [about] = aboutTheJobHeadings();
-    const description = about ? descriptionUnder([about]) : null;
+    // The first "About the job" heading inside the verified region, and only
+    // that one: on this route the page shows one posting, so a second would
+    // be furniture, and a heading outside the region belongs to something
+    // else entirely.
+    const [about] = aboutTheJobHeadings().filter((heading) =>
+      region.contains(heading),
+    );
+    const rawDescription = about ? descriptionUnder([about]) : null;
+    // `descriptionUnder` climbs toward `document.body` and can, in principle,
+    // surface a box outside the verified region; only one found inside it
+    // may be recorded.
+    const description =
+      rawDescription && region.contains(rawDescription) ? rawDescription : null;
     const descriptionValue = markupOf(description);
     if (descriptionValue) {
-      recordIdentityAwareField("description", descriptionValue, description);
-      recordDescriptionLinks(description);
+      recordIdentityAwareField(
+        "description",
+        descriptionValue,
+        description,
+        region,
+      );
+      recordDescriptionLinks(description, region);
     }
   }
 
@@ -707,11 +814,6 @@ export function collectPageSignals(
    * — every field stays blank.
    */
   function readLinkedInSplitPane(): void {
-    /** The one region holding the posting the student is looking at. */
-    const PRIMARY_CONTENT_SELECTORS = [
-      'section[aria-label="Primary content"]',
-      '[aria-label="Primary content"]',
-    ];
     /** The rail of other postings, and the description block, by convention. */
     const RAIL_ID_PATTERN = /similarjobs|morejobs/i;
     const ABOUT_ID_PATTERN = /aboutthejob/i;

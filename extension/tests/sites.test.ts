@@ -231,8 +231,19 @@ describe("LinkedIn", () => {
       </li>
     </ul>`;
 
+  /**
+   * A direct `/jobs/view/<id>` page, exactly as live evidence (job 4461319262,
+   * 2 September 2026) found it: the posting's own fields sit inside one
+   * `section[aria-label="Primary content"]` region, and — unlike the fixture
+   * this replaced — nothing on the page carries `data-job-id` at all. Real
+   * LinkedIn no longer writes one anywhere near these fields; identity for
+   * this route comes from the region being unique, not from a marker inside
+   * it (`page-collector.ts`'s `identityAwareLinkedInJobDetail`).
+   */
   const detail = (...parts: string[]) =>
-    `<body><main data-job-id="4123456789"><h1>Jobs</h1>${parts.join("")}</main></body>`;
+    `<body><main><h1>Jobs</h1>
+       <section aria-label="Primary content">${parts.join("")}</section>
+     </main></body>`;
 
   /**
    * The same page as a split pane, which is what a search route really is.
