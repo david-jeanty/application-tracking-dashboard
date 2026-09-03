@@ -3,6 +3,8 @@
 import { useActionState, useEffect, useRef } from "react";
 import { LoaderCircle } from "lucide-react";
 import { ApplicationFields } from "@/components/applications/application-fields";
+import { StatusTransitionDialog } from "@/components/applications/status-transition-dialog";
+import { useStatusTransitionGuard } from "@/components/applications/use-status-transition-guard";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import { updateApplicationAction } from "@/lib/applications/actions";
@@ -24,6 +26,17 @@ export function ApplicationEditForm({
     initialApplicationState,
   );
   const submissionLocked = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Editing an application always loads a real status from the record, so
+  // this is never the empty sentinel `ApplicationFormValues` also allows for
+  // a not-yet-started creation form.
+  const loadedStatus =
+    defaultValues.currentStatus === "" ? null : defaultValues.currentStatus;
+  const { cancel, confirm, intercept, pending: pendingTransition } =
+    useStatusTransitionGuard({
+      currentStatus: loadedStatus ?? "Interested",
+    });
 
   useEffect(() => {
     submissionLocked.current = false;
@@ -44,8 +57,13 @@ export function ApplicationEditForm({
             event.preventDefault();
             return;
           }
+          if (loadedStatus && intercept(event.currentTarget)) {
+            event.preventDefault();
+            return;
+          }
           submissionLocked.current = true;
         }}
+        ref={formRef}
       >
         <input
           name="expectedUpdatedAt"
@@ -83,6 +101,17 @@ export function ApplicationEditForm({
           </Button>
         </div>
       </form>
+      {pendingTransition && loadedStatus ? (
+        <StatusTransitionDialog
+          fromStatus={loadedStatus}
+          onCancel={cancel}
+          onConfirm={() => {
+            if (formRef.current) confirm(formRef.current);
+          }}
+          reason={pendingTransition.reason}
+          toStatus={pendingTransition.to}
+        />
+      ) : null}
     </div>
   );
 }

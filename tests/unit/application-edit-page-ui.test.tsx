@@ -1,13 +1,21 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplicationRecord } from "@/lib/applications/types";
 
 // This suite does not run with Vitest globals, so Testing Library's automatic
 // cleanup is never registered and renders would otherwise accumulate.
 afterEach(cleanup);
 
+// A stable reference, so a test can assert on the same bound action the form
+// actually submits to rather than a fresh mock `.bind` hands back each time.
+// `useActionState` renders whatever this resolves to as the next state, so it
+// must resolve to a valid `ApplicationActionState` rather than `undefined`.
+const boundUpdateApplicationAction = vi.fn().mockResolvedValue({ status: "success" });
+
 vi.mock("@/lib/applications/actions", () => ({
-  updateApplicationAction: Object.assign(vi.fn(), { bind: vi.fn(() => vi.fn()) }),
+  updateApplicationAction: Object.assign(vi.fn(), {
+    bind: vi.fn(() => boundUpdateApplicationAction),
+  }),
 }));
 
 const supabase = {
@@ -103,5 +111,70 @@ describe("the edit page hierarchy", () => {
     // The form sits on the page under a rule; nothing draws a box around it.
     const form = container.querySelector("form");
     expect(form?.closest('[class*="rounded-record"]')).toBeNull();
+  });
+});
+
+describe("an unusual status change is confirmed before it saves", () => {
+  beforeEach(() => {
+    boundUpdateApplicationAction.mockClear();
+  });
+
+  it("pauses on Applied to Interested rather than saving right away", async () => {
+    await renderPage();
+
+    fireEvent.change(screen.getByLabelText(/Current status/), {
+      target: { value: "Interested" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Confirm status change" });
+    expect(dialog).toHaveTextContent(
+      "This moves the application backward, from Applied to Interested.",
+    );
+    expect(boundUpdateApplicationAction).not.toHaveBeenCalled();
+  });
+
+  it("leaves the chosen value in place and saves nothing when cancelled", async () => {
+    await renderPage();
+
+    fireEvent.change(screen.getByLabelText(/Current status/), {
+      target: { value: "Interested" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep Applied" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Confirm status change" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Current status/)).toHaveValue("Interested");
+    expect(boundUpdateApplicationAction).not.toHaveBeenCalled();
+  });
+
+  it("saves exactly once when the change is confirmed", async () => {
+    await renderPage();
+
+    fireEvent.change(screen.getByLabelText(/Current status/), {
+      target: { value: "Interested" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Change to Interested" }),
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: "Confirm status change" }),
+    ).not.toBeInTheDocument();
+    expect(boundUpdateApplicationAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not pause when the status field is left unchanged", async () => {
+    await renderPage();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Confirm status change" }),
+    ).not.toBeInTheDocument();
+    expect(boundUpdateApplicationAction).toHaveBeenCalledTimes(1);
   });
 });

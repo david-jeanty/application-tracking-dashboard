@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APPLICATION_STATUSES } from "@/lib/applications/constants";
 import type { ApplicationListItem } from "@/lib/applications/types";
@@ -29,6 +29,9 @@ vi.mock("@/lib/applications/actions", () => ({
 
 const { PipelineBoard, PipelineBoardLoading } = await import(
   "@/components/pipeline/pipeline-board"
+);
+const { moveApplicationStatusAction } = await import(
+  "@/lib/applications/actions"
 );
 
 let sequence = 0;
@@ -424,6 +427,81 @@ describe("a card can be moved by keyboard alone", () => {
     ).map((input) => input.getAttribute("name"));
 
     expect(names).toEqual(["applicationId"]);
+  });
+});
+
+describe("an unusual move is confirmed before it saves", () => {
+  const named = () =>
+    application({
+      company_name: "RBC",
+      current_status: "Applied",
+      original_job_title: "Business Analyst Intern",
+    });
+
+  const moveMenu = () =>
+    screen.getByLabelText(
+      "Move Business Analyst Intern at RBC to another status",
+    ) as HTMLSelectElement;
+
+  const moveButton = () =>
+    screen.getByRole("button", { name: "Move Business Analyst Intern at RBC" });
+
+  beforeEach(() => {
+    vi.mocked(moveApplicationStatusAction).mockClear();
+  });
+
+  it("pauses on Applied to Interested rather than saving right away", async () => {
+    await renderBoard({ rows: [named()] });
+
+    fireEvent.change(moveMenu(), { target: { value: "Interested" } });
+    fireEvent.click(moveButton());
+
+    const dialog = screen.getByRole("dialog", { name: "Confirm status change" });
+    expect(dialog).toHaveTextContent(
+      "This moves the application backward, from Applied to Interested.",
+    );
+    expect(moveApplicationStatusAction).not.toHaveBeenCalled();
+  });
+
+  it("leaves the chosen destination in place and saves nothing when cancelled", async () => {
+    await renderBoard({ rows: [named()] });
+
+    fireEvent.change(moveMenu(), { target: { value: "Interested" } });
+    fireEvent.click(moveButton());
+    fireEvent.click(screen.getByRole("button", { name: "Keep Applied" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Confirm status change" }),
+    ).not.toBeInTheDocument();
+    expect(moveMenu()).toHaveValue("Interested");
+    expect(moveApplicationStatusAction).not.toHaveBeenCalled();
+  });
+
+  it("moves exactly once when the change is confirmed", async () => {
+    await renderBoard({ rows: [named()] });
+
+    fireEvent.change(moveMenu(), { target: { value: "Interested" } });
+    fireEvent.click(moveButton());
+    fireEvent.click(
+      screen.getByRole("button", { name: "Change to Interested" }),
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: "Confirm status change" }),
+    ).not.toBeInTheDocument();
+    expect(moveApplicationStatusAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not pause on a valid skip forward", async () => {
+    await renderBoard({ rows: [named()] });
+
+    fireEvent.change(moveMenu(), { target: { value: "Offer" } });
+    fireEvent.click(moveButton());
+
+    expect(
+      screen.queryByRole("dialog", { name: "Confirm status change" }),
+    ).not.toBeInTheDocument();
+    expect(moveApplicationStatusAction).toHaveBeenCalledTimes(1);
   });
 });
 
