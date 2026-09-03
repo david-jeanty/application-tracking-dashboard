@@ -7,6 +7,7 @@ import {
   listApplications,
   updateApplication,
 } from "@/lib/applications/repository";
+import { timeDbCall } from "@/lib/mcp/telemetry";
 import type { JobTrackRepositoryFactory } from "@/lib/mcp/tools";
 import { createBearerClient } from "@/lib/supabase/bearer";
 
@@ -25,17 +26,25 @@ export const createSupabaseJobTrackRepository: JobTrackRepositoryFactory = ({
 }) => {
   const supabase = createBearerClient(token);
 
+  // Each call is timed and folded into the enclosing tool call's database
+  // duration — see `lib/mcp/telemetry.ts`. Nothing about the query or its
+  // result passes through the timer; it only measures how long the promise
+  // took to settle.
   return {
-    createApplication: (input) => createApplication(supabase, input),
+    createApplication: (input) =>
+      timeDbCall(() => createApplication(supabase, input)),
     // No `userId` argument, and none is possible: the rows carry no owner
     // column, so `auth.uid()` from this request's own token fills it in and
     // the insert policy checks it again.
-    createApplications: (inputs) => createApplications(supabase, inputs),
+    createApplications: (inputs) =>
+      timeDbCall(() => createApplications(supabase, inputs)),
     getApplication: (applicationId) =>
-      getApplicationById(supabase, userId, applicationId),
+      timeDbCall(() => getApplicationById(supabase, userId, applicationId)),
     listApplications: (filters) =>
-      listApplications(supabase, userId, filters),
+      timeDbCall(() => listApplications(supabase, userId, filters)),
     updateApplication: (applicationId, input) =>
-      updateApplication(supabase, userId, applicationId, input),
+      timeDbCall(() =>
+        updateApplication(supabase, userId, applicationId, input),
+      ),
   };
 };

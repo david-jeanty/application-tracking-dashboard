@@ -225,6 +225,53 @@ The literals they would have supplied are pinned by tests instead.
   are honoured; the student's chosen Interndex accent is not, because the view
   never reads their settings.
 
+## Known ChatGPT-side behavior this repository cannot fix
+
+A user-visible latency-and-UX audit traced a ~55 second wait and an
+unexpected extra bubble after a `list_jobs` call to ChatGPT's own
+orchestration and client behavior, not to this server — which the same
+audit measured processing every tool call in well under 100ms (see
+`lib/mcp/telemetry.ts`). Two upstream reports match what was observed:
+
+- **ChatGPT can call a tool twice for one user action.** Reported upstream
+  as ChatGPT's web client initializing two MCP sessions on different
+  protocol versions and invoking tools from both
+  ([openai/openai-apps-sdk-examples#171](https://github.com/openai/openai-apps-sdk-examples/issues/171)),
+  and separately as two identical widget bubbles rendering for a single
+  tool call (OpenAI Developer Community: "Double widget bubble rendered for
+  a single MCP tool call"). No server-side workaround is documented for
+  either as of this writing. `mcp-handler`'s `legacy: 'stateless' | 'reject'`
+  option is the only lever this server has anywhere near this — it decides
+  whether pre-2026-07-28 ("legacy") MCP traffic is served at all — but
+  nothing in either report confirms which session ChatGPT treats as
+  authoritative, so flipping it without being able to test against a live
+  ChatGPT connector could as easily break the connection as fix the
+  duplicate. It is deliberately left at its default rather than guessed at.
+- **A widget-bound tool's `content` is not shown to the model.** When
+  `list_jobs`'s result renders as a widget, ChatGPT does not forward the
+  tool's `content` text to the model at all — it substitutes a system
+  message saying a UI was displayed, and hands the model `structuredContent`
+  as a raw JSON code block instead
+  ([openai/openai-apps-sdk-examples#144](https://github.com/openai/openai-apps-sdk-examples/issues/144)).
+  This means keeping `content` short (already true here — see
+  `tools.ts`'s `list_jobs` handler) does not, by itself, discourage the
+  model from composing its own prose restatement of the raw JSON once the
+  widget has already shown it; the model still produces a normal reply after
+  every tool call, by design, and no MCP or Apps SDK field this server can
+  set suppresses that reply outright. `lib/mcp/instructions.ts` is the one
+  lever aimed at it: it asks the model directly not to restate the list once
+  rendered. Whether a given ChatGPT build honours that can only be confirmed
+  against a live connector, the same limitation the wire-contract note above
+  already carries.
+
+Neither of these is a defect in `registerJobTrackTools`, the repository
+layer, or the view's own script — all three are exercised by
+`tests/unit/mcp-tool-registration.test.ts` and `tests/unit/mcp-app-view.test.ts`
+and behave as documented. They are recorded here rather than "fixed" because
+there is nothing on this side of the wire to change: the audit's own rule
+was not to claim ChatGPT orchestration latency solved when it is outside
+this application's control.
+
 ## Next
 
 `get_job` — a single-application detail view. It is the natural next slice: the

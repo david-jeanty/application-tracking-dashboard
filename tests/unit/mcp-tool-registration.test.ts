@@ -5,7 +5,7 @@ import {
   type AuthInfo,
   type JSONRPCMessage,
 } from "@modelcontextprotocol/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { toApplicationInsert } from "@/lib/applications/mapper";
 import type { ApplicationListFilters } from "@/lib/applications/repository";
 import type {
@@ -1254,6 +1254,56 @@ describe("save_job reports what it created", () => {
   });
 });
 
+/**
+ * A student asking "which jobs did I apply to this week" should cost exactly
+ * one `list_jobs` call, not one plus a `get_job` per row to double-check a
+ * date the list already carries. The audit that added this traced a real,
+ * multi-second-per-round-trip wait to exactly that pattern; this pins the
+ * fact the list result already carries what such a question needs, so an
+ * assistant reading the advertised description has no reason to reach for
+ * `get_job` at all.
+ */
+describe("list_jobs advertises that it alone answers date-based questions", () => {
+  it("names date_applied in its own description, not only in the schema", async () => {
+    const connection = await connectServer();
+
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "list_jobs",
+    );
+
+    expect(tool!.description).toMatch(/date applied/i);
+    expect(tool!.description).toMatch(/without a follow-up call/i);
+    await connection.close();
+  });
+
+  it("still tells the assistant get_job is for the full posting, not for fields list_jobs already has", async () => {
+    const connection = await connectServer();
+
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "list_jobs",
+    );
+
+    expect(tool!.description).toMatch(/get_job only for the full posting/i);
+    await connection.close();
+  });
+
+  it("keeps date_applied and deadline in every returned record", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool("list_jobs", {});
+    const applications = result.structuredContent!.applications as Record<
+      string,
+      unknown
+    >[];
+
+    for (const application of applications) {
+      expect(application).toHaveProperty("date_applied");
+      expect(application).toHaveProperty("deadline");
+    }
+    await connection.close();
+  });
+});
+
 /*
  * The ChatGPT Apps SDK contract.
  *
@@ -1433,6 +1483,223 @@ describe("Apps SDK view served by the real server", () => {
       expect(item.text).not.toContain("Shopify");
       expect(item.text).not.toContain(STUDENT);
     }
+    await connection.close();
+  });
+});
+
+/**
+ * Counts calls made to a `JobTrackRepository` produced by the given factory,
+ * without changing what any call does — every call is forwarded to the real
+ * fake underneath. This is what lets a test assert "exactly one round trip"
+ * rather than only "the right data came back", which the tests above already
+ * cover.
+ */
+function countingRepositoryFactory(repositoryFactory: JobTrackRepositoryFactory) {
+  const calls = {
+    createApplication: 0,
+    createApplications: 0,
+    getApplication: 0,
+    listApplications: 0,
+    updateApplication: 0,
+  };
+
+  const counting: JobTrackRepositoryFactory = (identity) => {
+    const repository = repositoryFactory(identity);
+    return {
+      createApplication: (input) => {
+        calls.createApplication += 1;
+        return repository.createApplication(input);
+      },
+      createApplications: (inputs) => {
+        calls.createApplications += 1;
+        return repository.createApplications(inputs);
+      },
+      getApplication: (applicationId) => {
+        calls.getApplication += 1;
+        return repository.getApplication(applicationId);
+      },
+      listApplications: (filters) => {
+        calls.listApplications += 1;
+        return repository.listApplications(filters);
+      },
+      updateApplication: (applicationId, input) => {
+        calls.updateApplication += 1;
+        return repository.updateApplication(applicationId, input);
+      },
+    };
+  };
+
+  return { counting, calls };
+}
+
+/**
+ * Each tool already made the minimum number of repository calls before the
+ * latency audit that added instrumentation to this file — one round trip for
+ * every read or write tool, and exactly a read-then-write for `update_job`,
+ * which needs the current record to merge a partial patch onto and to detect
+ * a concurrent change. These pin that count so wrapping every call for timing
+ * (`lib/mcp/telemetry.ts`, `lib/mcp/repository.ts`) never quietly turns into
+ * an extra query, now or later.
+ */
+describe("database round trips per tool call", () => {
+  it("list_jobs reads once", async () => {
+    const { counting, calls } = countingRepositoryFactory(fakeRepositoryFactory());
+    const connection = await connectServer(counting);
+
+    await connection.callTool("list_jobs", {});
+
+    expect(calls.listApplications).toBe(1);
+    expect(calls.getApplication).toBe(0);
+    expect(calls.updateApplication).toBe(0);
+    await connection.close();
+  });
+
+  it("get_job reads once", async () => {
+    const { counting, calls } = countingRepositoryFactory(fakeRepositoryFactory());
+    const connection = await connectServer(counting);
+
+    await connection.callTool("get_job", { application_id: RBC_ID });
+
+    expect(calls.getApplication).toBe(1);
+    expect(calls.listApplications).toBe(0);
+    await connection.close();
+  });
+
+  it("save_job writes once", async () => {
+    const { counting, calls } = countingRepositoryFactory(fakeRepositoryFactory());
+    const connection = await connectServer(counting);
+
+    await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
+    });
+
+    expect(calls.createApplication).toBe(1);
+    await connection.close();
+  });
+
+  it("import_jobs writes once for the whole batch, not once per record", async () => {
+    const { counting, calls } = countingRepositoryFactory(fakeRepositoryFactory());
+    const connection = await connectServer(counting);
+
+    await connection.callTool("import_jobs", {
+      applications: [
+        { company: "RBC", job_title: "Analyst Intern", status: "Applied" },
+        { company: "Deloitte", job_title: "Consulting Intern", status: "Interview" },
+      ],
+    });
+
+    expect(calls.createApplications).toBe(1);
+    await connection.close();
+  });
+
+  it("update_job reads the record once and writes once", async () => {
+    const { counting, calls } = countingRepositoryFactory(fakeRepositoryFactory());
+    const connection = await connectServer(counting);
+
+    await connection.callTool("update_job", {
+      application_id: SHOPIFY_ID,
+      status: "Applied",
+    });
+
+    expect(calls.getApplication).toBe(1);
+    expect(calls.updateApplication).toBe(1);
+    await connection.close();
+  });
+});
+
+/**
+ * `save_job` and `import_jobs` take whatever the assistant already read off
+ * the posting; neither has ever fetched the URL itself, and this pins that so
+ * a future change cannot reintroduce a server-side fetch of student-supplied
+ * URLs without a test noticing.
+ */
+describe("saving a job never fetches the posting URL", () => {
+  it("does not call fetch while saving one job", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("fetch must not be called by save_job"));
+    const connection = await connectServer();
+
+    const result = await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
+      job_url: "https://jobs.nokia.example/posting/123",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+    await connection.close();
+  });
+
+  it("does not call fetch while importing a batch", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("fetch must not be called by import_jobs"));
+    const connection = await connectServer();
+
+    const result = await connection.callTool("import_jobs", {
+      applications: [
+        { company: "RBC", job_title: "Analyst Intern", status: "Applied" },
+      ],
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+    await connection.close();
+  });
+});
+
+/**
+ * The latency instrumentation added alongside these tests logs one line per
+ * tool call (`lib/mcp/telemetry.ts`). These confirm that line actually shows
+ * up through the real server, and — the part that matters for a tracker full
+ * of a student's own job-search details — that it never carries any of the
+ * content the tool call touched.
+ */
+describe("tool-call telemetry", () => {
+  it("logs one line per call, naming the tool and outcome but nothing it touched", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const connection = await connectServer();
+
+    await connection.callTool("get_job", { application_id: RBC_ID });
+
+    const lines = logSpy.mock.calls.map((call) => String(call[0]));
+    const toolCallLines = lines.filter((line) => line.includes("mcp.tool_call"));
+
+    expect(toolCallLines).toHaveLength(1);
+    const payload = JSON.parse(toolCallLines[0]);
+    expect(payload).toMatchObject({ tool: "get_job", outcome: "success" });
+
+    for (const line of lines) {
+      expect(line).not.toContain("retail banking");
+      expect(line).not.toContain("Referred by a classmate");
+      expect(line).not.toContain("Business Analyst");
+      expect(line).not.toContain(STUDENT);
+      expect(line).not.toContain(`token-for-${STUDENT}`);
+    }
+    logSpy.mockRestore();
+    await connection.close();
+  });
+
+  it("logs a tool_error outcome, still without the arguments that failed", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const connection = await connectServer();
+
+    await connection.callTool("get_job", { application_id: OTHER_STUDENTS_ID });
+
+    const toolCallLines = logSpy.mock.calls
+      .map((call) => String(call[0]))
+      .filter((line) => line.includes("mcp.tool_call"));
+
+    expect(toolCallLines).toHaveLength(1);
+    expect(JSON.parse(toolCallLines[0])).toMatchObject({
+      tool: "get_job",
+      outcome: "tool_error",
+    });
+    logSpy.mockRestore();
     await connection.close();
   });
 });

@@ -118,7 +118,7 @@ describe("a valid token establishes exactly one identity", () => {
 
     const authInfo = await verifySupabaseAccessToken(request, "good-token");
 
-    expect(authInfo?.extra).toEqual({ userId: USER_ID });
+    expect(authInfo?.extra).toMatchObject({ userId: USER_ID });
     expect(authInfo?.token).toBe("good-token");
   });
 
@@ -155,7 +155,29 @@ describe("a valid token establishes exactly one identity", () => {
 
     const authInfo = await verifySupabaseAccessToken(spoofed, "good-token");
 
-    expect(authInfo?.extra).toEqual({ userId: USER_ID });
+    expect(authInfo?.extra).toMatchObject({ userId: USER_ID });
+  });
+});
+
+describe("auth verification records its own duration", () => {
+  it("carries a non-negative duration alongside the resolved identity", async () => {
+    getUser.mockResolvedValue(supabaseUser());
+
+    const authInfo = await verifySupabaseAccessToken(request, "good-token");
+    const extra = authInfo?.extra as { authDurationMs?: number };
+
+    expect(typeof extra.authDurationMs).toBe("number");
+    expect(extra.authDurationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it("never carries the token itself in that duration field", async () => {
+    getUser.mockResolvedValue(supabaseUser());
+
+    const authInfo = await verifySupabaseAccessToken(request, "secret-token");
+
+    expect(Object.keys(authInfo?.extra as object).sort()).toEqual(
+      ["authDurationMs", "userId"].sort(),
+    );
   });
 });
 
