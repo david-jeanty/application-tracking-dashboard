@@ -226,7 +226,7 @@ export function registerJobTrackTools(
     {
       title: "List job applications",
       description:
-        "Lists the student's saved job applications, newest first, so you can find the one they mean and read its id. Records are short: use get_job for the full posting and notes. Filter by status, employer, work term, or archive state, then choose the application yourself rather than asking the student for an id.",
+        "Lists the student's saved job applications, newest first, so you can find the one they mean and read its id. Each record already carries its status, work term, location, date applied, and deadline, which is enough to answer a question like which were applied to this week or this month without a follow-up call. Records are short beyond that: use get_job only for the full posting and notes. Filter by status, employer, work term, or archive state, then choose the application yourself rather than asking the student for an id.",
       inputSchema: listJobsInputSchema,
       outputSchema: listJobsOutputSchema,
       // The only change this tool needed to gain a ChatGPT app: a pointer to

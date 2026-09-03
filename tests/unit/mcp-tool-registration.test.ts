@@ -1254,6 +1254,56 @@ describe("save_job reports what it created", () => {
   });
 });
 
+/**
+ * A student asking "which jobs did I apply to this week" should cost exactly
+ * one `list_jobs` call, not one plus a `get_job` per row to double-check a
+ * date the list already carries. The audit that added this traced a real,
+ * multi-second-per-round-trip wait to exactly that pattern; this pins the
+ * fact the list result already carries what such a question needs, so an
+ * assistant reading the advertised description has no reason to reach for
+ * `get_job` at all.
+ */
+describe("list_jobs advertises that it alone answers date-based questions", () => {
+  it("names date_applied in its own description, not only in the schema", async () => {
+    const connection = await connectServer();
+
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "list_jobs",
+    );
+
+    expect(tool!.description).toMatch(/date applied/i);
+    expect(tool!.description).toMatch(/without a follow-up call/i);
+    await connection.close();
+  });
+
+  it("still tells the assistant get_job is for the full posting, not for fields list_jobs already has", async () => {
+    const connection = await connectServer();
+
+    const tool = (await connection.listTools()).find(
+      (candidate) => candidate.name === "list_jobs",
+    );
+
+    expect(tool!.description).toMatch(/get_job only for the full posting/i);
+    await connection.close();
+  });
+
+  it("keeps date_applied and deadline in every returned record", async () => {
+    const connection = await connectServer();
+
+    const result = await connection.callTool("list_jobs", {});
+    const applications = result.structuredContent!.applications as Record<
+      string,
+      unknown
+    >[];
+
+    for (const application of applications) {
+      expect(application).toHaveProperty("date_applied");
+      expect(application).toHaveProperty("deadline");
+    }
+    await connection.close();
+  });
+});
+
 /*
  * The ChatGPT Apps SDK contract.
  *

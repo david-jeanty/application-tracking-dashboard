@@ -1,4 +1,5 @@
 import { createMcpHandler, withMcpAuth } from "mcp-handler";
+import { MCP_SERVER_INSTRUCTIONS } from "@/lib/mcp/instructions";
 import { verifySupabaseAccessToken } from "@/lib/mcp/identity";
 import { createSupabaseJobTrackRepository } from "@/lib/mcp/repository";
 import { registerJobTrackTools } from "@/lib/mcp/tools";
@@ -14,6 +15,9 @@ const handler = createMcpHandler(
   (server) => registerJobTrackTools(server, createSupabaseJobTrackRepository),
   {
     serverInfo: { name: "interndex", version: "0.1.0" },
+    // Forwarded verbatim to the underlying `McpServer`'s `initialize` result —
+    // see `lib/mcp/instructions.ts` for why this exists and what it is for.
+    instructions: MCP_SERVER_INSTRUCTIONS,
   },
 );
 

@@ -135,6 +135,37 @@ secret is introduced. Delete both once the client honours the metadata.
 RFC 8414 metadata is deliberately **not** served at our origin. See
 `docs/implementation-log.md` for why, and what would change that.
 
+## Server instructions
+
+`lib/mcp/instructions.ts` exports `MCP_SERVER_INSTRUCTIONS`, passed as
+`instructions` to `createMcpHandler` in `app/api/mcp/route.ts`. This is the
+MCP protocol's own field for it: a plain string forwarded verbatim into the
+`initialize` result, which any compliant client — Claude, ChatGPT, or
+otherwise — is expected to hold as standing context for the rest of the
+conversation, the same way a system prompt does.
+
+It exists because of a specific finding from a latency audit: a student's
+request that needed exactly one `list_jobs` call instead produced several
+tool calls and a visible wait measured in tens of seconds, while the
+server's own processing for each call measured well under 100ms (see
+`lib/mcp/telemetry.ts`). The gap was in the connecting model's own
+orchestration — a tool call for a plain greeting, or a `get_job` per row to
+re-verify something `list_jobs` already returned — and every such round
+trip costs seconds of a host's own "thinking" time that this server cannot
+see, measure, or shorten. `instructions` is the one lever MCP gives a
+server over *whether* a call happens at all, as opposed to what a tool does
+once it is called, so it is the fix aimed at that specific gap rather than
+at anything measured on this side of the wire.
+
+It stays short deliberately: this text rides along on every turn of the
+conversation, competing for the same attention as everything else the model
+is holding, so each sentence corresponds to one previously-observed
+unnecessary call rather than general advice. See
+`tests/unit/mcp-instructions.test.ts` for what it says, and for the proof —
+over a real `McpServer` and transport — that the MCP SDK actually surfaces a
+server's `instructions` on `initialize` rather than that being a hopeful
+reading of a constructor option's name.
+
 ## Tools
 
 All five tools exist: `save_job`, `import_jobs`, `list_jobs`, `get_job`, and
