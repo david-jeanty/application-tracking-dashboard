@@ -101,7 +101,7 @@ describe("withTransientReadRetry", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
-  it("gives up after one retry and reports the last error honestly", async () => {
+  it("gives up after two retries and reports the last error honestly", async () => {
     const gatewayError = { message: "Bad Gateway" };
     const run = vi.fn().mockResolvedValue(attempt({ status: 502, error: gatewayError }));
 
@@ -110,8 +110,40 @@ describe("withTransientReadRetry", () => {
     const result = await pending;
 
     expect(result).toEqual({ data: null, error: gatewayError });
-    // Bounded: the initial attempt plus exactly one retry, never more.
+    // Bounded: the initial attempt plus exactly two retries, never more.
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries a clock-skew JWT rejection (PGRST303) and succeeds once the skew clears", async () => {
+    // The exact shape PostgREST reports when the token's own iat/exp disagree
+    // with the validating node's clock — hits a token issued moments ago
+    // hardest, which is exactly what a brand-new signup's or a just-confirmed
+    // account's very first request is. See supabase/supabase#41294 and
+    // supabase/supabase discussion #48123.
+    const skewError = { code: "PGRST303", message: "JWT issued at future" };
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce(attempt({ status: 401, error: skewError }))
+      .mockResolvedValueOnce(attempt({ data: [], status: 200 }));
+
+    const pending = withTransientReadRetry("statusTimeline", "/dashboard", true, run);
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toEqual({ data: [], error: null });
     expect(run).toHaveBeenCalledTimes(2);
+  });
+
+  it("still gives up honestly when the clock skew never clears within the bound", async () => {
+    const skewError = { code: "PGRST303", message: "JWT issued at future" };
+    const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: skewError }));
+
+    const pending = withTransientReadRetry("applications", "/dashboard", true, run);
+    await vi.runAllTimersAsync();
+    const result = await pending;
+
+    expect(result).toEqual({ data: null, error: skewError });
+    expect(run).toHaveBeenCalledTimes(3);
   });
 
   it("logs only the query's own fields, never a secret or personal one", async () => {
