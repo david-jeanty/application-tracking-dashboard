@@ -175,8 +175,8 @@ describe("the first dashboard load right after signing in", () => {
     expect(
       screen.getByText("Your dashboard could not be loaded"),
     ).toBeInTheDocument();
-    // Bounded: the initial attempt plus exactly one retry, then it gives up.
-    expect(listApplications).toHaveBeenCalledTimes(2);
+    // Bounded: the initial attempt plus exactly two retries, then it gives up.
+    expect(listApplications).toHaveBeenCalledTimes(3);
   });
 
   it("logs the failure with no secret or personal data, regardless of outcome", async () => {
@@ -247,5 +247,76 @@ describe("the first dashboard load right after signing in", () => {
     expect(errorSpy.mock.calls.at(-1)?.[1]).toMatchObject({
       likelyFirstLoadAfterSignIn: false,
     });
+  });
+});
+
+describe("a brand-new account's first dashboard load, right after confirming by email", () => {
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    listApplications.mockReset();
+    listStatusTimeline.mockReset();
+    // Clicking a confirmation link lands here by following our own server
+    // redirect from `/auth/callback`, not a client-side navigation from
+    // `/signup` — so, unlike a password sign-in, the referer this request
+    // actually carries is whatever launched the mail client's link (often
+    // absent), not one of our own auth pages.
+    refererHeader = null;
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  it("reaches the empty dashboard on the first render, with no manual refresh", async () => {
+    // The reproduction this guards: a just-confirmed account has saved
+    // nothing yet, so both reads legitimately resolve to zero rows — but its
+    // session is the freshest possible token, which is exactly what trips a
+    // PGRST303 clock-skew rejection (see `lib/dashboard/reads.ts`) on the
+    // very first request. One retry is enough once the skew clears.
+    listApplications
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: "PGRST303", message: "JWT issued at future" },
+        status: 401,
+      })
+      .mockResolvedValueOnce({ data: [], error: null, status: 200 });
+    listStatusTimeline
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: "PGRST303", message: "JWT issued at future" },
+        status: 401,
+      })
+      .mockResolvedValueOnce({ data: [], error: null, status: 200 });
+
+    render(await DashboardPage());
+
+    // The real empty-tracker state, not the failure banner and not a claim
+    // about data that was never actually read.
+    expect(screen.getByText("No applications yet.")).toBeInTheDocument();
+    expect(screen.queryByText("Your dashboard could not be loaded")).toBeNull();
+    expect(listApplications).toHaveBeenCalledTimes(2);
+    expect(listStatusTimeline).toHaveBeenCalledTimes(2);
+  });
+
+  it("still reports unavailable, honestly, if a same-shaped failure is not actually transient", async () => {
+    // Confirms the fix is a real classification, not "retry until it works":
+    // an ordinary permission denial that merely happens on a new account's
+    // first request is never retried and never silently becomes "empty".
+    listApplications.mockResolvedValue({
+      data: null,
+      error: { code: "42501", message: "permission denied" },
+      status: 401,
+    });
+    listStatusTimeline.mockResolvedValue({ data: [], error: null, status: 200 });
+
+    render(await DashboardPage());
+
+    expect(
+      screen.getByText("Your dashboard could not be loaded"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No applications yet.")).toBeNull();
+    expect(listApplications).toHaveBeenCalledTimes(1);
   });
 });

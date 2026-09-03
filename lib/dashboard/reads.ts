@@ -77,9 +77,25 @@ const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504, 520, 521, 522, 523, 
  * right now" — a pool warming up, a restart in progress, the schema cache not
  * yet loaded. Never a permission, ownership, or validation code: retrying one
  * of those would only ask the same question and get the same honest answer.
+ *
+ * `PGRST303` is the one exception to "never a permission code" and belongs
+ * here deliberately: PostgREST returns it, at HTTP 401, when the JWT's own
+ * `iat`/`exp` timestamps disagree with the clock on the node validating it —
+ * a genuine clock-skew race between the Auth node that minted the token and
+ * whichever PostgREST node answers the very next request, documented against
+ * this exact shape (supabase/supabase#41294, supabase/supabase discussion
+ * #48123). It hits a token that was issued moments ago hardest, because an
+ * older token has already outlived the skew window — which is exactly what a
+ * user's very first request is, right after signing in, signing up, or
+ * confirming a new account. The same token is routinely accepted a moment
+ * later, which is the honest, evidence-backed reason a retry belongs here and
+ * not a session refresh or a client-side reload: nothing about the session
+ * was ever wrong. A genuinely expired or otherwise invalid token reports a
+ * different PostgREST code (`PGRST301`) and is correctly left unretried.
  */
 const TRANSIENT_ERROR_CODES = new Set([
   "PGRST002", // PostgREST could not load the schema cache yet
+  "PGRST303", // JWT timestamp vs. validator clock skew — see comment above
   "57P01", // admin shutdown mid-request
   "57P02", // crash shutdown
   "57P03", // the database system is not yet accepting connections
@@ -100,17 +116,18 @@ function isTransientReadFailure(
   return Boolean(error?.code && TRANSIENT_ERROR_CODES.has(error.code));
 }
 
-const MAX_ATTEMPTS = 2;
-const RETRY_DELAY_MS = 300;
+const MAX_ATTEMPTS = 3;
+/** One entry per retry: the delay before that attempt, indexed from 0. */
+const RETRY_DELAYS_MS = [300, 600];
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Runs one dashboard read with a small bounded retry — one retry, after a
- * short fixed delay — and only for the class of failure a moment's wait can
- * actually fix.
+ * Runs one dashboard read with a small bounded retry — up to two retries,
+ * spaced further apart each time — and only for the class of failure a
+ * moment's wait can actually fix.
  *
  * Everything else — an expired session, a row-level security denial, a
  * malformed filter — is returned exactly as PostgREST reported it, on the
@@ -145,7 +162,7 @@ export async function withTransientReadRetry<Row>(
       attempt < MAX_ATTEMPTS && isTransientReadFailure(result.error, result.status);
     if (!canRetry) return { data: result.data, error: result.error };
 
+    await delay(RETRY_DELAYS_MS[attempt - 1]);
     attempt += 1;
-    await delay(RETRY_DELAY_MS);
   }
 }
