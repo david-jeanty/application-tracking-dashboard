@@ -1,6 +1,7 @@
 import { CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { CompanyLogo } from "@/components/branding/company-logo";
+import { StatusTransitionForm } from "@/components/applications/status-transition-form";
 import { Button } from "@/components/ui/button";
 import { moveApplicationStatusAction } from "@/lib/applications/actions";
 import { APPLICATION_STATUSES } from "@/lib/applications/constants";
@@ -179,9 +180,10 @@ export function PipelineCard({
         the student was actually looking at. Both are re-parsed and re-encoded
         server-side before they reach a redirect.
       */}
-      <form
+      <StatusTransitionForm
         action={moveApplicationStatusAction}
         className="relative z-10 mt-2 flex items-center gap-1"
+        currentStatus={application.current_status}
       >
         <input name="applicationId" type="hidden" value={application.id} />
         {filters.search ? (
@@ -252,7 +254,7 @@ export function PipelineCard({
             {application.original_job_title} at {application.company_name}
           </span>
         </Button>
-      </form>
+      </StatusTransitionForm>
       </>
       )}
     </li>

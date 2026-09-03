@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { APPLICATION_STATUSES } from "@/lib/applications/constants";
 import type { ApplicationRecord } from "@/lib/applications/types";
 
@@ -18,6 +18,9 @@ vi.mock("@/lib/applications/actions", () => ({
 }));
 
 const { QuickUpdate } = await import("@/components/applications/quick-update");
+const { updateApplicationStatusAction } = await import(
+  "@/lib/applications/actions"
+);
 
 function application(
   overrides: Partial<ApplicationRecord> = {},
@@ -210,5 +213,83 @@ describe("the full edit workflow is untouched by this ticket", () => {
     // The quick mutations deliberately skip `expectedUpdatedAt`; the full
     // update must not, because it genuinely can overwrite another change.
     expect(repository).toContain('.eq("updated_at", input.expectedUpdatedAt)');
+  });
+});
+
+describe("an unusual status change is confirmed before it saves", () => {
+  beforeEach(() => {
+    vi.mocked(updateApplicationStatusAction).mockClear();
+  });
+
+  it("pauses on Applied to Interested rather than saving right away", () => {
+    render(
+      <QuickUpdate application={application({ current_status: "Applied" })} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Status"), {
+      target: { value: "Interested" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save status" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Confirm status change" });
+    expect(dialog).toHaveTextContent(
+      "This moves the application backward, from Applied to Interested.",
+    );
+    expect(updateApplicationStatusAction).not.toHaveBeenCalled();
+  });
+
+  it("leaves the chosen value in place and saves nothing when cancelled", () => {
+    render(
+      <QuickUpdate application={application({ current_status: "Applied" })} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Status"), {
+      target: { value: "Interested" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save status" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep Applied" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Confirm status change" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Status")).toHaveValue("Interested");
+    expect(updateApplicationStatusAction).not.toHaveBeenCalled();
+  });
+
+  it("saves exactly once when the change is confirmed", () => {
+    render(
+      <QuickUpdate application={application({ current_status: "Applied" })} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Status"), {
+      target: { value: "Interested" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save status" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Change to Interested" }),
+    );
+
+    expect(
+      screen.queryByRole("dialog", { name: "Confirm status change" }),
+    ).not.toBeInTheDocument();
+    expect(updateApplicationStatusAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not pause on normal forward progress", () => {
+    render(
+      <QuickUpdate
+        application={application({ current_status: "Interested" })}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Status"), {
+      target: { value: "Applied" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save status" }));
+
+    expect(
+      screen.queryByRole("dialog", { name: "Confirm status change" }),
+    ).not.toBeInTheDocument();
+    expect(updateApplicationStatusAction).toHaveBeenCalledTimes(1);
   });
 });

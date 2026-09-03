@@ -1,3 +1,4 @@
+import { StatusTransitionForm } from "@/components/applications/status-transition-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -53,9 +54,10 @@ export function QuickUpdate({
         Current
       </h2>
 
-      <form
+      <StatusTransitionForm
         action={updateApplicationStatusAction}
         className="flex flex-col gap-1.5 pt-5"
+        currentStatus={application.current_status}
       >
         <input name="applicationId" type="hidden" value={application.id} />
         <label className={labelClassName} htmlFor="quickStatus">
@@ -78,7 +80,7 @@ export function QuickUpdate({
             Save status
           </Button>
         </div>
-      </form>
+      </StatusTransitionForm>
 
       <form action={updateNextActionAction} className="flex flex-col gap-4 pt-6">
         <input name="applicationId" type="hidden" value={application.id} />
