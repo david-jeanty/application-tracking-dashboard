@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import {
   DashboardHeader,
@@ -9,12 +10,35 @@ import {
   listApplications,
   listStatusTimeline,
 } from "@/lib/applications/repository";
+import { withTransientReadRetry } from "@/lib/dashboard/reads";
 import { buildDashboard } from "@/lib/dashboard/summary";
 import { todayInTimeZone } from "@/lib/dates/date-only";
 import { DEFAULT_TIME_ZONE } from "@/lib/dates/time-zone";
+import { publicAuthRoutes } from "@/lib/routes";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = { title: "Dashboard" };
+
+const DASHBOARD_PATH = "/dashboard";
+
+/**
+ * Best-effort signal that this request is the first dashboard load right
+ * after signing in — the `Referer` header naming the login or signup page.
+ * Never more than that: a missing or unparsable header, or any other
+ * referrer, is reported as "unknown" or "no" rather than guessed at, and
+ * nothing here reads a cookie, a token, or anything about the visitor.
+ */
+async function likelyFirstLoadAfterSignIn(): Promise<boolean | null> {
+  const referer = (await headers()).get("referer");
+  if (!referer) return null;
+
+  try {
+    const path = new URL(referer).pathname;
+    return (publicAuthRoutes as readonly string[]).includes(path);
+  } catch {
+    return null;
+  }
+}
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -24,14 +48,25 @@ export default async function DashboardPage() {
 
   if (!user) redirect("/login");
 
+  const firstLoad = await likelyFirstLoadAfterSignIn();
+
   // Both reads are owner-scoped by the server-derived user id, with row-level
   // security applying again underneath. Every application is read, archived
   // ones included, because the search summary uses the analytics definitions —
   // the sections that describe what is in flight filter to active records
   // themselves rather than making a second, narrower query.
+  //
+  // Each read carries its own small bounded retry (see `lib/dashboard/reads`)
+  // for the one class of failure a moment actually fixes: the database or its
+  // API not yet ready to answer. A permission or session failure is never
+  // retried, and comes back exactly as issued.
   const [applications, timeline] = await Promise.all([
-    listApplications(supabase, user.id, { archiveState: "all" }),
-    listStatusTimeline(supabase, user.id),
+    withTransientReadRetry("applications", DASHBOARD_PATH, firstLoad, () =>
+      listApplications(supabase, user.id, { archiveState: "all" }),
+    ),
+    withTransientReadRetry("statusTimeline", DASHBOARD_PATH, firstLoad, () =>
+      listStatusTimeline(supabase, user.id),
+    ),
   ]);
 
   // "Today" is resolved once, here, and passed down. Every rule below compares
