@@ -4,7 +4,7 @@ import { arrangementWord } from "./rich-fields.js";
 import type { ExtractedJob, PageSignals } from "./types.js";
 
 /**
- * The job surfaces Interndex Capture recognizes by name, and nothing else.
+ * The three job surfaces Interndex Capture recognizes by name, and nothing else.
  *
  * Site knowledge was deliberately absent from the first version, on the theory
  * that a selector guess is worse than a blank field. Manual testing in real
@@ -15,20 +15,6 @@ import type { ExtractedJob, PageSignals } from "./types.js";
  * search, so they get narrow, deterministic read paths here, and the generic
  * fallback is switched off on them entirely: a recognized site that yields
  * nothing yields blanks, never the page's first heading.
- *
- * Greenhouse is recognized too, but for a different reason and by a different
- * mechanism: it publishes no selectors at all. This environment cannot reach a
- * live Greenhouse posting, so no DOM was verified for it the way Indeed's and
- * Workday's markup was, and a guessed selector here would be exactly the
- * mistake this file exists to avoid. What Greenhouse gets instead is the one
- * fact about it that is genuinely stable without a DOM read: its board
- * addresses name one posting by a permanent numeric id
- * (`/<company>/jobs/<id>`), which lets this file supply `jobId` for identity
- * correlation. Every field still comes from the structured JobPosting JSON-LD
- * Greenhouse publishes on the page, read by the extractor before this file is
- * ever consulted — recognizing the site only turns off the generic heading
- * fallback, so a Greenhouse page whose structured data does not correlate
- * yields blanks rather than a guessed title.
  *
  * What is in this file is a table of selectors and named relational strategies,
  * and a little URL arithmetic. It does not know that Interndex exists. It
@@ -62,7 +48,7 @@ import type { ExtractedJob, PageSignals } from "./types.js";
  * fact that the route needs it, and which posting id it must corroborate.
  */
 
-export type SiteId = "linkedin" | "indeed" | "workday" | "greenhouse";
+export type SiteId = "linkedin" | "indeed" | "workday";
 
 /** One field the injected collector should try to read, in preference order. */
 export type FieldRule = { key: SiteFieldKey; selectors: string[] };
@@ -307,36 +293,6 @@ function workdayRoute(url: URL): RoutedRead {
   };
 }
 
-/**
- * The job id a Greenhouse board address names, on either of its two hosts.
- *
- * `boards.greenhouse.io/<company>/jobs/<id>` is the long-standing template;
- * `job-boards.greenhouse.io/<company>/jobs/<id>` is Greenhouse's newer board
- * UI, launched under its own host but keeping the same `/jobs/<id>` shape.
- * Both are Greenhouse's own permanent addressing scheme for one posting — the
- * same class of stable, site-maintained identifier as Workday's requisition
- * segment, just carried in the path instead of a DOM attribute — so it can
- * supply `jobId` without any DOM read at all.
- *
- * This is not a public-postings listing page, an application-form route, or
- * the `/embed/job_app` iframe shape a company's own careers page can point at:
- * none of those name one posting the way `/jobs/<id>` does, so none of them
- * are matched here.
- */
-function greenhouseJobId(url: URL): string | undefined {
-  const segments = url.pathname.split("/").filter(Boolean);
-  const index = segments.indexOf("jobs");
-  if (index === -1 || index === segments.length - 1) return undefined;
-
-  return jobIdentifier(segments[index + 1]);
-}
-
-function greenhouseRoute(url: URL): RoutedRead {
-  const jobId = greenhouseJobId(url);
-
-  return jobId ? { jobId } : {};
-}
-
 const SITE_RULES: readonly SiteRule[] = [
   {
     id: "linkedin",
@@ -391,22 +347,6 @@ const SITE_RULES: readonly SiteRule[] = [
     hosts: ["myworkdayjobs.com", "myworkdaysite.com", "wd1.myworkdaycdn.com"],
     fields: [],
     route: workdayRoute,
-  },
-  {
-    id: "greenhouse",
-    hosts: ["boards.greenhouse.io", "job-boards.greenhouse.io"],
-    // No selectors, deliberately. This environment cannot reach a live
-    // Greenhouse posting to verify DOM structure the way Indeed's and
-    // Workday's selectors were verified, and a guessed selector is worse than
-    // the blank field it would replace. Greenhouse's own `schema.org`
-    // JobPosting JSON-LD already reaches the extractor through the structured
-    // data path ahead of this file, so recognizing the site costs nothing:
-    // it supplies `jobId` for identity correlation and, by becoming a
-    // recognized site, turns off the generic heading fallback that would
-    // otherwise guess a title from page furniture when structured data is
-    // absent or does not correlate.
-    fields: [],
-    route: greenhouseRoute,
   },
 ];
 

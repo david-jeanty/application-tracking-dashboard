@@ -417,41 +417,9 @@ and stop there.
 Adapter selection is based only on the invoked page URL and the registry's
 declared order. It does not inspect document order. LinkedIn was the first
 adapter to claim page-local posting-identity support; Workday is the second.
-Indeed and Greenhouse share the unchanged site-field compatibility path, while
+Indeed keeps its unchanged site-field compatibility path, while Greenhouse,
 Lever, SmartRecruiters and unrecognized pages keep the unchanged generic path.
 Those compatibility adapters report identity as unsupported, not unobserved.
-
-**Greenhouse has safe structured-data recognition, not a dedicated or
-identity-aware adapter.** `sites.ts` recognizes `boards.greenhouse.io` and
-`job-boards.greenhouse.io` (`/<company>/jobs/<id>`) only to parse a route
-`jobId`, which strengthens the identity correlation `selectStructuredCandidate`
-already performs generically for every site. It has no DOM strategy of its own
-— no selectors, no page-local root scoping, nothing comparable to LinkedIn's
-or Workday's evidence collection — and `collectAdapterEvidence` reports its
-`postingIdentity` as `{ support: "unsupported", observed: "unsupported" }`,
-the same as Indeed, not `"supported"` the way LinkedIn's and Workday's do.
-Every Greenhouse field comes entirely from the `schema.org` JobPosting JSON-LD
-the posting publishes, read by the structured-data path ahead of adapter
-selection; recognizing the site adds no DOM read and changes nothing about how
-that structured data is parsed. What it does change is the generic heading
-fallback: because Greenhouse is now a recognized site, a Greenhouse page whose
-structured data does not correlate with the route yields blanks, never a
-guessed title from the page's `<h1>`. A listing page
-(`boards.greenhouse.io/<company>`) and the `/embed/job_app` iframe route name
-no posting and get no `jobId` either — though the segment immediately after
-`jobs/` is accepted as a job id whenever it is alphanumeric, not only when it
-is numeric, so an unanticipated non-numeric `/jobs/<word>` route would also
-get a (wrong-shaped but otherwise inert) `jobId`. This is an unverified,
-safe-failure limitation: no real Greenhouse route of this shape is known to
-exist, and even if one did, a `jobId` that fails to correlate with the page's
-structured data still yields blanks, never a wrong value. It has not been
-tightened without evidence that such a route is real.
-
-Because none of this has been checked against a real Greenhouse posting (see
-"Read-only Greenhouse data feasibility attempt" below), Greenhouse is not at
-LinkedIn/Workday reliability parity and should not be counted as a supported
-launch site until real-Chrome QA confirms it — the same bar every other
-recognized site already had to clear before this document called it verified.
 
 For LinkedIn, the collector records each field beside the posting ids written
 on the same bounded root that supplied it. A matching root may project. A root
@@ -614,24 +582,6 @@ or nesting depth. A site that cannot be read reliably returns blanks.
   not where a student found the opportunity. **A Workday hostname is never a
   company domain**, and the employer is left empty unless the posting itself
   establishes it — a tenant hostname names whoever bought Workday.
-- **Greenhouse — safe structured-data recognition, not a dedicated adapter.**
-  No selectors and no DOM strategy at all. This environment's network egress
-  to every Greenhouse host is blocked, so unlike Indeed and Workday no live
-  DOM was available to verify a selector against, and a guessed one would be
-  exactly the mistake this document's LinkedIn section already found and
-  reversed. Greenhouse contributes only a route `jobId`, parsed from its own
-  permanent `/<company>/jobs/<id>` address; every field comes from the
-  JobPosting JSON-LD the posting publishes, through the same structured-data
-  path every site already shares. **Source is never set to `Greenhouse`** and
-  **a Greenhouse hostname is never a company domain**, both already true
-  through the existing ATS host list — recognizing the site changes neither.
-
-  This is not identity-aware in the sense LinkedIn and Workday are: there is
-  no page-local evidence root, and `postingIdentity` reports `unsupported`
-  support, same as Indeed. It is not at LinkedIn/Workday reliability parity
-  and has had no real-Chrome QA — see "Read-only Greenhouse data feasibility
-  attempt" below — so it should not be treated as a supported launch site
-  until that QA happens.
 
 #### The generic fallback, and what stops it
 
@@ -988,8 +938,7 @@ never a wrong one.
 1. Load the unpacked extension and connect it to a real Interndex account.
 2. Open a public posting on each of LinkedIn (`/jobs/view/`, a job selected
    inside `/jobs/search-results/`, and a job selected from Similar Jobs),
-   Indeed, a Workday tenant, a Greenhouse posting on both `boards.greenhouse.io`
-   and `job-boards.greenhouse.io`, and the KPMG, IBM and L3Harris careers pages.
+   Indeed, a Workday tenant, and the KPMG, IBM and L3Harris careers pages.
 3. Record, per site: which fields extracted correctly, which were absent, which
    were wrong, and whether the popup made the result usable anyway.
 4. Confirm specifically that a job selected from Similar Jobs stores that job
@@ -1007,19 +956,8 @@ something **wrong** is a bug in this one.
 - TD direct Workday posting: the prior title/location/description/duration
   capture remains covered; P1.2 adds identity-gated board-name and `logoLink`
   evidence for employer and domain. Real-Chrome confirmation is still required.
-- Greenhouse-hosted posting: title and description were already correct
-  through the generic structured-data path before any Greenhouse-specific
-  change existed. Greenhouse is now a recognized site (see "Greenhouse" under
-  Per-site notes) rather than an unrecognized one, which adds route-based
-  identity correlation and turns off the generic heading-guess fallback for
-  it; no new field-reading code was added, so employer and location remain
-  exactly as reliable as the posting's own JSON-LD states them — no more, no
-  less. This is safe structured-data recognition, not a dedicated or
-  identity-aware Greenhouse adapter, and it has no verified DOM strategy: it
-  is not at LinkedIn/Workday reliability parity. Real-Chrome QA is required
-  before Greenhouse counts as a supported launch site — this environment
-  could not reach a live Greenhouse posting to verify it (see "Read-only
-  Greenhouse data feasibility attempt" below).
+- Greenhouse-hosted posting: title and description correct; employer and
+  location missing. This remains outside P1.2.
 - BDO Workday search-results split pane at `/details/...`: the selected job is
   now represented by a matching-requisition fixture with title, three
   locations, employer, description and safe employer-domain coverage. A stale
@@ -1047,48 +985,6 @@ something **wrong** is a bug in this one.
   called by the extension: P1.2 adds no request, permission, host permission,
   background fetch, dependency or network-architecture change.
 
-**Read-only Greenhouse data feasibility attempt (2 September 2026)**
-
-- `boards.greenhouse.io`, `job-boards.greenhouse.io`, `boards-api.greenhouse.io`
-  and `greenhouse.io` itself were all attempted, read-only, before any
-  Greenhouse code was written. All four failed at CONNECT — the same network
-  policy already documented above for `www.linkedin.com`, `ca.indeed.com` and
-  `*.myworkdayjobs.com`. No live Greenhouse DOM was inspected.
-- Given that, the Greenhouse work in this change deliberately adds no
-  selector: inventing one without live evidence is the exact mistake this
-  document's LinkedIn section already recorded and reversed. Instead
-  `sites.ts` reads only Greenhouse's own permanent addressing scheme —
-  `/<company>/jobs/<id>` — into a route `jobId`, which is not a DOM read at
-  all and needed no page to inspect. Every field still comes from the
-  `schema.org` JobPosting JSON-LD structured-data path already shared by
-  every site, which an existing test (`extraction.test.ts`, "never treats the
-  applicant-tracking host as the employer") already showed correctly reading
-  company, title and description on a `boards.greenhouse.io` URL before this
-  change existed.
-- What is genuinely unverified: whether real Greenhouse postings publish
-  `jobLocation` and a matching `identifier`/`url` as consistently as assumed
-  here, and whether the newer `job-boards.greenhouse.io` UI's JSON-LD matches
-  the classic template's shape. A posting that omits either yields blanks for
-  the fields it omits, never a wrong value — but it has not been confirmed in
-  real Chrome. Also unverified: the fixtures this change's tests use were
-  written from general `schema.org` JobPosting convention, not from any real
-  captured Greenhouse HTML or JSON-LD — no real Greenhouse evidence exists
-  anywhere in this repository's history to draw from.
-- The route parser also accepts a non-numeric token immediately after
-  `jobs/` as a `jobId` (`/acme/jobs/department` parses the same as
-  `/acme/jobs/4009876`), since it only checks that the segment is
-  alphanumeric, not that it looks like a real Greenhouse posting id. No real
-  Greenhouse route of that shape is known to exist, so this has deliberately
-  not been tightened on a guess; it is a safe-failure limitation either way,
-  since a `jobId` that cannot be correlated with the page's structured data
-  still yields blanks, never a wrong value.
-- **Conclusion: this is safe Greenhouse structured-data recognition, not a
-  dedicated or identity-aware Greenhouse adapter.** It has no verified DOM
-  strategy and is not at LinkedIn/Workday reliability parity. Real-Chrome QA
-  on real Greenhouse postings — both hosts, several employers — is required
-  before Greenhouse can be counted as a supported launch site. That
-  confirmation, and Lever, remain open.
-
 ### The least-privilege question
 
 Supabase OAuth scopes affect what an identity token contains, not what Postgres
@@ -1108,12 +1004,10 @@ warranted, remain deferred to PR #29 along with Chrome Web Store submission.
 
 ## Explicitly deferred
 
-Not part of the server foundation and not part of the extension: DOM read
-paths for any site other than LinkedIn, Indeed and Workday — Lever, Glassdoor
+Not part of the server foundation and not part of the extension: read paths for
+any site other than LinkedIn, Indeed and Workday — Greenhouse, Lever, Glassdoor
 and the rest wait for evidence, and the table in `sites.ts` is where one would
-go. Greenhouse is now recognized, but only for route identity; it has no DOM
-read path either, deliberately, for the same reason. A generalized scraping
-framework; background monitoring; built-in AI;
+go; a generalized scraping framework; background monitoring; built-in AI;
 classification; resume matching or tailoring; cover letters; autofill;
 auto-apply; submission detection; recommendations; job discovery;
 email or calendar integration; notifications; fuzzy deduplication; global URL
