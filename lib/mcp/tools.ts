@@ -17,6 +17,7 @@ import {
 import { runGetJob } from "@/lib/mcp/get-job";
 import { runImportJobs } from "@/lib/mcp/import-jobs";
 import { runListJobs } from "@/lib/mcp/list-jobs";
+import { instrumentToolCall } from "@/lib/mcp/telemetry";
 import { runUpdateJob } from "@/lib/mcp/update-job";
 import { readUserId } from "@/lib/mcp/user";
 import {
@@ -116,56 +117,57 @@ export function registerJobTrackTools(
       inputSchema: saveJobInputSchema,
       outputSchema: saveJobOutputSchema,
     },
-    async (args, ctx) => {
-      const authInfo = ctx.http?.authInfo;
-      const userId = readUserId(authInfo);
+    async (args, ctx) =>
+      instrumentToolCall("save_job", ctx, async () => {
+        const authInfo = ctx.http?.authInfo;
+        const userId = readUserId(authInfo);
 
-      if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
+        if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
 
-      // The tool's wire schema is permissive so Claude can fill it easily.
-      // The shared creation schema is the real gate, so an MCP write obeys
-      // exactly the same rules as a write from the website's form.
-      const parsed = applicationCreationSchema.safeParse(
-        toApplicationCreationValues(args),
-      );
-
-      if (!parsed.success) {
-        const details = parsed.error.issues
-          .map((issue) => issue.message)
-          .join(" ");
-        return toolError(`That job could not be saved. ${details}`);
-      }
-
-      // Queries run as the token's user, so row-level security decides what
-      // may be written. `user_id` is never taken from tool arguments: the
-      // column defaults to `auth.uid()`, resolved from the access token.
-      const repository = repositoryFor({ token: authInfo.token, userId });
-      const { data, error } = await repository.createApplication(parsed.data);
-
-      if (error || !data) {
-        return toolError(
-          `That job could not be saved. Database error ${error?.code ?? "unknown"}.`,
+        // The tool's wire schema is permissive so Claude can fill it easily.
+        // The shared creation schema is the real gate, so an MCP write obeys
+        // exactly the same rules as a write from the website's form.
+        const parsed = applicationCreationSchema.safeParse(
+          toApplicationCreationValues(args),
         );
-      }
 
-      // The sentence a student reads, and the same facts as data for a client
-      // that would otherwise have to list the tracker again to find the id it
-      // just created. No ownership column is in either.
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Saved ${parsed.data.originalJobTitle} at ${parsed.data.companyName} with status ${parsed.data.currentStatus}.`,
+        if (!parsed.success) {
+          const details = parsed.error.issues
+            .map((issue) => issue.message)
+            .join(" ");
+          return toolError(`That job could not be saved. ${details}`);
+        }
+
+        // Queries run as the token's user, so row-level security decides what
+        // may be written. `user_id` is never taken from tool arguments: the
+        // column defaults to `auth.uid()`, resolved from the access token.
+        const repository = repositoryFor({ token: authInfo.token, userId });
+        const { data, error } = await repository.createApplication(parsed.data);
+
+        if (error || !data) {
+          return toolError(
+            `That job could not be saved. Database error ${error?.code ?? "unknown"}.`,
+          );
+        }
+
+        // The sentence a student reads, and the same facts as data for a client
+        // that would otherwise have to list the tracker again to find the id it
+        // just created. No ownership column is in either.
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Saved ${parsed.data.originalJobTitle} at ${parsed.data.companyName} with status ${parsed.data.currentStatus}.`,
+            },
+          ],
+          structuredContent: {
+            application_id: data.id,
+            company: parsed.data.companyName,
+            job_title: parsed.data.originalJobTitle,
+            status: parsed.data.currentStatus,
           },
-        ],
-        structuredContent: {
-          application_id: data.id,
-          company: parsed.data.companyName,
-          job_title: parsed.data.originalJobTitle,
-          status: parsed.data.currentStatus,
-        },
-      };
-    },
+        };
+      }),
   );
 
   server.registerTool(
@@ -177,45 +179,46 @@ export function registerJobTrackTools(
       inputSchema: importJobsInputSchema,
       outputSchema: importJobsOutputSchema,
     },
-    async (args, ctx) => {
-      const authInfo = ctx.http?.authInfo;
-      const userId = readUserId(authInfo);
+    async (args, ctx) =>
+      instrumentToolCall("import_jobs", ctx, async () => {
+        const authInfo = ctx.http?.authInfo;
+        const userId = readUserId(authInfo);
 
-      if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
+        if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
 
-      // Bound to the token's user before the runner is reached, exactly as
-      // every other tool is. Row-level security checks again underneath.
-      const repository = repositoryFor({ token: authInfo.token, userId });
-      const result = await runImportJobs(args, {
-        createApplications: (inputs) => repository.createApplications(inputs),
-      });
+        // Bound to the token's user before the runner is reached, exactly as
+        // every other tool is. Row-level security checks again underneath.
+        const repository = repositoryFor({ token: authInfo.token, userId });
+        const result = await runImportJobs(args, {
+          createApplications: (inputs) => repository.createApplications(inputs),
+        });
 
-      if (result.outcome === "invalid") {
-        return toolError(
-          `Nothing was imported. ${result.message} Fix that record with the student and send the batch again.`,
-        );
-      }
-      if (result.outcome === "error") {
-        return toolError(
-          `Nothing was imported. Database error ${result.code ?? "unknown"}.`,
-        );
-      }
+        if (result.outcome === "invalid") {
+          return toolError(
+            `Nothing was imported. ${result.message} Fix that record with the student and send the batch again.`,
+          );
+        }
+        if (result.outcome === "error") {
+          return toolError(
+            `Nothing was imported. Database error ${result.code ?? "unknown"}.`,
+          );
+        }
 
-      const imported = result.applications.length;
+        const imported = result.applications.length;
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Imported ${imported} application${imported === 1 ? "" : "s"} into Interndex.`,
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Imported ${imported} application${imported === 1 ? "" : "s"} into Interndex.`,
+            },
+          ],
+          structuredContent: {
+            imported,
+            applications: result.applications,
           },
-        ],
-        structuredContent: {
-          imported,
-          applications: result.applications,
-        },
-      };
-    },
+        };
+      }),
   );
 
   server.registerTool(
@@ -231,40 +234,41 @@ export function registerJobTrackTools(
       // structured content below stay shared with every MCP client.
       _meta: appViewToolMeta(APPLICATION_LIST_VIEW_URI),
     },
-    async (args, ctx) => {
-      const authInfo = ctx.http?.authInfo;
-      const userId = readUserId(authInfo);
+    async (args, ctx) =>
+      instrumentToolCall("list_jobs", ctx, async () => {
+        const authInfo = ctx.http?.authInfo;
+        const userId = readUserId(authInfo);
 
-      if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
+        if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
 
-      const repository = repositoryFor({ token: authInfo.token, userId });
-      const result = await runListJobs(args, {
-        listApplications: (filters) => repository.listApplications(filters),
-      });
+        const repository = repositoryFor({ token: authInfo.token, userId });
+        const result = await runListJobs(args, {
+          listApplications: (filters) => repository.listApplications(filters),
+        });
 
-      if (result.outcome === "error") {
-        return toolError(
-          `Those applications could not be read. Database error ${result.code ?? "unknown"}.`,
-        );
-      }
+        if (result.outcome === "error") {
+          return toolError(
+            `Those applications could not be read. Database error ${result.code ?? "unknown"}.`,
+          );
+        }
 
-      const structured = {
-        applications: result.applications,
-        returned: result.applications.length,
-        has_more: result.hasMore,
-      };
-      const count = result.applications.length;
-      const text = `${count} application${count === 1 ? "" : "s"} found.`;
+        const structured = {
+          applications: result.applications,
+          returned: result.applications.length,
+          has_more: result.hasMore,
+        };
+        const count = result.applications.length;
+        const text = `${count} application${count === 1 ? "" : "s"} found.`;
 
-      return {
-        content: [{ type: "text" as const, text }],
-        structuredContent: structured,
-        // The view association again, travelling with the payload the host is
-        // about to render. Purely additive: the text block and the structured
-        // content above are what every other client reads, unchanged.
-        _meta: appViewResultMeta(APPLICATION_LIST_VIEW_URI),
-      };
-    },
+        return {
+          content: [{ type: "text" as const, text }],
+          structuredContent: structured,
+          // The view association again, travelling with the payload the host is
+          // about to render. Purely additive: the text block and the structured
+          // content above are what every other client reads, unchanged.
+          _meta: appViewResultMeta(APPLICATION_LIST_VIEW_URI),
+        };
+      }),
   );
 
   server.registerTool(
@@ -276,37 +280,38 @@ export function registerJobTrackTools(
       inputSchema: getJobInputSchema,
       outputSchema: jobDetailSchema,
     },
-    async (args, ctx) => {
-      const authInfo = ctx.http?.authInfo;
-      const userId = readUserId(authInfo);
+    async (args, ctx) =>
+      instrumentToolCall("get_job", ctx, async () => {
+        const authInfo = ctx.http?.authInfo;
+        const userId = readUserId(authInfo);
 
-      if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
+        if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
 
-      // The read is bound to the token's user here, so the tool body has no
-      // way to name a different owner. Row-level security checks again.
-      const repository = repositoryFor({ token: authInfo.token, userId });
-      const result = await runGetJob(args, {
-        readApplication: (applicationId) =>
-          repository.getApplication(applicationId),
-      });
+        // The read is bound to the token's user here, so the tool body has no
+        // way to name a different owner. Row-level security checks again.
+        const repository = repositoryFor({ token: authInfo.token, userId });
+        const result = await runGetJob(args, {
+          readApplication: (applicationId) =>
+            repository.getApplication(applicationId),
+        });
 
-      if (result.outcome === "not_found") return toolError(NOT_IN_TRACKER);
-      if (result.outcome === "error") {
-        return toolError(
-          `That application could not be read. Database error ${result.code ?? "unknown"}.`,
-        );
-      }
+        if (result.outcome === "not_found") return toolError(NOT_IN_TRACKER);
+        if (result.outcome === "error") {
+          return toolError(
+            `That application could not be read. Database error ${result.code ?? "unknown"}.`,
+          );
+        }
 
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `${result.job.job_title} at ${result.job.company}, status ${result.job.status}.`,
-          },
-        ],
-        structuredContent: result.job,
-      };
-    },
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `${result.job.job_title} at ${result.job.company}, status ${result.job.status}.`,
+            },
+          ],
+          structuredContent: result.job,
+        };
+      }),
   );
 
   server.registerTool(
@@ -318,52 +323,53 @@ export function registerJobTrackTools(
       inputSchema: updateJobInputSchema,
       outputSchema: updateJobOutputSchema,
     },
-    async (args, ctx) => {
-      const authInfo = ctx.http?.authInfo;
-      const userId = readUserId(authInfo);
+    async (args, ctx) =>
+      instrumentToolCall("update_job", ctx, async () => {
+        const authInfo = ctx.http?.authInfo;
+        const userId = readUserId(authInfo);
 
-      if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
+        if (!authInfo || !userId) return toolError(NOT_SIGNED_IN);
 
-      // Both calls are bound to the token's user here, so the tool body has
-      // no way to name a different owner. Row-level security checks again.
-      const repository = repositoryFor({ token: authInfo.token, userId });
-      const result = await runUpdateJob(args, {
-        readApplication: (applicationId) =>
-          repository.getApplication(applicationId),
-        writeApplication: (applicationId, input) =>
-          repository.updateApplication(applicationId, input),
-      });
+        // Both calls are bound to the token's user here, so the tool body has
+        // no way to name a different owner. Row-level security checks again.
+        const repository = repositoryFor({ token: authInfo.token, userId });
+        const result = await runUpdateJob(args, {
+          readApplication: (applicationId) =>
+            repository.getApplication(applicationId),
+          writeApplication: (applicationId, input) =>
+            repository.updateApplication(applicationId, input),
+        });
 
-      if (result.outcome === "not_found") return toolError(NOT_IN_TRACKER);
-      if (result.outcome === "invalid") {
-        return toolError(`That update could not be applied. ${result.message}`);
-      }
-      if (result.outcome === "conflict") {
-        return toolError(
-          "That application was changed elsewhere while updating. Read it again and retry.",
-        );
-      }
-      if (result.outcome === "error") {
-        return toolError(
-          `That application could not be updated. Database error ${result.code ?? "unknown"}.`,
-        );
-      }
+        if (result.outcome === "not_found") return toolError(NOT_IN_TRACKER);
+        if (result.outcome === "invalid") {
+          return toolError(`That update could not be applied. ${result.message}`);
+        }
+        if (result.outcome === "conflict") {
+          return toolError(
+            "That application was changed elsewhere while updating. Read it again and retry.",
+          );
+        }
+        if (result.outcome === "error") {
+          return toolError(
+            `That application could not be updated. Database error ${result.code ?? "unknown"}.`,
+          );
+        }
 
-      const structured = {
-        application_id: result.applicationId,
-        changed_fields: result.changed,
-        status_history_recorded: result.statusChanged,
-      };
-      const summary = result.changed.length
-        ? result.changed
-            .map((change) => `${change.field} → ${change.to ?? "cleared"}`)
-            .join(", ")
-        : "no fields changed";
+        const structured = {
+          application_id: result.applicationId,
+          changed_fields: result.changed,
+          status_history_recorded: result.statusChanged,
+        };
+        const summary = result.changed.length
+          ? result.changed
+              .map((change) => `${change.field} → ${change.to ?? "cleared"}`)
+              .join(", ")
+          : "no fields changed";
 
-      return {
-        content: [{ type: "text" as const, text: `Updated: ${summary}.` }],
-        structuredContent: structured,
-      };
-    },
+        return {
+          content: [{ type: "text" as const, text: `Updated: ${summary}.` }],
+          structuredContent: structured,
+        };
+      }),
   );
 }
