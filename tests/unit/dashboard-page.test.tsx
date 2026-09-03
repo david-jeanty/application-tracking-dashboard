@@ -175,8 +175,8 @@ describe("the first dashboard load right after signing in", () => {
     expect(
       screen.getByText("Your dashboard could not be loaded"),
     ).toBeInTheDocument();
-    // Bounded: the initial attempt plus exactly two retries, then it gives up.
-    expect(listApplications).toHaveBeenCalledTimes(3);
+    // Bounded: the initial attempt plus exactly one retry, then it gives up.
+    expect(listApplications).toHaveBeenCalledTimes(2);
   });
 
   it("logs the failure with no secret or personal data, regardless of outcome", async () => {
@@ -210,11 +210,14 @@ describe("the first dashboard load right after signing in", () => {
         "message",
         "path",
         "read",
+        "requestId",
         "status",
       ].sort(),
     );
     expect(payload.path).toBe("/dashboard");
     expect(payload.likelyFirstLoadAfterSignIn).toBe(true);
+    expect(typeof payload.requestId).toBe("string");
+    expect((payload.requestId as string).length).toBeGreaterThan(0);
     const serialized = JSON.stringify(payload);
     for (const forbidden of [
       "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -225,6 +228,31 @@ describe("the first dashboard load right after signing in", () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it("gives both reads' failure log lines the same request id, when both fail", async () => {
+    listApplications.mockResolvedValue({
+      data: null,
+      error: { code: "42501", message: "permission denied" },
+      status: 401,
+    });
+    listStatusTimeline.mockResolvedValue({
+      data: null,
+      error: { code: "42501", message: "permission denied" },
+      status: 401,
+    });
+
+    render(await DashboardPage());
+
+    expect(errorSpy).toHaveBeenCalledTimes(2);
+    const [firstCall, secondCall] = errorSpy.mock.calls as [
+      [string, Record<string, unknown>],
+      [string, Record<string, unknown>],
+    ];
+    const [, firstPayload] = firstCall;
+    const [, secondPayload] = secondCall;
+    expect(firstPayload.requestId).toBe(secondPayload.requestId);
+    expect(typeof firstPayload.requestId).toBe("string");
   });
 
   it("treats a request with no referer, or one from elsewhere in the app, as not a first load", async () => {
@@ -318,5 +346,110 @@ describe("a brand-new account's first dashboard load, right after confirming by 
     ).toBeInTheDocument();
     expect(screen.queryByText("No applications yet.")).toBeNull();
     expect(listApplications).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("an existing account's dashboard load right after a fresh sign-in", () => {
+  // The production regression this whole block guards: an earlier version of
+  // this file retried every PGRST303 by code alone, which meant a genuinely
+  // expired or otherwise invalid session — the same code PostgREST uses for a
+  // real clock-skew race — was retried too, turning a working existing
+  // account's sign-in into the generic failure banner. See
+  // `lib/dashboard/reads.ts` for the classification this block exercises
+  // through the page.
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    listApplications.mockReset();
+    listStatusTimeline.mockReset();
+    refererHeader = "https://app.interndex.example/login";
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+  });
+
+  it("loads the populated dashboard on the first attempt, exactly as before", async () => {
+    listApplications.mockResolvedValue({
+      data: [
+        application({ id: "a", company_name: "RBC" }),
+        application({ id: "b", company_name: "Shopify", current_status: "Interview" }),
+      ],
+      error: null,
+      status: 200,
+    });
+    listStatusTimeline.mockResolvedValue({
+      data: [timelineEvent({ application_id: "a" }), timelineEvent({ application_id: "b" })],
+      error: null,
+      status: 200,
+    });
+
+    render(await DashboardPage());
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Dashboard" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Your dashboard could not be loaded")).toBeNull();
+    expect(listApplications).toHaveBeenCalledTimes(1);
+    expect(listStatusTimeline).toHaveBeenCalledTimes(1);
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not retry a genuinely dead session reported as PGRST303, and reports it honestly", async () => {
+    // The exact shape of the regression: PostgREST reports an actually
+    // expired token under the same PGRST303 code as the clock-skew case, but
+    // with a different message. A retry cannot revive it, so the fixed
+    // classification leaves it at one attempt — the same single, honest
+    // failure this account would have seen before the clock-skew fix ever
+    // shipped, not a slower version of it.
+    listApplications.mockResolvedValue({
+      data: null,
+      error: { code: "PGRST303", message: "JWT expired" },
+      status: 401,
+    });
+    listStatusTimeline.mockResolvedValue({
+      data: [timelineEvent()],
+      error: null,
+      status: 200,
+    });
+
+    render(await DashboardPage());
+
+    expect(
+      screen.getByText("Your dashboard could not be loaded"),
+    ).toBeInTheDocument();
+    expect(listApplications).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/PGRST303|JWT expired/i)).toBeNull();
+  });
+
+  it("still recovers a real clock-skew race for an existing account, same as a new one", async () => {
+    // The clock-skew condition is about the token's age, not the account's:
+    // a returning user's freshly minted session can race it too, and the
+    // narrower classification still catches that exact message.
+    listApplications
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: "PGRST303", message: "JWT issued at future" },
+        status: 401,
+      })
+      .mockResolvedValueOnce({
+        data: [application()],
+        error: null,
+        status: 200,
+      });
+    listStatusTimeline.mockResolvedValue({
+      data: [timelineEvent()],
+      error: null,
+      status: 200,
+    });
+
+    render(await DashboardPage());
+
+    expect(screen.queryByText("Your dashboard could not be loaded")).toBeNull();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Dashboard" }),
+    ).toBeInTheDocument();
+    expect(listApplications).toHaveBeenCalledTimes(2);
   });
 });

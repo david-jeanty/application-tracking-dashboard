@@ -31,11 +31,18 @@ export type DashboardReadAttempt<Row> = {
  * This is the one place production is allowed to learn that a dashboard read
  * failed, so the fields are an allowlist rather than "whatever the error
  * object happens to carry": the query's own code/message/details/hint, which
- * read it was, which attempt this was, the fixed page path, and — best
- * effort — whether the request looks like the first one after signing in.
- * Nothing here can carry a cookie, a JWT, an email, a user id, or anything
- * about the applications a student saved, because none of those are ever
- * passed in.
+ * read it was, which attempt this was, the fixed page path, a per-request
+ * correlation id, and — best effort — whether the request looks like the
+ * first one after signing in. Nothing here can carry a cookie, a JWT, an
+ * email, a user id, or anything about the applications a student saved,
+ * because none of those are ever passed in.
+ *
+ * `requestId` is temporary incident instrumentation, minted fresh per page
+ * render (see `DashboardPage`) with no relationship to the session or the
+ * user — its only job is letting two log lines from the same failed load
+ * (one per read) be tied together when reading Vercel's runtime logs, and
+ * giving a reporter something exact to search for. Safe to delete once this
+ * incident is closed.
  */
 export function logDashboardReadFailure(input: {
   read: DashboardReadName;
@@ -44,6 +51,7 @@ export function logDashboardReadFailure(input: {
   attempt: number;
   path: string;
   likelyFirstLoadAfterSignIn: boolean | null;
+  requestId: string;
 }): void {
   console.error("[dashboard] read failed", {
     read: input.read,
@@ -55,6 +63,7 @@ export function logDashboardReadFailure(input: {
     attempt: input.attempt,
     path: input.path,
     likelyFirstLoadAfterSignIn: input.likelyFirstLoadAfterSignIn,
+    requestId: input.requestId,
   });
 }
 
@@ -78,24 +87,26 @@ const TRANSIENT_STATUS_CODES = new Set([500, 502, 503, 504, 520, 521, 522, 523, 
  * yet loaded. Never a permission, ownership, or validation code: retrying one
  * of those would only ask the same question and get the same honest answer.
  *
- * `PGRST303` is the one exception to "never a permission code" and belongs
- * here deliberately: PostgREST returns it, at HTTP 401, when the JWT's own
- * `iat`/`exp` timestamps disagree with the clock on the node validating it —
- * a genuine clock-skew race between the Auth node that minted the token and
- * whichever PostgREST node answers the very next request, documented against
- * this exact shape (supabase/supabase#41294, supabase/supabase discussion
- * #48123). It hits a token that was issued moments ago hardest, because an
- * older token has already outlived the skew window — which is exactly what a
- * user's very first request is, right after signing in, signing up, or
- * confirming a new account. The same token is routinely accepted a moment
- * later, which is the honest, evidence-backed reason a retry belongs here and
- * not a session refresh or a client-side reload: nothing about the session
- * was ever wrong. A genuinely expired or otherwise invalid token reports a
- * different PostgREST code (`PGRST301`) and is correctly left unretried.
+ * `PGRST303` is deliberately absent from this set. It is not a single
+ * condition: PostgREST's own source (`JwtClaimsErr` in
+ * PostgREST/postgrest's `src/library/PostgREST/Error.hs`) returns this one
+ * code, at HTTP 401, for nine different JWT-claim outcomes sharing the same
+ * status — an actually expired token, a wrong `aud`, unparseable claims, four
+ * flavors of a malformed claim, and exactly two that are a clock
+ * disagreement between the Auth node that minted the token and the PostgREST
+ * node validating it: "JWT issued at future" and "JWT not yet valid"
+ * (documented against this exact shape in supabase/supabase#41294 and
+ * supabase/supabase discussion #48123). Only those two are a moment's wait
+ * from succeeding; the other seven report the same thing again no matter how
+ * many times they are asked. Treating the whole code as retryable — as an
+ * earlier version of this file did — retries a genuinely expired or
+ * otherwise invalid session for existing, already-working accounts too,
+ * which is what turned a same-attempt, honest `unavailable` into a slower
+ * one for every session that failed for a reason a retry cannot fix.
+ * `isTransientReadFailure` below checks `PGRST303`'s exact message instead.
  */
 const TRANSIENT_ERROR_CODES = new Set([
   "PGRST002", // PostgREST could not load the schema cache yet
-  "PGRST303", // JWT timestamp vs. validator clock skew — see comment above
   "57P01", // admin shutdown mid-request
   "57P02", // crash shutdown
   "57P03", // the database system is not yet accepting connections
@@ -108,26 +119,43 @@ const TRANSIENT_ERROR_CODES = new Set([
   "08P01", // connection-exception class
 ]);
 
+/**
+ * The exact two `PGRST303` messages that are a clock disagreement rather
+ * than a genuinely dead or malformed session — see the comment on
+ * `TRANSIENT_ERROR_CODES` above for the full set PostgREST can report under
+ * this one code and why the other seven are excluded on purpose. Matched
+ * verbatim against PostgREST's own source strings, not by substring: a
+ * message this file does not recognize is a message this file must not
+ * guess about, so it is left unretried like any other claim failure.
+ */
+const TRANSIENT_JWT_CLAIM_MESSAGES = new Set([
+  "JWT issued at future",
+  "JWT not yet valid",
+]);
+
 function isTransientReadFailure(
   error: DashboardReadError | null,
   status: number,
 ): boolean {
   if (TRANSIENT_STATUS_CODES.has(status)) return true;
-  return Boolean(error?.code && TRANSIENT_ERROR_CODES.has(error.code));
+  if (!error?.code) return false;
+  if (error.code === "PGRST303") {
+    return Boolean(error.message && TRANSIENT_JWT_CLAIM_MESSAGES.has(error.message));
+  }
+  return TRANSIENT_ERROR_CODES.has(error.code);
 }
 
-const MAX_ATTEMPTS = 3;
-/** One entry per retry: the delay before that attempt, indexed from 0. */
-const RETRY_DELAYS_MS = [300, 600];
+const MAX_ATTEMPTS = 2;
+const RETRY_DELAY_MS = 300;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Runs one dashboard read with a small bounded retry — up to two retries,
- * spaced further apart each time — and only for the class of failure a
- * moment's wait can actually fix.
+ * Runs one dashboard read with a small bounded retry — one retry, after a
+ * short fixed delay — and only for the class of failure a moment's wait can
+ * actually fix.
  *
  * Everything else — an expired session, a row-level security denial, a
  * malformed filter — is returned exactly as PostgREST reported it, on the
@@ -141,6 +169,7 @@ export async function withTransientReadRetry<Row>(
   read: DashboardReadName,
   path: string,
   likelyFirstLoadAfterSignIn: boolean | null,
+  requestId: string,
   run: () => PromiseLike<DashboardReadAttempt<Row>>,
 ): Promise<{ data: Row[] | null; error: DashboardReadError | null }> {
   let attempt = 1;
@@ -156,13 +185,14 @@ export async function withTransientReadRetry<Row>(
       attempt,
       path,
       likelyFirstLoadAfterSignIn,
+      requestId,
     });
 
     const canRetry =
       attempt < MAX_ATTEMPTS && isTransientReadFailure(result.error, result.status);
     if (!canRetry) return { data: result.data, error: result.error };
 
-    await delay(RETRY_DELAYS_MS[attempt - 1]);
     attempt += 1;
+    await delay(RETRY_DELAY_MS);
   }
 }

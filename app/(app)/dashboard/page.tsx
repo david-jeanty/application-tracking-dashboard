@@ -49,6 +49,12 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   const firstLoad = await likelyFirstLoadAfterSignIn();
+  // Temporary incident instrumentation: ties the two reads' failure log
+  // lines (see `lib/dashboard/reads`) back to the same page load, and gives
+  // whoever is reading Vercel's runtime logs an exact string to search for.
+  // Carries no relationship to the session or the user — safe to delete once
+  // the incident this was added for is closed.
+  const requestId = crypto.randomUUID();
 
   // Both reads are owner-scoped by the server-derived user id, with row-level
   // security applying again underneath. Every application is read, archived
@@ -61,10 +67,10 @@ export default async function DashboardPage() {
   // API not yet ready to answer. A permission or session failure is never
   // retried, and comes back exactly as issued.
   const [applications, timeline] = await Promise.all([
-    withTransientReadRetry("applications", DASHBOARD_PATH, firstLoad, () =>
+    withTransientReadRetry("applications", DASHBOARD_PATH, firstLoad, requestId, () =>
       listApplications(supabase, user.id, { archiveState: "all" }),
     ),
-    withTransientReadRetry("statusTimeline", DASHBOARD_PATH, firstLoad, () =>
+    withTransientReadRetry("statusTimeline", DASHBOARD_PATH, firstLoad, requestId, () =>
       listStatusTimeline(supabase, user.id),
     ),
   ]);

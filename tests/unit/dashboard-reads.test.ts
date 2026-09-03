@@ -39,7 +39,7 @@ describe("withTransientReadRetry", () => {
   it("returns the data straight through on a first-attempt success", async () => {
     const run = vi.fn().mockResolvedValue(attempt({ data: [{ id: "a" }], status: 200 }));
 
-    const result = await withTransientReadRetry("applications", "/dashboard", null, run);
+    const result = await withTransientReadRetry("applications", "/dashboard", null, "req-test", run);
 
     expect(result).toEqual({ data: [{ id: "a" }], error: null });
     expect(run).toHaveBeenCalledTimes(1);
@@ -54,7 +54,7 @@ describe("withTransientReadRetry", () => {
       )
       .mockResolvedValueOnce(attempt({ data: [{ id: "a" }], status: 200 }));
 
-    const pending = withTransientReadRetry("applications", "/dashboard", true, run);
+    const pending = withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
     await vi.runAllTimersAsync();
     const result = await pending;
 
@@ -68,7 +68,7 @@ describe("withTransientReadRetry", () => {
       .mockResolvedValueOnce(attempt({ status: 504, error: { message: "Gateway Timeout" } }))
       .mockResolvedValueOnce(attempt({ data: [], status: 200 }));
 
-    const pending = withTransientReadRetry("statusTimeline", "/dashboard", null, run);
+    const pending = withTransientReadRetry("statusTimeline", "/dashboard", null, "req-test", run);
     await vi.runAllTimersAsync();
     const result = await pending;
 
@@ -85,7 +85,7 @@ describe("withTransientReadRetry", () => {
     };
     const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: rlsError }));
 
-    const result = await withTransientReadRetry("applications", "/dashboard", true, run);
+    const result = await withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
 
     expect(result).toEqual({ data: null, error: rlsError });
     expect(run).toHaveBeenCalledTimes(1);
@@ -95,55 +95,122 @@ describe("withTransientReadRetry", () => {
     const jwtError = { code: "PGRST301", message: "JWT expired" };
     const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: jwtError }));
 
-    const result = await withTransientReadRetry("statusTimeline", "/dashboard", true, run);
+    const result = await withTransientReadRetry("statusTimeline", "/dashboard", true, "req-test", run);
 
     expect(result).toEqual({ data: null, error: jwtError });
     expect(run).toHaveBeenCalledTimes(1);
   });
 
-  it("gives up after two retries and reports the last error honestly", async () => {
+  it("gives up after one retry and reports the last error honestly", async () => {
     const gatewayError = { message: "Bad Gateway" };
     const run = vi.fn().mockResolvedValue(attempt({ status: 502, error: gatewayError }));
 
-    const pending = withTransientReadRetry("applications", "/dashboard", true, run);
+    const pending = withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
     await vi.runAllTimersAsync();
     const result = await pending;
 
     expect(result).toEqual({ data: null, error: gatewayError });
-    // Bounded: the initial attempt plus exactly two retries, never more.
-    expect(run).toHaveBeenCalledTimes(3);
-  });
-
-  it("retries a clock-skew JWT rejection (PGRST303) and succeeds once the skew clears", async () => {
-    // The exact shape PostgREST reports when the token's own iat/exp disagree
-    // with the validating node's clock — hits a token issued moments ago
-    // hardest, which is exactly what a brand-new signup's or a just-confirmed
-    // account's very first request is. See supabase/supabase#41294 and
-    // supabase/supabase discussion #48123.
-    const skewError = { code: "PGRST303", message: "JWT issued at future" };
-    const run = vi
-      .fn()
-      .mockResolvedValueOnce(attempt({ status: 401, error: skewError }))
-      .mockResolvedValueOnce(attempt({ data: [], status: 200 }));
-
-    const pending = withTransientReadRetry("statusTimeline", "/dashboard", true, run);
-    await vi.runAllTimersAsync();
-    const result = await pending;
-
-    expect(result).toEqual({ data: [], error: null });
+    // Bounded: the initial attempt plus exactly one retry, never more.
     expect(run).toHaveBeenCalledTimes(2);
   });
 
-  it("still gives up honestly when the clock skew never clears within the bound", async () => {
-    const skewError = { code: "PGRST303", message: "JWT issued at future" };
-    const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: skewError }));
+  describe("PGRST303 — PostgREST's single code for nine different JWT-claim outcomes", () => {
+    // PostgREST's own `JwtClaimsErr` (src/library/PostgREST/Error.hs) returns
+    // this one code, at HTTP 401, for a token that is genuinely expired, one
+    // with the wrong audience, one whose claims failed to parse, four flavors
+    // of a malformed claim, and exactly two clock-disagreement conditions.
+    // Only the two clock-disagreement messages are retried; the code alone
+    // proves nothing about which of the nine actually happened.
 
-    const pending = withTransientReadRetry("applications", "/dashboard", true, run);
-    await vi.runAllTimersAsync();
-    const result = await pending;
+    it("retries a clock-skew JWT rejection and succeeds once the skew clears", async () => {
+      // Documented against this exact shape in supabase/supabase#41294 and
+      // supabase/supabase discussion #48123 — a token issued moments ago,
+      // exactly what a brand-new signup's or a just-confirmed account's very
+      // first request carries.
+      const skewError = { code: "PGRST303", message: "JWT issued at future" };
+      const run = vi
+        .fn()
+        .mockResolvedValueOnce(attempt({ status: 401, error: skewError }))
+        .mockResolvedValueOnce(attempt({ data: [], status: 200 }));
 
-    expect(result).toEqual({ data: null, error: skewError });
-    expect(run).toHaveBeenCalledTimes(3);
+      const pending = withTransientReadRetry("statusTimeline", "/dashboard", true, "req-test", run);
+      await vi.runAllTimersAsync();
+      const result = await pending;
+
+      expect(result).toEqual({ data: [], error: null });
+      expect(run).toHaveBeenCalledTimes(2);
+    });
+
+    it("also retries the 'not yet valid' clock-skew message", async () => {
+      const skewError = { code: "PGRST303", message: "JWT not yet valid" };
+      const run = vi
+        .fn()
+        .mockResolvedValueOnce(attempt({ status: 401, error: skewError }))
+        .mockResolvedValueOnce(attempt({ data: [], status: 200 }));
+
+      const pending = withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
+      await vi.runAllTimersAsync();
+      const result = await pending;
+
+      expect(result).toEqual({ data: [], error: null });
+      expect(run).toHaveBeenCalledTimes(2);
+    });
+
+    it("still gives up honestly when the clock skew never clears within the bound", async () => {
+      const skewError = { code: "PGRST303", message: "JWT issued at future" };
+      const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: skewError }));
+
+      const pending = withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
+      await vi.runAllTimersAsync();
+      const result = await pending;
+
+      expect(result).toEqual({ data: null, error: skewError });
+      expect(run).toHaveBeenCalledTimes(2);
+    });
+
+    it("never retries a genuinely expired session reported as PGRST303", async () => {
+      // The production regression this guards: an earlier version of this
+      // file retried every PGRST303, including this one — a real, dead
+      // session that a retry cannot revive, previously reported honestly on
+      // the first attempt for every already-working existing-user sign-in.
+      const expiredError = { code: "PGRST303", message: "JWT expired" };
+      const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: expiredError }));
+
+      const result = await withTransientReadRetry("applications", "/dashboard", false, "req-test", run);
+
+      expect(result).toEqual({ data: null, error: expiredError });
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it("never retries an audience mismatch reported as PGRST303", async () => {
+      const audienceError = { code: "PGRST303", message: "JWT not in audience" };
+      const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: audienceError }));
+
+      const result = await withTransientReadRetry("statusTimeline", "/dashboard", false, "req-test", run);
+
+      expect(result).toEqual({ data: null, error: audienceError });
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it("never retries a malformed-claims PGRST303", async () => {
+      const malformedError = { code: "PGRST303", message: "Parsing claims failed" };
+      const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: malformedError }));
+
+      const result = await withTransientReadRetry("applications", "/dashboard", false, "req-test", run);
+
+      expect(result).toEqual({ data: null, error: malformedError });
+      expect(run).toHaveBeenCalledTimes(1);
+    });
+
+    it("never guesses on a PGRST303 with an unrecognized or missing message", async () => {
+      const unknownError = { code: "PGRST303", message: "some future PostgREST wording" };
+      const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: unknownError }));
+
+      const result = await withTransientReadRetry("applications", "/dashboard", false, "req-test", run);
+
+      expect(result).toEqual({ data: null, error: unknownError });
+      expect(run).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("logs only the query's own fields, never a secret or personal one", async () => {
@@ -154,7 +221,7 @@ describe("withTransientReadRetry", () => {
       }),
     );
 
-    await withTransientReadRetry("applications", "/dashboard", true, run);
+    await withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
     const [label, payload] = errorSpy.mock.calls[0] as [string, Record<string, unknown>];
@@ -169,6 +236,7 @@ describe("withTransientReadRetry", () => {
         "message",
         "path",
         "read",
+        "requestId",
         "status",
       ].sort(),
     );
@@ -179,5 +247,17 @@ describe("withTransientReadRetry", () => {
     for (const forbidden of ["cookie", "Bearer ", "eyJ", "@", "sb-", "password"]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it("carries the caller's request id through, unchanged, for correlating both reads of one load", async () => {
+    const run = vi.fn().mockResolvedValue(
+      attempt({ status: 401, error: { code: "42501", message: "permission denied" } }),
+    );
+
+    await withTransientReadRetry("applications", "/dashboard", true, "incident-123", run);
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [, payload] = errorSpy.mock.calls[0] as [string, Record<string, unknown>];
+    expect(payload.requestId).toBe("incident-123");
   });
 });
