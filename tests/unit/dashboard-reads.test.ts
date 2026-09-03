@@ -39,7 +39,7 @@ describe("withTransientReadRetry", () => {
   it("returns the data straight through on a first-attempt success", async () => {
     const run = vi.fn().mockResolvedValue(attempt({ data: [{ id: "a" }], status: 200 }));
 
-    const result = await withTransientReadRetry("applications", "/dashboard", null, run);
+    const result = await withTransientReadRetry("applications", "/dashboard", null, "req-test", run);
 
     expect(result).toEqual({ data: [{ id: "a" }], error: null });
     expect(run).toHaveBeenCalledTimes(1);
@@ -54,7 +54,7 @@ describe("withTransientReadRetry", () => {
       )
       .mockResolvedValueOnce(attempt({ data: [{ id: "a" }], status: 200 }));
 
-    const pending = withTransientReadRetry("applications", "/dashboard", true, run);
+    const pending = withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
     await vi.runAllTimersAsync();
     const result = await pending;
 
@@ -68,7 +68,7 @@ describe("withTransientReadRetry", () => {
       .mockResolvedValueOnce(attempt({ status: 504, error: { message: "Gateway Timeout" } }))
       .mockResolvedValueOnce(attempt({ data: [], status: 200 }));
 
-    const pending = withTransientReadRetry("statusTimeline", "/dashboard", null, run);
+    const pending = withTransientReadRetry("statusTimeline", "/dashboard", null, "req-test", run);
     await vi.runAllTimersAsync();
     const result = await pending;
 
@@ -85,7 +85,7 @@ describe("withTransientReadRetry", () => {
     };
     const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: rlsError }));
 
-    const result = await withTransientReadRetry("applications", "/dashboard", true, run);
+    const result = await withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
 
     expect(result).toEqual({ data: null, error: rlsError });
     expect(run).toHaveBeenCalledTimes(1);
@@ -95,7 +95,7 @@ describe("withTransientReadRetry", () => {
     const jwtError = { code: "PGRST301", message: "JWT expired" };
     const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: jwtError }));
 
-    const result = await withTransientReadRetry("statusTimeline", "/dashboard", true, run);
+    const result = await withTransientReadRetry("statusTimeline", "/dashboard", true, "req-test", run);
 
     expect(result).toEqual({ data: null, error: jwtError });
     expect(run).toHaveBeenCalledTimes(1);
@@ -105,7 +105,7 @@ describe("withTransientReadRetry", () => {
     const gatewayError = { message: "Bad Gateway" };
     const run = vi.fn().mockResolvedValue(attempt({ status: 502, error: gatewayError }));
 
-    const pending = withTransientReadRetry("applications", "/dashboard", true, run);
+    const pending = withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
     await vi.runAllTimersAsync();
     const result = await pending;
 
@@ -133,7 +133,7 @@ describe("withTransientReadRetry", () => {
         .mockResolvedValueOnce(attempt({ status: 401, error: skewError }))
         .mockResolvedValueOnce(attempt({ data: [], status: 200 }));
 
-      const pending = withTransientReadRetry("statusTimeline", "/dashboard", true, run);
+      const pending = withTransientReadRetry("statusTimeline", "/dashboard", true, "req-test", run);
       await vi.runAllTimersAsync();
       const result = await pending;
 
@@ -148,7 +148,7 @@ describe("withTransientReadRetry", () => {
         .mockResolvedValueOnce(attempt({ status: 401, error: skewError }))
         .mockResolvedValueOnce(attempt({ data: [], status: 200 }));
 
-      const pending = withTransientReadRetry("applications", "/dashboard", true, run);
+      const pending = withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
       await vi.runAllTimersAsync();
       const result = await pending;
 
@@ -160,7 +160,7 @@ describe("withTransientReadRetry", () => {
       const skewError = { code: "PGRST303", message: "JWT issued at future" };
       const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: skewError }));
 
-      const pending = withTransientReadRetry("applications", "/dashboard", true, run);
+      const pending = withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
       await vi.runAllTimersAsync();
       const result = await pending;
 
@@ -176,7 +176,7 @@ describe("withTransientReadRetry", () => {
       const expiredError = { code: "PGRST303", message: "JWT expired" };
       const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: expiredError }));
 
-      const result = await withTransientReadRetry("applications", "/dashboard", false, run);
+      const result = await withTransientReadRetry("applications", "/dashboard", false, "req-test", run);
 
       expect(result).toEqual({ data: null, error: expiredError });
       expect(run).toHaveBeenCalledTimes(1);
@@ -186,7 +186,7 @@ describe("withTransientReadRetry", () => {
       const audienceError = { code: "PGRST303", message: "JWT not in audience" };
       const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: audienceError }));
 
-      const result = await withTransientReadRetry("statusTimeline", "/dashboard", false, run);
+      const result = await withTransientReadRetry("statusTimeline", "/dashboard", false, "req-test", run);
 
       expect(result).toEqual({ data: null, error: audienceError });
       expect(run).toHaveBeenCalledTimes(1);
@@ -196,7 +196,7 @@ describe("withTransientReadRetry", () => {
       const malformedError = { code: "PGRST303", message: "Parsing claims failed" };
       const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: malformedError }));
 
-      const result = await withTransientReadRetry("applications", "/dashboard", false, run);
+      const result = await withTransientReadRetry("applications", "/dashboard", false, "req-test", run);
 
       expect(result).toEqual({ data: null, error: malformedError });
       expect(run).toHaveBeenCalledTimes(1);
@@ -206,7 +206,7 @@ describe("withTransientReadRetry", () => {
       const unknownError = { code: "PGRST303", message: "some future PostgREST wording" };
       const run = vi.fn().mockResolvedValue(attempt({ status: 401, error: unknownError }));
 
-      const result = await withTransientReadRetry("applications", "/dashboard", false, run);
+      const result = await withTransientReadRetry("applications", "/dashboard", false, "req-test", run);
 
       expect(result).toEqual({ data: null, error: unknownError });
       expect(run).toHaveBeenCalledTimes(1);
@@ -221,7 +221,7 @@ describe("withTransientReadRetry", () => {
       }),
     );
 
-    await withTransientReadRetry("applications", "/dashboard", true, run);
+    await withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
     const [label, payload] = errorSpy.mock.calls[0] as [string, Record<string, unknown>];
@@ -236,6 +236,7 @@ describe("withTransientReadRetry", () => {
         "message",
         "path",
         "read",
+        "requestId",
         "status",
       ].sort(),
     );
@@ -246,5 +247,17 @@ describe("withTransientReadRetry", () => {
     for (const forbidden of ["cookie", "Bearer ", "eyJ", "@", "sb-", "password"]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it("carries the caller's request id through, unchanged, for correlating both reads of one load", async () => {
+    const run = vi.fn().mockResolvedValue(
+      attempt({ status: 401, error: { code: "42501", message: "permission denied" } }),
+    );
+
+    await withTransientReadRetry("applications", "/dashboard", true, "incident-123", run);
+
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [, payload] = errorSpy.mock.calls[0] as [string, Record<string, unknown>];
+    expect(payload.requestId).toBe("incident-123");
   });
 });

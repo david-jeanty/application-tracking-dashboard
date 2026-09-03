@@ -210,11 +210,14 @@ describe("the first dashboard load right after signing in", () => {
         "message",
         "path",
         "read",
+        "requestId",
         "status",
       ].sort(),
     );
     expect(payload.path).toBe("/dashboard");
     expect(payload.likelyFirstLoadAfterSignIn).toBe(true);
+    expect(typeof payload.requestId).toBe("string");
+    expect((payload.requestId as string).length).toBeGreaterThan(0);
     const serialized = JSON.stringify(payload);
     for (const forbidden of [
       "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -225,6 +228,31 @@ describe("the first dashboard load right after signing in", () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it("gives both reads' failure log lines the same request id, when both fail", async () => {
+    listApplications.mockResolvedValue({
+      data: null,
+      error: { code: "42501", message: "permission denied" },
+      status: 401,
+    });
+    listStatusTimeline.mockResolvedValue({
+      data: null,
+      error: { code: "42501", message: "permission denied" },
+      status: 401,
+    });
+
+    render(await DashboardPage());
+
+    expect(errorSpy).toHaveBeenCalledTimes(2);
+    const [firstCall, secondCall] = errorSpy.mock.calls as [
+      [string, Record<string, unknown>],
+      [string, Record<string, unknown>],
+    ];
+    const [, firstPayload] = firstCall;
+    const [, secondPayload] = secondCall;
+    expect(firstPayload.requestId).toBe(secondPayload.requestId);
+    expect(typeof firstPayload.requestId).toBe("string");
   });
 
   it("treats a request with no referer, or one from elsewhere in the app, as not a first load", async () => {

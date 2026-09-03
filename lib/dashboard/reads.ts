@@ -31,11 +31,18 @@ export type DashboardReadAttempt<Row> = {
  * This is the one place production is allowed to learn that a dashboard read
  * failed, so the fields are an allowlist rather than "whatever the error
  * object happens to carry": the query's own code/message/details/hint, which
- * read it was, which attempt this was, the fixed page path, and — best
- * effort — whether the request looks like the first one after signing in.
- * Nothing here can carry a cookie, a JWT, an email, a user id, or anything
- * about the applications a student saved, because none of those are ever
- * passed in.
+ * read it was, which attempt this was, the fixed page path, a per-request
+ * correlation id, and — best effort — whether the request looks like the
+ * first one after signing in. Nothing here can carry a cookie, a JWT, an
+ * email, a user id, or anything about the applications a student saved,
+ * because none of those are ever passed in.
+ *
+ * `requestId` is temporary incident instrumentation, minted fresh per page
+ * render (see `DashboardPage`) with no relationship to the session or the
+ * user — its only job is letting two log lines from the same failed load
+ * (one per read) be tied together when reading Vercel's runtime logs, and
+ * giving a reporter something exact to search for. Safe to delete once this
+ * incident is closed.
  */
 export function logDashboardReadFailure(input: {
   read: DashboardReadName;
@@ -44,6 +51,7 @@ export function logDashboardReadFailure(input: {
   attempt: number;
   path: string;
   likelyFirstLoadAfterSignIn: boolean | null;
+  requestId: string;
 }): void {
   console.error("[dashboard] read failed", {
     read: input.read,
@@ -55,6 +63,7 @@ export function logDashboardReadFailure(input: {
     attempt: input.attempt,
     path: input.path,
     likelyFirstLoadAfterSignIn: input.likelyFirstLoadAfterSignIn,
+    requestId: input.requestId,
   });
 }
 
@@ -160,6 +169,7 @@ export async function withTransientReadRetry<Row>(
   read: DashboardReadName,
   path: string,
   likelyFirstLoadAfterSignIn: boolean | null,
+  requestId: string,
   run: () => PromiseLike<DashboardReadAttempt<Row>>,
 ): Promise<{ data: Row[] | null; error: DashboardReadError | null }> {
   let attempt = 1;
@@ -175,6 +185,7 @@ export async function withTransientReadRetry<Row>(
       attempt,
       path,
       likelyFirstLoadAfterSignIn,
+      requestId,
     });
 
     const canRetry =
