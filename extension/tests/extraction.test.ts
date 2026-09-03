@@ -20,14 +20,15 @@ import {
 
 const JNJ_LINKEDIN_POSTING = `<head></head><body>
   <aside><a href="https://other.example/careers">Neighbouring role</a></aside>
-  <main data-job-id="123"><section>
+  <main><section aria-label="Primary content">
+  <section>
     <div aria-label="Company, Johnson &amp; Johnson MedTech.">Johnson &amp; Johnson MedTech</div>
     <div data-display-contents="true"><p>Marketing Co-Op</p></div>
     <p><span>Toronto, ON</span></p>
   </section>
   <section><h2>About the job</h2><div data-testid="expandable-text-box">
     <a href="https://www.linkedin.com/safety/go/?url=https%3A%2F%2Fwww.jnj.com%2Fmedtech&amp;trk=test">jnj.com</a>
-  </div></section></main>
+  </div></section></section></main>
 </body>`;
 
 const KPMG_SELECTED_APPLY = {
