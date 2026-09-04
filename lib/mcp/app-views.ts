@@ -65,48 +65,72 @@ import { SAVE_CONFIRMATION_VIEW_HTML } from "@/lib/mcp/app-views/save-confirmati
  * re-checking against a live connector, which is the one thing this
  * repository cannot do for itself.
  *
- * Both views now also declare `ui.domain` (a *different* MCP Apps field from
+ * Both views also declare `ui.domain` (a *different* MCP Apps field from
  * `csp`, the one behind ChatGPT's separate "Widget domain is not set"
- * indicator). An earlier version of this file left it unset on the reasoning
- * that it is documented as optional at the protocol level — true for how
- * `@modelcontextprotocol/ext-apps` describes it ("If omitted, host uses
- * default sandbox origin"), but not the acceptance criterion that matters:
- * ChatGPT's own connector settings and its app-submission checklist name
- * `_meta.ui.domain` as required and required-unique-per-resource — a UI
- * resource with none is a submission blocker, not a style preference, per a
- * third-party OpenAI-submission readiness checker's own citations against
- * OpenAI's published policy references. Treating "the generic MCP Apps spec
- * allows omitting it" as the answer to "does ChatGPT require it" was the
- * mistake; the platform's own stated requirement is the acceptance criterion,
- * and it says otherwise.
+ * indicator). Two earlier versions of this file got it wrong in opposite
+ * directions, both worth recording so neither mistake creeps back in:
  *
- * The value declared is derived from the one already-stable, already-deployed
- * canonical Interndex origin — `https://www.interndex.dev` — never a new
- * hostname or a preview URL, using the exact transformation OpenAI's own
- * `ext-apps` reference documents as ChatGPT's pattern for a per-plugin
- * sandbox label ("URL-derived subdomain", e.g. `www-example-com
- * .oaiusercontent.com` for `https://www.example.com`): dots become dashes,
- * `.oaiusercontent.com` — OpenAI's own asset domain, not Interndex's — is
- * appended. Interndex is not asked to host anything there or prove ownership
- * of it; the string identifies which sandbox origin ChatGPT should key the
- * view to, the same way Claude keys its own on a value *it* computes from the
- * connector URL. Each resource gets a distinct value (`chatgptContentDomain()`
- * takes a per-resource slug) because two Interndex resources sharing one
- * domain would share a sandbox, and then one view could read the other's
- * storage — exactly the failure mode the uniqueness requirement exists to
- * prevent, even though neither view currently stores anything.
+ * - The first left it unset, reasoning that the generic MCP Apps spec
+ *   documents it as optional ("If omitted, host uses default sandbox
+ *   origin" — `@modelcontextprotocol/ext-apps`). True of the spec, not the
+ *   acceptance criterion: ChatGPT's own connector settings show the same
+ *   warning this file exists to clear, and independent developer reports on
+ *   OpenAI's community forum (e.g. "Is widgetDomain required for app
+ *   submission?") describe the identical discrepancy — the reference docs
+ *   call the field optional while the submission/connector UI flags it.
+ * - The second declared it, but as an invented `*.oaiusercontent.com`
+ *   subdomain. That pattern comes from `@modelcontextprotocol/ext-apps`'s own
+ *   doc comment, which lists "URL-derived subdomains (e.g.
+ *   `www-example-com.oaiusercontent.com`)" only as one unattributed *example*
+ *   of what some host might do, immediately preceded by "the format and
+ *   validation rules for this field are determined by each host — servers
+ *   MUST consult host-specific documentation." `oaiusercontent.com` is not
+ *   Interndex's to declare: it is OpenAI's own infrastructure domain, and
+ *   ChatGPT already uses it automatically — independent evidence confirms
+ *   ChatGPT serves widgets by default from `https://web-sandbox
+ *   .oaiusercontent.com` when no `ui.domain` is set. Declaring a
+ *   `*.oaiusercontent.com` value would have asserted ownership of a domain
+ *   Interndex does not control.
  *
- * This is the one place in this file built from a documented *pattern*
- * rather than a value confirmed byte-for-byte against a live host: no source
- * gives an algorithm for ChatGPT's domain the way Claude's own
- * `sha256(<connector URL>)[:32] + ".claudemcpcontent.com"` rule is
- * documented. If a live connector's submission check rejects this exact
- * string shape, only the two constants below need to change — the
- * presence-and-uniqueness requirement they satisfy is the confirmed part.
+ * ChatGPT's own documentation is the host-specific source `ext-apps` says to
+ * consult — `developers.openai.com/plugins/build/chatgpt-ui`, "Add UI to
+ * your MCP server" — and its resource-registration example shows the shape
+ * directly: `domain: "https://example.com"`, the app's own absolute HTTPS
+ * origin, not a host-derived subdomain. (This repository's session could not
+ * fetch `developers.openai.com` directly — blocked by this environment's own
+ * network egress policy, not a transient failure — so that example is
+ * corroborated two other ways instead: independent search results reproduce
+ * the same code sample verbatim, and OpenAI's own `openai-apps-sdk-examples`
+ * repository, read directly from GitHub, never declares `ui.domain` on any
+ * example server — including `cards_against_ai_server_node`, the one already
+ * cited above for the CSP precedent — consistent with the field being
+ * genuinely optional at the protocol level while still being flagged by
+ * ChatGPT's own connector UI.)
+ *
+ * So the value declared here is `https://www.interndex.dev` — the one origin
+ * every Interndex MCP resource is already served from, the same one
+ * `NEXT_PUBLIC_SITE_URL` names in production — for both views, unchanged.
+ * Nothing is invented: no new hostname, no DNS record, no OpenAI-owned domain
+ * asserted as Interndex's. Nothing in OpenAI's documented example or in its
+ * own example servers suggests two resources of the same app need distinct
+ * `ui.domain` values; the earlier claim that they must differ came from a
+ * third-party readiness checker's heuristic, not from any OpenAI-published
+ * source, and is retracted along with the invented subdomains.
+ *
  * There is no confirmed flat legacy alias for this field (unlike `csp`'s
- * `openai/widgetCSP`): the only sighting of one, `openai/widgetDomain`, is
- * recorded as an unsupported name in a third-party host-compatibility
- * catalog, for a different MCP-Apps-compatible client, not ChatGPT.
+ * `openai/widgetCSP`): `openai/widgetDomain` does not appear anywhere in
+ * `openai-apps-sdk-examples` or in `@modelcontextprotocol/ext-apps`, checked
+ * directly rather than inferred.
+ *
+ * What remains genuinely unverified, and is not resolved by any source
+ * available to this repository: whether declaring `https://www.interndex.dev`
+ * is sufficient to satisfy ChatGPT's live app-submission validator, as
+ * opposed to merely being the correctly-shaped, documentation-backed value
+ * the reference example itself demonstrates. The gap between "the reference
+ * docs call this optional" and "the connector UI / submission checklist flags
+ * it" is real and independently reported, and this repository cannot close it
+ * from documentation alone — see `docs/chatgpt-app.md` for how that is
+ * tracked.
  *
  * There are two views, one per tool that needs a visual result:
  *
@@ -229,41 +253,25 @@ function legacyWidgetCsp(csp: WidgetCsp) {
 /**
  * The stable, already-deployed origin every Interndex MCP resource is served
  * from — the same one `NEXT_PUBLIC_SITE_URL` names in production
- * (`docs/mcp.md`'s deployment setup). Never a preview URL: this is the one
- * origin `chatgptContentDomain()` is allowed to derive from.
+ * (`docs/mcp.md`'s deployment setup). Declared as `ui.domain` for both views
+ * below: an absolute HTTPS origin, exactly the shape
+ * `developers.openai.com/plugins/build/chatgpt-ui`'s own resource
+ * registration example uses (`domain: "https://example.com"`) — applied to
+ * the app's real domain, not the documentation's placeholder one, and never a
+ * preview URL or an invented hostname.
  */
-const INTERNDEX_CANONICAL_HOST = "www.interndex.dev";
+export const INTERNDEX_WIDGET_DOMAIN = "https://www.interndex.dev";
 
 /**
- * OpenAI's own asset domain, not Interndex's. Interndex does not host
- * anything here and is not asked to prove ownership of it — the derived value
- * is a label identifying which sandbox origin ChatGPT should key this view
- * to, the same way `.claudemcpcontent.com` names Claude's equivalent.
+ * `ui.domain` for the application-list view. Same value as
+ * `SAVE_CONFIRMATION_VIEW_DOMAIN` — see this file's top comment for why
+ * nothing in OpenAI's documentation or its own example servers requires two
+ * resources of one app to declare distinct values.
  */
-const CHATGPT_CONTENT_DOMAIN_SUFFIX = ".oaiusercontent.com";
+export const APPLICATION_LIST_VIEW_DOMAIN = INTERNDEX_WIDGET_DOMAIN;
 
-/**
- * Builds a `ui.domain` value for one resource: the documented ChatGPT
- * "URL-derived subdomain" pattern (dots to dashes, then the suffix above)
- * applied to `INTERNDEX_CANONICAL_HOST`, with `resourceSlug` prefixed so two
- * resources sharing one origin still get distinct values — required because
- * two resources declaring the same `ui.domain` would share a sandbox, and
- * with it, each other's storage.
- */
-function chatgptContentDomain(resourceSlug: string): string {
-  const originLabel = INTERNDEX_CANONICAL_HOST.replace(/\./g, "-");
-  return `${resourceSlug}.${originLabel}${CHATGPT_CONTENT_DOMAIN_SUFFIX}`;
-}
-
-/** `ui.domain` for the application-list view. See this file's top comment. */
-export const APPLICATION_LIST_VIEW_DOMAIN = chatgptContentDomain(
-  "application-list",
-);
-
-/** `ui.domain` for the save-confirmation view. See this file's top comment. */
-export const SAVE_CONFIRMATION_VIEW_DOMAIN = chatgptContentDomain(
-  "save-confirmation",
-);
+/** `ui.domain` for the save-confirmation view. See `APPLICATION_LIST_VIEW_DOMAIN`. */
+export const SAVE_CONFIRMATION_VIEW_DOMAIN = INTERNDEX_WIDGET_DOMAIN;
 
 /**
  * The `_meta` that associates a tool with a UI resource.
@@ -305,11 +313,11 @@ export function appViewToolMeta(resourceUri: string, labels: AppViewLabels) {
  * registered without its author stating what it needs — see this file's
  * top-of-file comment for why an explicit empty policy is not the same
  * declaration as no policy at all. `domain` is required for the same reason:
- * ChatGPT's own submission requirement, not the generic MCP Apps spec's
- * optional default, is the bar this has to clear — see the top-of-file
- * comment on `ui.domain` for what the value means and how it is derived.
- * There is no flat legacy alias to repeat it under; see that same comment
- * for why one is not added.
+ * ChatGPT's connector UI flags its absence even though the generic MCP Apps
+ * spec calls it optional — see the top-of-file comment on `ui.domain` for
+ * what the declared value is, why it is not invented, and what about this
+ * remains unverified. There is no flat legacy alias to repeat it under; see
+ * that same comment for why one is not added.
  */
 export function appViewResourceMeta(
   resourceUri: string,

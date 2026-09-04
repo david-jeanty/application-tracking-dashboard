@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { APPLICATION_LIST_VIEW_HTML } from "@/lib/mcp/app-views/application-list-html";
 import {
   APPLICATION_LIST_VIEW_DOMAIN,
+  INTERNDEX_WIDGET_DOMAIN,
   LEGACY_WIDGET_CSP_META_KEY,
   NO_EXTERNAL_DOMAINS,
   SAVE_CONFIRMATION_VIEW_DOMAIN,
@@ -34,8 +35,10 @@ import { SAVE_CONFIRMATION_VIEW_HTML } from "@/lib/mcp/app-views/save-confirmati
  *    without widening the declared policy, that would silently reintroduce
  *    the same bug in the opposite direction: a policy that lies about what
  *    the view does. The scan below is what would catch that.
- * 3. Every registered view also carries a present, unique `ui.domain` —
- *    checked here and against the wire contract, the same way as `csp`.
+ * 3. Every registered view also carries a present `ui.domain` set to
+ *    Interndex's real, already-owned production origin — never an invented
+ *    hostname or a domain Interndex does not control — checked here and
+ *    against the wire contract, the same way as `csp`.
  */
 
 const EXTERNAL_RESOURCE_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
@@ -143,16 +146,23 @@ describe("appViewResourceMeta declares CSP under both spellings", () => {
 });
 
 /*
- * The regression this pins: ChatGPT's own app-submission checklist marks
- * `_meta.ui.domain` required and required-unique-per-resource, independent
- * of the generic MCP Apps spec's "optional, host assigns a default when
- * omitted" framing that this repository relied on before. There is no
+ * The regression this pins: a live ChatGPT connector flagged
+ * `_meta.ui.domain` as missing, even though the generic MCP Apps spec
+ * documents it as optional ("host assigns a default when omitted"). A later
+ * attempt to fix that invented a `*.oaiusercontent.com` value per resource —
+ * a domain Interndex does not own, and a pattern OpenAI's own
+ * `chatgpt-ui` documentation does not use for its own example (which shows
+ * `domain: "https://example.com"`, the app's own absolute origin). Both
+ * mistakes are retracted here: the value below is Interndex's real,
+ * already-deployed production origin, the same for both views, because
+ * nothing in OpenAI's documented example or its own example servers
+ * requires two resources of one app to declare distinct values. There is no
  * confirmed flat legacy alias for this field — only `_meta.ui.domain` itself
  * is exercised here, and no `openai/widgetDomain` key is asserted anywhere in
  * this repository's code or tests, on purpose (see lib/mcp/app-views.ts's
  * top-of-file comment).
  */
-describe("appViewResourceMeta declares a present, unique ui.domain", () => {
+describe("appViewResourceMeta declares a present ui.domain on Interndex's real origin", () => {
   it("declares a non-empty ui.domain for each view", () => {
     const applicationList = appViewResourceMeta(
       APPLICATION_LIST_VIEW_URI,
@@ -171,31 +181,35 @@ describe("appViewResourceMeta declares a present, unique ui.domain", () => {
     expect(saveConfirmation.ui.domain.length).toBeGreaterThan(0);
   });
 
-  it("gives the two views different ui.domain values", () => {
-    // Required, not cosmetic: two Interndex resources declaring the same
-    // ui.domain would share a sandbox, and with it, each other's storage.
-    expect(APPLICATION_LIST_VIEW_DOMAIN).not.toBe(SAVE_CONFIRMATION_VIEW_DOMAIN);
+  it("gives both views the same ui.domain: Interndex is one app, not two sandboxes", () => {
+    // Not a requirement to relax carelessly — just not a requirement at all.
+    // No OpenAI-published source (the chatgpt-ui reference example, or any
+    // server in openai-apps-sdk-examples) requires per-resource uniqueness;
+    // sharing the app's one real origin is the non-invented choice.
+    expect(APPLICATION_LIST_VIEW_DOMAIN).toBe(SAVE_CONFIRMATION_VIEW_DOMAIN);
   });
 
-  it("derives both domains from the real canonical Interndex origin, never a placeholder", () => {
-    // Not `example.com`, not a Vercel preview host, not an invented
-    // subdomain requiring new DNS — the same origin production already
-    // deploys at.
-    expect(APPLICATION_LIST_VIEW_DOMAIN).toContain("interndex-dev");
-    expect(SAVE_CONFIRMATION_VIEW_DOMAIN).toContain("interndex-dev");
+  it("uses Interndex's real, already-deployed origin — an absolute HTTPS URL, never a placeholder or an OpenAI-owned domain", () => {
+    // Not `example.com` (the documentation's own placeholder), not a Vercel
+    // preview host, not an invented oaiusercontent.com subdomain OpenAI's
+    // own infrastructure already uses for its default sandbox — the same
+    // origin production already deploys at, in the shape
+    // developers.openai.com/plugins/build/chatgpt-ui's own example uses
+    // (`domain: "https://example.com"`).
+    expect(APPLICATION_LIST_VIEW_DOMAIN).toMatch(/^https:\/\//);
+    expect(APPLICATION_LIST_VIEW_DOMAIN).toContain("interndex.dev");
+    expect(APPLICATION_LIST_VIEW_DOMAIN).not.toContain("example.com");
+    expect(APPLICATION_LIST_VIEW_DOMAIN).not.toContain("oaiusercontent.com");
     expect(APPLICATION_LIST_VIEW_DOMAIN).not.toContain("vercel.app");
     expect(APPLICATION_LIST_VIEW_DOMAIN).not.toContain("localhost");
   });
 
-  it("matches the exact values registerInterndexAppViews wires up", () => {
-    // Pins the literal strings so a change to either constant is a visible
-    // diff here, not a silent drift between what this test exercises and
-    // what the real server serves.
-    expect(APPLICATION_LIST_VIEW_DOMAIN).toBe(
-      "application-list.www-interndex-dev.oaiusercontent.com",
-    );
-    expect(SAVE_CONFIRMATION_VIEW_DOMAIN).toBe(
-      "save-confirmation.www-interndex-dev.oaiusercontent.com",
-    );
+  it("matches the exact value registerInterndexAppViews wires up for both views", () => {
+    // Pins the literal string so a change to the constant is a visible diff
+    // here, not a silent drift between what this test exercises and what the
+    // real server serves.
+    expect(INTERNDEX_WIDGET_DOMAIN).toBe("https://www.interndex.dev");
+    expect(APPLICATION_LIST_VIEW_DOMAIN).toBe(INTERNDEX_WIDGET_DOMAIN);
+    expect(SAVE_CONFIRMATION_VIEW_DOMAIN).toBe(INTERNDEX_WIDGET_DOMAIN);
   });
 });
