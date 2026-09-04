@@ -9,18 +9,15 @@ import type {
   ApplicationListItem,
   ApplicationRecord,
 } from "@/lib/applications/types";
-import {
-  APPLICATION_LIST_VIEW_LABELS,
-  APPLICATION_LIST_VIEW_URI,
-  appViewResultMeta,
-  appViewToolMeta,
-  registerInterndexAppViews,
-  SAVE_CONFIRMATION_VIEW_LABELS,
-  SAVE_CONFIRMATION_VIEW_URI,
-} from "@/lib/mcp/app-views";
 import { runGetJob } from "@/lib/mcp/get-job";
 import { runImportJobs } from "@/lib/mcp/import-jobs";
 import { runListJobs } from "@/lib/mcp/list-jobs";
+import {
+  formatJobDetail,
+  formatJobList,
+  formatSaveConfirmation,
+  formatUpdateConfirmation,
+} from "@/lib/mcp/markdown";
 import { instrumentToolCall } from "@/lib/mcp/telemetry";
 import { runUpdateJob } from "@/lib/mcp/update-job";
 import { readUserId } from "@/lib/mcp/user";
@@ -106,30 +103,14 @@ export function registerJobTrackTools(
   server: McpServer,
   repositoryFor: JobTrackRepositoryFactory,
 ): void {
-  // The ChatGPT Apps SDK views. Registered from here rather than beside them
-  // in the route because a tool's `_meta` points at a resource: if the two
-  // could be registered separately, a deployment could advertise a view that
-  // does not resolve. One function registers both, and the tests drive it.
-  registerInterndexAppViews(server);
-
   server.registerTool(
     "save_job",
     {
       title: "Save job application",
       description:
-        "Saves a job to the student's application tracker. Use this when they share a job posting and want it recorded, or say they have applied somewhere. Pass the full job description verbatim when it is available so they can reread it later. Fill in company_domain with the employer's own website whenever you can identify the employer, so the saved application shows its logo without the student having to ask for it.",
+        "Saves a job to the student's application tracker. Use this when they share a job posting and want it recorded, or say they have applied somewhere. Pass the full job description verbatim when it is available so they can reread it later. Fill in company_domain with the employer's own website whenever you can identify the employer, so the saved application shows its logo without the student having to ask for it. This tool's returned Markdown confirmation is already the final answer to show the student — do not restate it, and do not call list_jobs afterward to double-check or display it.",
       inputSchema: saveJobInputSchema,
       outputSchema: saveJobOutputSchema,
-      // save_job gets its own compact, single-record view rather than sharing
-      // list_jobs's. A save that renders nothing of its own is a save that
-      // invites a host — or the model driving it — to reach for the one tool
-      // that does render something, which is how a plain-text confirmation
-      // ended up displaying somebody's whole tracker above it. See
-      // `lib/mcp/app-views/save-confirmation-html.ts`.
-      _meta: appViewToolMeta(
-        SAVE_CONFIRMATION_VIEW_URI,
-        SAVE_CONFIRMATION_VIEW_LABELS,
-      ),
     },
     async (args, ctx) =>
       instrumentToolCall("save_job", ctx, async () => {
@@ -164,32 +145,48 @@ export function registerJobTrackTools(
           );
         }
 
-        // The sentence a student reads, and the same facts as data for a client
-        // that would otherwise have to list the tracker again to find the id it
-        // just created. No ownership column is in either. work_term and
-        // location fall back to null rather than the internal "Not specified"
-        // sentinel, exactly as list_jobs's own records do.
+        // The Markdown a student reads, and the same facts as structured data
+        // for a client that would otherwise have to list the tracker again to
+        // find what it just created. No ownership column is in either.
+        // work_term and location fall back to null rather than the internal
+        // "Not specified" sentinel, exactly as list_jobs's own records do.
+        // `formatSaveConfirmation` builds the text from these same values —
+        // the server generates the confirmation, never the model.
+        const saved = {
+          application_id: data.id,
+          company: parsed.data.companyName,
+          job_title: parsed.data.originalJobTitle,
+          status: parsed.data.currentStatus,
+          category: parsed.data.normalizedJobCategory,
+          work_term: displayOptionalText(parsed.data.workTermSeason),
+          location: parsed.data.location ?? null,
+          duration: parsed.data.workTermDuration ?? null,
+          deadline: parsed.data.applicationDeadline ?? null,
+          source: parsed.data.applicationSource ?? null,
+          salary: parsed.data.salary ?? null,
+          notes: parsed.data.notes ?? null,
+        };
+
         return {
           content: [
             {
               type: "text" as const,
-              text: `Saved ${parsed.data.originalJobTitle} at ${parsed.data.companyName} with status ${parsed.data.currentStatus}.`,
+              text: formatSaveConfirmation({
+                title: saved.job_title,
+                company: saved.company,
+                status: saved.status,
+                category: saved.category,
+                location: saved.location,
+                workTerm: saved.work_term,
+                duration: saved.duration,
+                deadline: saved.deadline,
+                source: saved.source,
+                salary: saved.salary,
+                notes: saved.notes,
+              }),
             },
           ],
-          structuredContent: {
-            application_id: data.id,
-            company: parsed.data.companyName,
-            job_title: parsed.data.originalJobTitle,
-            status: parsed.data.currentStatus,
-            work_term: displayOptionalText(parsed.data.workTermSeason),
-            location: displayOptionalText(parsed.data.location),
-          },
-          // The view association again, travelling with the payload the host
-          // is about to render — a single saved job, never a list.
-          _meta: appViewResultMeta(
-            SAVE_CONFIRMATION_VIEW_URI,
-            SAVE_CONFIRMATION_VIEW_LABELS,
-          ),
+          structuredContent: saved,
         };
       }),
   );
@@ -253,10 +250,6 @@ export function registerJobTrackTools(
         "Lists the student's saved job applications, newest first, so you can find the one they mean and read its id. Each record already carries its status, work term, location, date applied, and deadline, which is enough to answer a question like which were applied to this week or this month without a follow-up call. Records are short beyond that: use get_job only for the full posting and notes. Filter by status, employer, work term, or archive state, then choose the application yourself rather than asking the student for an id.",
       inputSchema: listJobsInputSchema,
       outputSchema: listJobsOutputSchema,
-      // The only change this tool needed to gain a ChatGPT app: a pointer to
-      // the view that renders its result. The arguments, repository call and
-      // structured content below stay shared with every MCP client.
-      _meta: appViewToolMeta(APPLICATION_LIST_VIEW_URI, APPLICATION_LIST_VIEW_LABELS),
     },
     async (args, ctx) =>
       instrumentToolCall("list_jobs", ctx, async () => {
@@ -281,16 +274,15 @@ export function registerJobTrackTools(
           returned: result.applications.length,
           has_more: result.hasMore,
         };
-        const count = result.applications.length;
-        const text = `${count} application${count === 1 ? "" : "s"} found.`;
 
         return {
-          content: [{ type: "text" as const, text }],
+          content: [
+            {
+              type: "text" as const,
+              text: formatJobList(result.applications, result.hasMore),
+            },
+          ],
           structuredContent: structured,
-          // The view association again, travelling with the payload the host is
-          // about to render. Purely additive: the text block and the structured
-          // content above are what every other client reads, unchanged.
-          _meta: appViewResultMeta(APPLICATION_LIST_VIEW_URI, APPLICATION_LIST_VIEW_LABELS),
         };
       }),
   );
@@ -330,7 +322,7 @@ export function registerJobTrackTools(
           content: [
             {
               type: "text" as const,
-              text: `${result.job.job_title} at ${result.job.company}, status ${result.job.status}.`,
+              text: formatJobDetail(result.job),
             },
           ],
           structuredContent: result.job,
@@ -384,14 +376,18 @@ export function registerJobTrackTools(
           changed_fields: result.changed,
           status_history_recorded: result.statusChanged,
         };
-        const summary = result.changed.length
-          ? result.changed
-              .map((change) => `${change.field} → ${change.to ?? "cleared"}`)
-              .join(", ")
-          : "no fields changed";
 
         return {
-          content: [{ type: "text" as const, text: `Updated: ${summary}.` }],
+          content: [
+            {
+              type: "text" as const,
+              text: formatUpdateConfirmation({
+                title: result.jobTitle,
+                company: result.company,
+                changed: result.changed,
+              }),
+            },
+          ],
           structuredContent: structured,
         };
       }),

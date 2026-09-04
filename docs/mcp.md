@@ -55,7 +55,7 @@ Claude ──1── POST /api/mcp  (no token)
 | `lib/mcp/user.ts` | Reads the verified user id off a request |
 | `lib/supabase/bearer.ts` | Token-scoped Supabase client (no cookies) |
 | `lib/validation/mcp.ts` | Every tool's wire contract and field mapping |
-| `lib/mcp/app-views.ts` | The ChatGPT Apps SDK UI resources — see `docs/chatgpt-app.md` |
+| `lib/mcp/markdown.ts` | The server-built Markdown every tool's `content` block returns — no client-specific UI resource, no `ui://` scheme |
 | `app/api/oauth-protected-resource/route.ts` | RFC 9728 discovery document |
 | `app/oauth/consent/page.tsx` | Consent screen Supabase redirects users to |
 | `lib/oauth/actions.ts` | Approve / deny decision |
@@ -157,6 +157,15 @@ server over *whether* a call happens at all, as opposed to what a tool does
 once it is called, so it is the fix aimed at that specific gap rather than
 at anything measured on this side of the wire.
 
+It also tells the model to treat `save_job`, `import_jobs`, and
+`update_job`'s own Markdown as the finished confirmation rather than a
+prompt to re-check the tracker: no `list_jobs` call before or after a save
+merely to look for duplicates or to show something visual next to the
+confirmation. That guidance is advice, not an enforcement boundary — MCP
+gives a server no way to forbid a client from making a second `tools/call` —
+but there is no `ui://` widget left for such a call to feed into either way;
+see "Removing the ChatGPT widget layer" below.
+
 It stays short deliberately: this text rides along on every turn of the
 conversation, competing for the same attention as everything else the model
 is holding, so each sentence corresponds to one previously-observed
@@ -192,16 +201,21 @@ express would be a field the other quietly stored better.
 | `next_action`, `next_action_due_date` | no | A due date is only kept alongside an action |
 | `company_domain` | no | The employer's canonical domain, e.g. `shopify.com`. Claude fills this in |
 
-It returns structured output as well as its sentence:
-`{ application_id, company, job_title, status, work_term, location }`, so a
-client need not list the tracker again to find what it just created —
-`work_term` and `location` fall back to `null` rather than the internal
-`Not specified` sentinel, matching `list_jobs`'s own records.
+It returns structured output as well as its Markdown:
+`{ application_id, company, job_title, status, category, work_term, location,
+duration, deadline, source, salary, notes }`, so a client need not list the
+tracker again to find what it just created — `work_term`, `location`,
+`duration`, `deadline`, `source`, `salary` and `notes` fall back to `null`
+rather than the internal `Not specified` sentinel or an invented value.
 
-On ChatGPT, `save_job` carries its own compact save-confirmation view — one
-saved job, never a list — so a save has something visual of its own without
-reaching for `list_jobs`. See `docs/chatgpt-app.md` for why, and for the
-regression this exists to close.
+The `content` block is a Markdown confirmation the server itself builds —
+`lib/mcp/markdown.ts`'s `formatSaveConfirmation`, never the model — from
+exactly the fields above: a one-line confirmation sentence, a field table
+that omits any row whose value is absent, an optional "Key details" list
+built from `notes` (capped at four lines, never paraphrased or invented),
+and one factual follow-up line when no deadline was saved. See "Removing the
+ChatGPT widget layer" below for why there is no `ui://` resource here
+anymore, and for the regression a save-specific view once existed to close.
 
 `work_term_season` is a required column that a posting rarely states, so it
 falls back to the same `Not specified` sentinel the web form uses.
@@ -332,11 +346,10 @@ The result also reports `returned` and `has_more`. `has_more` comes from
 fetching one row past the limit and dropping it, so Claude knows to narrow the
 filters without paying for a second counting query.
 
-`list_jobs` also carries a `_meta` pointer to a ChatGPT Apps SDK UI resource, so
-a ChatGPT host renders these records as a native Interndex list rather than as
-text. That is metadata only: the arguments, the repository call, the plain-text
-block and the structured content are unchanged, and a client that ignores
-`_meta` sees exactly the tool described here. See `docs/chatgpt-app.md`.
+`list_jobs`'s `content` block is a compact Markdown table built by
+`formatJobList` — one row per matching application, a count, and a note when
+more matched than were returned — never a `ui://` resource. See "Removing
+the ChatGPT widget layer" below.
 
 Filters are literal, not fuzzy. `company: "RBC"` matches stored text
 containing `RBC`, with `%` and `_` escaped so a name matches itself; it does
@@ -361,6 +374,12 @@ writes, so Claude never has to carry one.
 
 An application belonging to another student returns exactly what a nonexistent
 id returns, because the read is owner-scoped and RLS applies again underneath.
+
+`content` is `formatJobDetail`'s Markdown: a summary sentence, a field table
+of everything short enough for one, and the job description and notes as
+their own sections underneath, in full — a single detail read is exactly
+where a student wants that text complete, unlike the capped, no-full-text
+confirmation `save_job` returns.
 
 ### `update_job`
 
@@ -405,6 +424,52 @@ updateApplication(userId, id, …)   existing conditional write
 The read supplies the real `updated_at`, so the conditional write keeps its
 optimistic-concurrency protection instead of dropping it; on a conflict the
 tool re-reads and retries once, then reports the conflict rather than looping.
+
+`content` is `formatUpdateConfirmation`'s Markdown: a sentence naming the
+application, then a table of only the fields that actually changed, each
+shown as its new value — never the full diff's `from`, and never a value
+that was not actually written.
+
+## Removing the ChatGPT widget layer
+
+Interndex once shipped a ChatGPT Apps SDK UI layer alongside this server: two
+`ui://interndex/…` HTML resources (`lib/mcp/app-views.ts` and
+`lib/mcp/app-views/*`, since deleted), each pointed at by a tool's `_meta`
+(`openai/outputTemplate`, `openai/widgetAccessible`, `openai/widgetCSP`,
+`ui.resourceUri`, `ui.csp`, `ui.domain`). It has been removed entirely: no
+`ui://interndex/…` resource is registered anymore, and no tool definition or
+result carries any of that metadata. Every tool now returns exactly one
+thing — text and structured content, like `get_job` and `update_job` always
+did — and `lib/mcp/markdown.ts` is where that text is built.
+
+**Why.** A widget only renders on a host that recognises its exact MIME type
+and metadata shape, so its correctness could only be checked against a live
+ChatGPT session, never fully from this repository — see this file's git
+history, and the deleted `docs/chatgpt-app.md`, for how much of that
+uncertainty a widget layer carried (unverifiable CSP/domain submission
+requirements, an empty-state card, a second "does the model call `list_jobs`
+anyway" question that no server-side metadata could settle). Plain Markdown
+in `content` needs none of that: any MCP host, ChatGPT included, already
+knows how to show Markdown, so what ships here is what a student sees, with
+no host-specific contract to drift out of sync with.
+
+**What this repository can and cannot guarantee.** It can guarantee the
+Markdown `content` actually returned by each tool — that is exactly what
+`tests/unit/mcp-tool-registration.test.ts` and `tests/unit/mcp-markdown.test.ts`
+assert, over a real `McpServer`. It can guarantee there is no custom widget
+left to render, correctly or otherwise. It cannot guarantee ChatGPT reproduces
+this Markdown's exact wording or typography, because ChatGPT owns final
+rendering of whatever Markdown a tool returns — the same way it owns
+rendering for any other MCP server that returns plain text. That gap is why
+the server-built text is deliberately plain, compact Markdown a host can use
+directly with minimal rewriting, rather than anything relying on a specific
+renderer's quirks.
+
+Local testing:
+
+```bash
+npx vitest run tests/unit/mcp-markdown.test.ts tests/unit/mcp-tool-registration.test.ts
+```
 
 ## How a request reaches the database
 

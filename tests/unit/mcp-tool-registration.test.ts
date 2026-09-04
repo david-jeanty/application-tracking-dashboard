@@ -12,16 +12,6 @@ import type {
   ApplicationListItem,
   ApplicationRecord,
 } from "@/lib/applications/types";
-import { APPLICATION_LIST_VIEW_HTML } from "@/lib/mcp/app-views/application-list-html";
-import { SAVE_CONFIRMATION_VIEW_HTML } from "@/lib/mcp/app-views/save-confirmation-html";
-import {
-  APP_VIEW_MIME_TYPE,
-  APPLICATION_LIST_VIEW_DOMAIN,
-  APPLICATION_LIST_VIEW_URI,
-  MCP_APPS_VIEW_MIME_TYPE,
-  SAVE_CONFIRMATION_VIEW_DOMAIN,
-  SAVE_CONFIRMATION_VIEW_URI,
-} from "@/lib/mcp/app-views";
 import {
   registerJobTrackTools,
   type JobTrackRepositoryFactory,
@@ -474,7 +464,7 @@ describe("list_jobs served by the real server", () => {
       returned: 0,
       has_more: false,
     });
-    expect(result.content[0].text).toBe("0 applications found.");
+    expect(result.content[0].text).toBe("No applications found.");
     await connection.close();
   });
 
@@ -1229,19 +1219,23 @@ describe("save_job reports what it created", () => {
 
     // work_term and location fall back to null, matching list_jobs's own
     // records, rather than the internal "Not specified" sentinel or an
-    // absent field a client would have to special-case.
+    // absent field a client would have to special-case. category always
+    // carries the tool's own determination (default "Other"), which is real
+    // saved data, never an invented value.
     expect(saved.structuredContent).toEqual({
       application_id: MISSING_ID,
       company: "Nokia",
       job_title: "Marketing Student",
       status: "Applied",
+      category: "Other",
       work_term: null,
       location: null,
+      duration: null,
+      deadline: null,
+      source: null,
+      salary: null,
+      notes: null,
     });
-    // The sentence a student reads is unchanged.
-    expect(saved.content[0].text).toBe(
-      "Saved Marketing Student at Nokia with status Applied.",
-    );
     await connection.close();
   });
 
@@ -1276,52 +1270,136 @@ describe("save_job reports what it created", () => {
 
     expect(saved.isError).toBeUndefined();
     expect(saved.structuredContent!.company).toBe("Telus");
+    expect(saved.structuredContent!.salary).toBe("$24/hour");
     await connection.close();
   });
 });
 
-/*
- * The regression this pins: ChatGPT showed a student two existing RBC
- * application cards from the generic list widget above the confirmation of
- * a job that had just saved correctly. `save_job` carries no widget
- * association of its own, so the widget could only have reached that
- * response by ChatGPT separately calling `list_jobs` to put something
- * visual next to a plain-text confirmation. Giving `save_job` its own view
- * removes the reason for that: these tests pin that it renders its own
- * confirmation, never list-shaped data, and never reads the tracker as part
- * of the save itself.
+/**
+ * The canonical Markdown `save_job` returns, over a real MCP server, from a
+ * realistic populated posting — the shape the connector-only rewrite exists
+ * to guarantee: a confirmation sentence, a field table holding only what was
+ * actually saved, a capped "Key details" list built from real notes, and no
+ * deadline follow-up line because a deadline was supplied. See
+ * `tests/unit/mcp-markdown.test.ts` for the formatter's own unit coverage,
+ * including the omitted-fields and capped-notes cases.
  */
-describe("save_job stays confirmation-only", () => {
-  it("attaches its own save-confirmation view, never the application list", async () => {
+describe("save_job returns the canonical Markdown confirmation", () => {
+  it("matches the exact shape for a realistic, fully-populated save", async () => {
     const connection = await connectServer();
 
-    const saveJob = (await connection.listTools()).find(
-      (candidate) => candidate.name === "save_job",
-    );
-    // The descriptor, read once at connection time: `ui.resourceUri` names
-    // save_job's own view.
-    expect(saveJob!._meta?.["openai/outputTemplate"]).toBe(
-      SAVE_CONFIRMATION_VIEW_URI,
-    );
-    expect(saveJob!._meta?.ui).toMatchObject({
-      resourceUri: SAVE_CONFIRMATION_VIEW_URI,
+    const saved = await connection.callTool("save_job", {
+      company: "RBC",
+      job_title: "Business Analyst Intern",
+      status: "Applied",
+      category: "Business Analysis",
+      location: "Toronto, ON",
+      work_term: "Summer 2027",
+      duration: "4 months",
+      deadline: "2026-09-04",
+      source: "LinkedIn",
+      salary: "$22/hour",
+      notes: "Referred by a classmate.\nRecruiter is Jane Smith.",
     });
+
+    expect(saved.content[0].text).toBe(
+      [
+        "Saved **Business Analyst Intern** at **RBC** as **Applied**.",
+        "",
+        "| Field | Value |",
+        "| --- | --- |",
+        "| Company | RBC |",
+        "| Title | Business Analyst Intern |",
+        "| Status | Applied |",
+        "| Category | Business Analysis |",
+        "| Location | Toronto, ON |",
+        "| Work term | Summer 2027 |",
+        "| Duration | 4 months |",
+        "| Deadline | 2026-09-04 |",
+        "| Source | LinkedIn |",
+        "| Salary | $22/hour |",
+        "",
+        "**Key details**",
+        "",
+        "- Referred by a classmate.",
+        "- Recruiter is Jane Smith.",
+      ].join("\n"),
+    );
+    await connection.close();
+  });
+
+  it("omits every row and section whose value was not supplied", async () => {
+    const connection = await connectServer();
 
     const saved = await connection.callTool("save_job", {
       company: "Nokia",
       job_title: "Marketing Student",
     });
 
-    // The result, travelling with the payload the host is about to render.
-    expect(saved._meta?.["openai/outputTemplate"]).toBe(
-      SAVE_CONFIRMATION_VIEW_URI,
+    expect(saved.content[0].text).toBe(
+      [
+        "Saved **Marketing Student** at **Nokia** as **Interested**.",
+        "",
+        "| Field | Value |",
+        "| --- | --- |",
+        "| Company | Nokia |",
+        "| Title | Marketing Student |",
+        "| Status | Interested |",
+        "| Category | Other |",
+        "",
+        "No deadline was listed.",
+      ].join("\n"),
     );
-    expect(saved._meta?.["openai/outputTemplate"]).not.toBe(
-      APPLICATION_LIST_VIEW_URI,
-    );
+    // Nothing invented: no Location, Work term, Duration, Source, Salary row,
+    // and no "Key details" section, because none of those were supplied.
+    expect(saved.content[0].text).not.toContain("Location");
+    expect(saved.content[0].text).not.toContain("Work term");
+    expect(saved.content[0].text).not.toContain("Duration");
+    expect(saved.content[0].text).not.toContain("Source");
+    expect(saved.content[0].text).not.toContain("Salary");
+    expect(saved.content[0].text).not.toContain("Key details");
     await connection.close();
   });
 
+  it("caps notes at four bullets and never invents one", async () => {
+    const connection = await connectServer();
+
+    const saved = await connection.callTool("save_job", {
+      company: "Shopify",
+      job_title: "Product Analyst",
+      notes: [
+        "First note.",
+        "Second note.",
+        "Third note.",
+        "Fourth note.",
+        "Fifth note that must not appear.",
+      ].join("\n"),
+    });
+
+    const text = saved.content[0].text;
+    expect(text).toContain("- First note.");
+    expect(text).toContain("- Fourth note.");
+    expect(text).not.toContain("Fifth note");
+    expect((text.match(/^- /gm) ?? []).length).toBe(4);
+    await connection.close();
+  });
+
+  it("does not dump the full job description into the confirmation", async () => {
+    const connection = await connectServer();
+    const description = "x".repeat(2000);
+
+    const saved = await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
+      job_description: description,
+    });
+
+    expect(saved.content[0].text).not.toContain(description);
+    await connection.close();
+  });
+});
+
+describe("save_job never returns list-shaped data", () => {
   it("never carries list-shaped data — no applications array, ever", async () => {
     const connection = await connectServer();
 
@@ -1335,114 +1413,20 @@ describe("save_job stays confirmation-only", () => {
     expect(saved.structuredContent).not.toHaveProperty("has_more");
     await connection.close();
   });
-});
 
-describe("the save-confirmation view served by the real server", () => {
-  it("is registered as its own resource, distinct from the application list", async () => {
-    const connection = await connectServer();
+  it("never calls listApplications while saving", async () => {
+    const { counting, calls } = countingRepositoryFactory(fakeRepositoryFactory());
+    const connection = await connectServer(counting);
 
-    const resource = (await connection.listResources()).find(
-      (candidate) => candidate.uri === SAVE_CONFIRMATION_VIEW_URI,
-    );
-
-    expect(resource).toBeDefined();
-    expect(resource!.mimeType).toBe(APP_VIEW_MIME_TYPE);
-    await connection.close();
-  });
-
-  it("reads as skybridge first, MCP Apps second, exactly like the list view", async () => {
-    const connection = await connectServer();
-
-    const read = await connection.readResource(SAVE_CONFIRMATION_VIEW_URI);
-
-    expect(read.contents.map((item) => item.mimeType)).toEqual([
-      APP_VIEW_MIME_TYPE,
-      MCP_APPS_VIEW_MIME_TYPE,
-    ]);
-    for (const item of read.contents) {
-      expect(item.text).toBe(SAVE_CONFIRMATION_VIEW_HTML);
-      expect(item.text).toContain("<!doctype html>");
-    }
-    await connection.close();
-  });
-
-  it("carries no markup shaped like the application list", async () => {
-    // The whole point of a separate view: it cannot accidentally render a
-    // list even if a host fed it one, because it has no list markup at all.
-    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("ix-list");
-    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("ix-row");
-    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("No applications match");
-  });
-
-  it("never fetches anything of its own", async () => {
-    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("fetch(");
-    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("XMLHttpRequest");
-    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("/api/");
-    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("supabase");
-  });
-
-  /*
-   * The regression this pins: a ChatGPT connector showed "Widget CSP is not
-   * set" and "Widget domain is not set" for this exact resource, because
-   * `appViewResourceMeta` never declared either at all — an absent key, not
-   * an empty one, and `ui.domain`'s absence is flagged by ChatGPT's connector
-   * UI even though the generic MCP Apps spec calls the field optional. The
-   * declared value is Interndex's real production origin
-   * (`https://www.interndex.dev`), not an invented one — see
-   * lib/mcp/app-views.ts's top-of-file comment. These assert both
-   * declarations reach the wire on every place `_meta` can appear: the
-   * resource listing, and each content item a `resources/read` returns.
-   */
-  it("declares an explicit, empty CSP and a present ui.domain on the resource listing", async () => {
-    const connection = await connectServer();
-
-    const resource = (await connection.listResources()).find(
-      (candidate) => candidate.uri === SAVE_CONFIRMATION_VIEW_URI,
-    );
-
-    expect(resource!._meta?.ui).toMatchObject({
-      csp: { connectDomains: [], resourceDomains: [] },
-      domain: SAVE_CONFIRMATION_VIEW_DOMAIN,
+    await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
     });
-    expect(resource!._meta?.["openai/widgetCSP"]).toEqual({
-      connect_domains: [],
-      resource_domains: [],
-    });
-    await connection.close();
-  });
 
-  it("declares the same CSP and ui.domain on every resources/read content item", async () => {
-    const connection = await connectServer();
-
-    const read = await connection.readResource(SAVE_CONFIRMATION_VIEW_URI);
-
-    for (const item of read.contents) {
-      expect(item._meta?.ui).toMatchObject({
-        csp: { connectDomains: [], resourceDomains: [] },
-        domain: SAVE_CONFIRMATION_VIEW_DOMAIN,
-      });
-      expect(item._meta?.["openai/widgetCSP"]).toEqual({
-        connect_domains: [],
-        resource_domains: [],
-      });
-    }
-    await connection.close();
-  });
-
-  it("declares the same ui.domain as the application-list view", async () => {
-    // Both views are the same app's resources; nothing in OpenAI's
-    // documented example or its own example servers requires distinct
-    // ui.domain values per resource, so both share Interndex's one real
-    // origin rather than an invented per-resource label.
-    const connection = await connectServer();
-
-    const resource = (await connection.listResources()).find(
-      (candidate) => candidate.uri === SAVE_CONFIRMATION_VIEW_URI,
-    );
-
-    expect((resource!._meta?.ui as { domain?: string } | undefined)?.domain).toBe(
-      APPLICATION_LIST_VIEW_DOMAIN,
-    );
+    // The regression this pins: a save must never read the tracker on its
+    // own, which is what would let a stray list read hide inside the save
+    // path itself rather than arriving as a host's own separate call.
+    expect(calls.listApplications).toBe(0);
     await connection.close();
   });
 });
@@ -1498,238 +1482,126 @@ describe("list_jobs advertises that it alone answers date-based questions", () =
 });
 
 /*
- * The ChatGPT Apps SDK contract.
- *
- * These drive the same `registerJobTrackTools` the route serves, over a real
- * MCP server, so what is asserted here is what a host actually reads: a tool
- * that names a view, and a view that resolves. The rest of this file is the
- * other half of the guarantee — `list_jobs` keeps its arguments, its text
- * block, its structured content and its ownership behaviour with the metadata
- * attached.
+ * `list_jobs`'s Markdown, over a real MCP server: a compact table of only
+ * the matching applications, never a UI resource of any kind. This replaces
+ * the ChatGPT Apps SDK widget the tool used to point at.
  */
-describe("Apps SDK view served by the real server", () => {
-  it("binds list_jobs to the view with the key ChatGPT reads", async () => {
-    const connection = await connectServer();
-
-    const tool = (await connection.listTools()).find(
-      (candidate) => candidate.name === "list_jobs",
-    );
-
-    // `openai/outputTemplate` is the association ChatGPT resolves. The MCP
-    // Apps spellings ride alongside; all three must name the same resource.
-    expect(tool!._meta).toMatchObject({
-      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
-      ui: { resourceUri: APPLICATION_LIST_VIEW_URI },
-      "ui/resourceUri": APPLICATION_LIST_VIEW_URI,
-    });
-    // The view renders a result; it may not call back into the tracker.
-    expect(tool!._meta!["openai/widgetAccessible"]).toBe(false);
-    await connection.close();
-  });
-
-  it("labels the tool invocation for the host to show", async () => {
-    const connection = await connectServer();
-
-    const tool = (await connection.listTools()).find(
-      (candidate) => candidate.name === "list_jobs",
-    );
-
-    expect(tool!._meta!["openai/toolInvocation/invoking"]).toBeTypeOf("string");
-    expect(tool!._meta!["openai/toolInvocation/invoked"]).toBeTypeOf("string");
-    await connection.close();
-  });
-
-  it("gives each tool at most its own view, never another tool's", async () => {
-    const connection = await connectServer();
-
-    const templates = new Map(
-      (await connection.listTools()).map((tool) => [
-        tool.name,
-        tool._meta?.["openai/outputTemplate"],
-      ]),
-    );
-
-    expect(templates.get("list_jobs")).toBe(APPLICATION_LIST_VIEW_URI);
-    expect(templates.get("save_job")).toBe(SAVE_CONFIRMATION_VIEW_URI);
-    // import_jobs, get_job and update_job render no widget: nothing points
-    // one of them at either view, or at any view at all.
-    expect(templates.get("import_jobs")).toBeUndefined();
-    expect(templates.get("get_job")).toBeUndefined();
-    expect(templates.get("update_job")).toBeUndefined();
-    await connection.close();
-  });
-
-  it("lists the view as text/html+skybridge", async () => {
-    // The regression this pins: ChatGPT resolves the tool's outputTemplate to
-    // a resource and renders a custom component only when that resource is
-    // `text/html+skybridge`. Advertising the newer MCP Apps profile type here
-    // instead left ChatGPT rendering its default table, with every other part
-    // of the integration working.
-    const connection = await connectServer();
-
-    const resource = (await connection.listResources()).find(
-      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
-    );
-
-    expect(resource).toBeDefined();
-    expect(resource!.mimeType).toBe("text/html+skybridge");
-    expect(resource!.mimeType).toBe(APP_VIEW_MIME_TYPE);
-    await connection.close();
-  });
-
-  it("carries the view association on the resource listing too", async () => {
-    const connection = await connectServer();
-
-    const resource = (await connection.listResources()).find(
-      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
-    );
-
-    expect(resource!._meta).toMatchObject({
-      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
-      ui: { prefersBorder: false },
-    });
-    // A resource's `ui` says how to render the document, not what points at
-    // it — `resourceUri` there would be the tool's spelling in the wrong place.
-    expect(resource!._meta!.ui).not.toHaveProperty("resourceUri");
-    await connection.close();
-  });
-
-  /*
-   * The regression this pins: a live ChatGPT connector showed "Widget CSP is
-   * not set" and "Widget domain is not set" for this exact resource, because
-   * `appViewResourceMeta` never declared either at all. Both CSP spellings a
-   * host might read must reach the wire — the modern `ui.csp` (camelCase) and
-   * the legacy flat `openai/widgetCSP` (snake_case) — with an explicit empty
-   * policy, since this view fetches and loads nothing of its own. `ui.domain`
-   * must also be present, set to Interndex's real production origin
-   * (`https://www.interndex.dev`, the same value the save-confirmation view
-   * declares) — not an invented hostname, and not required to differ between
-   * the two views. See lib/mcp/app-views.ts's top comment for why.
-   */
-  it("declares an explicit, empty CSP and a present ui.domain on the resource listing", async () => {
-    const connection = await connectServer();
-
-    const resource = (await connection.listResources()).find(
-      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
-    );
-
-    expect(resource!._meta?.ui).toMatchObject({
-      csp: { connectDomains: [], resourceDomains: [] },
-      domain: APPLICATION_LIST_VIEW_DOMAIN,
-    });
-    expect(resource!._meta?.["openai/widgetCSP"]).toEqual({
-      connect_domains: [],
-      resource_domains: [],
-    });
-    // Same value as the save-confirmation view's domain: both are the same
-    // app's resources, and nothing in OpenAI's documentation requires
-    // per-resource distinct ui.domain values.
-    expect((resource!._meta?.ui as { domain?: string } | undefined)?.domain).toBe(
-      SAVE_CONFIRMATION_VIEW_DOMAIN,
-    );
-    await connection.close();
-  });
-
-  it("advertises the view as a resource template as well", async () => {
-    const connection = await connectServer();
-
-    const template = (await connection.listResourceTemplates()).find(
-      (candidate) => candidate.uriTemplate === APPLICATION_LIST_VIEW_URI,
-    );
-
-    expect(template).toBeDefined();
-    expect(template!.mimeType).toBe(APP_VIEW_MIME_TYPE);
-    expect(template!._meta).toMatchObject({
-      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
-    });
-    await connection.close();
-  });
-
-  it("lists the view exactly once", async () => {
-    // The template lists nothing of its own, so registering the view twice
-    // does not put it in `resources/list` twice.
-    const connection = await connectServer();
-
-    const matches = (await connection.listResources()).filter(
-      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
-    );
-
-    expect(matches).toHaveLength(1);
-    await connection.close();
-  });
-
-  it("reads the view as skybridge first, MCP Apps second", async () => {
-    const connection = await connectServer();
-
-    const read = await connection.readResource(APPLICATION_LIST_VIEW_URI);
-
-    // Order matters: a host that takes the first content item must get the
-    // type it asked for.
-    expect(read.contents.map((item) => item.mimeType)).toEqual([
-      APP_VIEW_MIME_TYPE,
-      MCP_APPS_VIEW_MIME_TYPE,
-    ]);
-    // One document, offered twice — not two views that could drift apart.
-    for (const item of read.contents) {
-      expect(item.text).toBe(APPLICATION_LIST_VIEW_HTML);
-      expect(item.text).toContain("<!doctype html>");
-      expect(item._meta).toMatchObject({
-        "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
-      });
-      // Declared on every content item a resources/read can return, not only
-      // on the resource listing — a host is entitled to read either.
-      expect(item._meta?.ui).toMatchObject({
-        csp: { connectDomains: [], resourceDomains: [] },
-        domain: APPLICATION_LIST_VIEW_DOMAIN,
-      });
-      expect(item._meta?.["openai/widgetCSP"]).toEqual({
-        connect_domains: [],
-        resource_domains: [],
-      });
-    }
-    await connection.close();
-  });
-
-  it("repeats the view association on the list_jobs result", async () => {
+describe("list_jobs returns plain Markdown, never a widget", () => {
+  it("keeps full list records in structured content, and renders a compact table as text", async () => {
     const connection = await connectServer();
 
     const result = await connection.callTool("list_jobs", {});
 
-    expect(result._meta).toMatchObject({
-      "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
-    });
-    await connection.close();
-  });
-
-  it("keeps full list records in structured content only", async () => {
-    const connection = await connectServer();
-
-    const result = await connection.callTool("list_jobs", {});
-
+    // Sorted newest first: RBC (2026-08-20) before Shopify (2026-08-19), the
+    // two active applications the default archive_state includes.
     expect(result.content).toEqual([
-      { type: "text", text: "2 applications found." },
+      {
+        type: "text",
+        text: [
+          "**2** applications found.",
+          "",
+          "| Company | Title | Status | Work term | Deadline |",
+          "| --- | --- | --- | --- | --- |",
+          "| RBC | Business Analyst | Applied | Summer 2027 | 2026-09-04 |",
+          "| Shopify | Product Analyst | Interested | Fall 2026 | 2026-09-04 |",
+        ].join("\n"),
+      },
     ]);
-    const content = result.content.map((item) => item.text).join("\n");
-    expect(content).not.toContain("RBC");
-    expect(content).not.toContain("Shopify");
-    expect(content).not.toMatch(/^\s*\|?.+\|.+$/m);
     expect(result.structuredContent).toHaveProperty("applications");
     expect(result.structuredContent).toHaveProperty("has_more");
     await connection.close();
   });
 
-  it("serves the view without ever reading a student's applications", async () => {
-    // No auth is passed to `resources/read` here. The document is static, so
-    // it resolves; nothing student-owned can be in it, and the assertion is
-    // that no application text ever appears in the view's body.
+  it("says so in plain text rather than rendering an empty-state widget", async () => {
+    const connection = await connectServer(fakeRepositoryFactory([]));
+
+    const result = await connection.callTool("list_jobs", {});
+
+    expect(result.content).toEqual([
+      { type: "text", text: "No applications found." },
+    ]);
+    await connection.close();
+  });
+
+  it("still works when explicitly requested, and stays text/structured only", async () => {
     const connection = await connectServer();
 
-    const read = await connection.readResource(APPLICATION_LIST_VIEW_URI);
+    const result = await connection.callTool("list_jobs", { company: "RBC" });
 
-    for (const item of read.contents) {
-      expect(item.text).not.toContain("RBC");
-      expect(item.text).not.toContain("Shopify");
-      expect(item.text).not.toContain(STUDENT);
+    expect(result.content[0].text).toContain("RBC");
+    expect(result.content[0].text).not.toContain("Shopify");
+    expect(result.structuredContent).toMatchObject({ returned: 1 });
+    await connection.close();
+  });
+});
+
+/*
+ * The hard guarantee behind this rewrite: no `ui://interndex/…` resource is
+ * registered anymore, and no tool definition or result carries any of the
+ * metadata that once pointed at one. Even if a host calls `list_jobs`
+ * unnecessarily after a save, there is no widget left for it to render.
+ */
+describe("no ChatGPT widget resources or metadata remain", () => {
+  const FORBIDDEN_META_KEYS = [
+    "openai/outputTemplate",
+    "openai/widgetAccessible",
+    "openai/widgetCSP",
+    "ui",
+    "csp",
+    "domain",
+  ];
+
+  it("registers no ui://interndex/... resource — resources/list is not even advertised", async () => {
+    // Every resource this server ever served came from the deleted widget
+    // layer. With nothing registered, `McpServer` does not advertise a
+    // `resources` capability at all, so `resources/list` itself is unknown —
+    // a stronger guarantee than an empty list would be.
+    const connection = await connectServer();
+
+    await expect(connection.listResources()).rejects.toThrow(/method not found/i);
+    await connection.close();
+  });
+
+  it("registers no ui://interndex/... resource template — resources/templates/list is not even advertised", async () => {
+    const connection = await connectServer();
+
+    await expect(connection.listResourceTemplates()).rejects.toThrow(
+      /method not found/i,
+    );
+    await connection.close();
+  });
+
+  it("carries none of the widget _meta keys on any tool definition", async () => {
+    const connection = await connectServer();
+
+    for (const tool of await connection.listTools()) {
+      for (const key of FORBIDDEN_META_KEYS) {
+        expect(tool._meta?.[key]).toBeUndefined();
+      }
+    }
+    await connection.close();
+  });
+
+  it("carries none of the widget _meta keys on any tool result", async () => {
+    const connection = await connectServer();
+
+    const saved = await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
+    });
+    const listed = await connection.callTool("list_jobs", {});
+    const fetched = await connection.callTool("get_job", {
+      application_id: RBC_ID,
+    });
+    const updated = await connection.callTool("update_job", {
+      application_id: SHOPIFY_ID,
+      status: "Applied",
+    });
+
+    for (const result of [saved, listed, fetched, updated]) {
+      for (const key of FORBIDDEN_META_KEYS) {
+        expect(result._meta?.[key]).toBeUndefined();
+      }
     }
     await connection.close();
   });

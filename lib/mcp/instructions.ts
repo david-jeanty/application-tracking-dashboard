@@ -25,6 +25,6 @@ export const MCP_SERVER_INSTRUCTIONS = `Interndex tracks a student's own job-sea
 
 list_jobs already returns status, work term, location, date_applied, and deadline for every application in one call, so it answers "which ones this week" or "since June" style questions by itself — do not call get_job once per application just to check a date or a status already in that list. Call get_job only when you need the full job description, notes, or a field list_jobs does not carry, or right before quoting one of those fields back to the student.
 
-save_job, import_jobs, and update_job already return what changed in their own result. Do not call get_job or list_jobs again immediately afterward just to confirm the write worked — only re-read if the student asks to see the record.
+save_job, import_jobs, and update_job already return what changed in their own result, as ready-to-show Markdown you should use as the final confirmation. Do not call get_job or list_jobs again immediately afterward just to confirm the write worked, to check for duplicates, or to display the tracker — only call list_jobs when the student explicitly asks to browse, search, or review their saved applications.
 
 When list_jobs renders its own list to the student, keep your reply short and do not restate the applications one by one in prose — the rendered list already shows them.`;
