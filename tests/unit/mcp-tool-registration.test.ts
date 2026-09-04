@@ -1378,6 +1378,48 @@ describe("the save-confirmation view served by the real server", () => {
     expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("/api/");
     expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("supabase");
   });
+
+  /*
+   * The regression this pins: a ChatGPT connector showed "Widget CSP is not
+   * set" for this exact resource, because `appViewResourceMeta` never
+   * declared a `csp` block at all — an absent key, not an empty one. These
+   * assert the declaration reaches the wire, under both spellings a host
+   * might read, on every place `_meta` can appear: the resource listing, and
+   * each content item a `resources/read` returns.
+   */
+  it("declares an explicit, empty CSP on the resource listing", async () => {
+    const connection = await connectServer();
+
+    const resource = (await connection.listResources()).find(
+      (candidate) => candidate.uri === SAVE_CONFIRMATION_VIEW_URI,
+    );
+
+    expect(resource!._meta?.ui).toMatchObject({
+      csp: { connectDomains: [], resourceDomains: [] },
+    });
+    expect(resource!._meta?.["openai/widgetCSP"]).toEqual({
+      connect_domains: [],
+      resource_domains: [],
+    });
+    await connection.close();
+  });
+
+  it("declares the same CSP on every resources/read content item", async () => {
+    const connection = await connectServer();
+
+    const read = await connection.readResource(SAVE_CONFIRMATION_VIEW_URI);
+
+    for (const item of read.contents) {
+      expect(item._meta?.ui).toMatchObject({
+        csp: { connectDomains: [], resourceDomains: [] },
+      });
+      expect(item._meta?.["openai/widgetCSP"]).toEqual({
+        connect_domains: [],
+        resource_domains: [],
+      });
+    }
+    await connection.close();
+  });
 });
 
 /**
@@ -1527,6 +1569,34 @@ describe("Apps SDK view served by the real server", () => {
     await connection.close();
   });
 
+  /*
+   * The regression this pins: a ChatGPT connector showed "Widget CSP is not
+   * set" for this exact resource, because `appViewResourceMeta` never
+   * declared a `csp` block at all. Both spellings a host might read must
+   * reach the wire — the modern `ui.csp` (camelCase) and the legacy flat
+   * `openai/widgetCSP` (snake_case) — with an explicit empty policy, since
+   * this view fetches and loads nothing of its own.
+   */
+  it("declares an explicit, empty CSP on the resource listing", async () => {
+    const connection = await connectServer();
+
+    const resource = (await connection.listResources()).find(
+      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
+    );
+
+    expect(resource!._meta?.ui).toMatchObject({
+      csp: { connectDomains: [], resourceDomains: [] },
+    });
+    expect(resource!._meta?.["openai/widgetCSP"]).toEqual({
+      connect_domains: [],
+      resource_domains: [],
+    });
+    // No dedicated sandbox origin is requested either: this view has no
+    // OAuth redirect, CORS-restricted call, or persisted state to stabilize.
+    expect(resource!._meta?.ui).not.toHaveProperty("domain");
+    await connection.close();
+  });
+
   it("advertises the view as a resource template as well", async () => {
     const connection = await connectServer();
 
@@ -1572,6 +1642,15 @@ describe("Apps SDK view served by the real server", () => {
       expect(item.text).toContain("<!doctype html>");
       expect(item._meta).toMatchObject({
         "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+      });
+      // Declared on every content item a resources/read can return, not only
+      // on the resource listing — a host is entitled to read either.
+      expect(item._meta?.ui).toMatchObject({
+        csp: { connectDomains: [], resourceDomains: [] },
+      });
+      expect(item._meta?.["openai/widgetCSP"]).toEqual({
+        connect_domains: [],
+        resource_domains: [],
       });
     }
     await connection.close();
