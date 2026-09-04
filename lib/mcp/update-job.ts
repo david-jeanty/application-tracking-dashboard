@@ -18,6 +18,8 @@ export type UpdateJobOutcome =
   | {
       outcome: "updated";
       applicationId: string;
+      company: string;
+      jobTitle: string;
       changed: FieldChange[];
       statusChanged: boolean;
     }
@@ -160,6 +162,8 @@ export async function runUpdateJob(
       return {
         outcome: "updated",
         applicationId,
+        company: result.application.company_name,
+        jobTitle: result.application.original_job_title,
         changed: diffApplications(before.data, result.application),
         statusChanged:
           before.data.current_status !== result.application.current_status,

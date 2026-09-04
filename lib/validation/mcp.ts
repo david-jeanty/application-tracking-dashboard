@@ -38,14 +38,16 @@ export type SaveJobInput = NewJobRecord;
 /**
  * What `save_job` reports back, so a client need not re-read the record — and
  * need not call `list_jobs` to show the student what was just saved. This is
- * also exactly what the save-confirmation view renders: the whole confirmation
- * a save needs, deliberately containing no other application and no list.
+ * also the machine-readable twin of the Markdown confirmation
+ * `formatSaveConfirmation` builds from the same values (`lib/mcp/markdown.ts`):
+ * one saved job, deliberately containing no other application and no list.
  */
 export const saveJobOutputSchema = z.object({
   application_id: z.string(),
   company: z.string(),
   job_title: z.string(),
   status: z.enum(APPLICATION_STATUSES),
+  category: z.enum(JOB_CATEGORIES),
   work_term: z
     .string()
     .nullable()
@@ -54,6 +56,11 @@ export const saveJobOutputSchema = z.object({
     .string()
     .nullable()
     .describe("The role's location, when it is known."),
+  duration: z.string().nullable(),
+  deadline: z.string().nullable(),
+  source: z.string().nullable(),
+  salary: z.string().nullable(),
+  notes: z.string().nullable(),
 });
 
 export { toApplicationCreationValues };
