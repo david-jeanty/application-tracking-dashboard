@@ -28,6 +28,110 @@ import { SAVE_CONFIRMATION_VIEW_HTML } from "@/lib/mcp/app-views/save-confirmati
  * Apps type rides along as a second content item on each read. One document
  * per view, two labels, no second view to drift.
  *
+ * Every resource also declares its Content Security Policy explicitly —
+ * `connectDomains`/`resourceDomains`, both empty arrays for these two views —
+ * rather than omitting the `csp` block. Omitting it and declaring an empty
+ * allowlist are two different claims: the first says "this view's network
+ * requirements were never stated", the second says "this view was checked and
+ * needs nothing". A ChatGPT connector reads the omission as the former and
+ * shows it as an unresolved "CSP is not set" warning, which is what this file
+ * used to produce. Two independent, working precedents back the exact shape
+ * used here — neither is a blog post or a forum reply:
+ *
+ * - `@modelcontextprotocol/ext-apps` (published by the modelcontextprotocol
+ *   GitHub org, the spec's own org) types `_meta.ui.csp` as
+ *   `{ connectDomains?, resourceDomains?, frameDomains?, baseUriDomains? }`
+ *   and states plainly that "Empty or omitted" both mean no access, but they
+ *   are not equivalent as *declarations* — omitting the field states nothing,
+ *   declaring it empty states a deny-by-default policy. OpenAI's own
+ *   `openai-apps-sdk-examples` repository ships a server
+ *   (`cards_against_ai_server_node`) built on this package that declares
+ *   `resourceDomains: []` explicitly for exactly this reason, in its own
+ *   comment: "no resourceDomains are needed" — stated, not left blank.
+ * - ChatGPT also still reads a second, older flat key,
+ *   `_meta["openai/widgetCSP"]`, with snake_case `connect_domains` /
+ *   `resource_domains` — confirmed by a real, working ChatGPT app example
+ *   (MCPJam's `examples/chatgpt-apps/CoffeeShop`) that declares exactly that
+ *   key on its resource `_meta`, and by MCPJam's own inspector, which
+ *   resolves both spellings against the SEP-1865 MCP Apps CSP proposal with
+ *   the modern nested key taking precedence.
+ *
+ * Both spellings are declared here for the same reason `openai/outputTemplate`
+ * and `ui.resourceUri` both are above: a host is entitled to read either one,
+ * and nothing here lets them diverge — `uiCsp()` and `legacyWidgetCsp()` build
+ * both from one `WidgetCsp` value. `developers.openai.com` could not be
+ * reached to check its prose directly against these two independent,
+ * executable sources; if either turns out to disagree with it, that is worth
+ * re-checking against a live connector, which is the one thing this
+ * repository cannot do for itself.
+ *
+ * Both views also declare `ui.domain` (a *different* MCP Apps field from
+ * `csp`, the one behind ChatGPT's separate "Widget domain is not set"
+ * indicator). Two earlier versions of this file got it wrong in opposite
+ * directions, both worth recording so neither mistake creeps back in:
+ *
+ * - The first left it unset, reasoning that the generic MCP Apps spec
+ *   documents it as optional ("If omitted, host uses default sandbox
+ *   origin" — `@modelcontextprotocol/ext-apps`). True of the spec, not the
+ *   acceptance criterion: ChatGPT's own connector settings show the same
+ *   warning this file exists to clear, and independent developer reports on
+ *   OpenAI's community forum (e.g. "Is widgetDomain required for app
+ *   submission?") describe the identical discrepancy — the reference docs
+ *   call the field optional while the submission/connector UI flags it.
+ * - The second declared it, but as an invented `*.oaiusercontent.com`
+ *   subdomain. That pattern comes from `@modelcontextprotocol/ext-apps`'s own
+ *   doc comment, which lists "URL-derived subdomains (e.g.
+ *   `www-example-com.oaiusercontent.com`)" only as one unattributed *example*
+ *   of what some host might do, immediately preceded by "the format and
+ *   validation rules for this field are determined by each host — servers
+ *   MUST consult host-specific documentation." `oaiusercontent.com` is not
+ *   Interndex's to declare: it is OpenAI's own infrastructure domain, and
+ *   ChatGPT already uses it automatically — independent evidence confirms
+ *   ChatGPT serves widgets by default from `https://web-sandbox
+ *   .oaiusercontent.com` when no `ui.domain` is set. Declaring a
+ *   `*.oaiusercontent.com` value would have asserted ownership of a domain
+ *   Interndex does not control.
+ *
+ * ChatGPT's own documentation is the host-specific source `ext-apps` says to
+ * consult — `developers.openai.com/plugins/build/chatgpt-ui`, "Add UI to
+ * your MCP server" — and its resource-registration example shows the shape
+ * directly: `domain: "https://example.com"`, the app's own absolute HTTPS
+ * origin, not a host-derived subdomain. (This repository's session could not
+ * fetch `developers.openai.com` directly — blocked by this environment's own
+ * network egress policy, not a transient failure — so that example is
+ * corroborated two other ways instead: independent search results reproduce
+ * the same code sample verbatim, and OpenAI's own `openai-apps-sdk-examples`
+ * repository, read directly from GitHub, never declares `ui.domain` on any
+ * example server — including `cards_against_ai_server_node`, the one already
+ * cited above for the CSP precedent — consistent with the field being
+ * genuinely optional at the protocol level while still being flagged by
+ * ChatGPT's own connector UI.)
+ *
+ * So the value declared here is `https://www.interndex.dev` — the one origin
+ * every Interndex MCP resource is already served from, the same one
+ * `NEXT_PUBLIC_SITE_URL` names in production — for both views, unchanged.
+ * Nothing is invented: no new hostname, no DNS record, no OpenAI-owned domain
+ * asserted as Interndex's. Nothing in OpenAI's documented example or in its
+ * own example servers suggests two resources of the same app need distinct
+ * `ui.domain` values; the earlier claim that they must differ came from a
+ * third-party readiness checker's heuristic, not from any OpenAI-published
+ * source, and is retracted along with the invented subdomains.
+ *
+ * There is no confirmed flat legacy alias for this field (unlike `csp`'s
+ * `openai/widgetCSP`): `openai/widgetDomain` does not appear anywhere in
+ * `openai-apps-sdk-examples` or in `@modelcontextprotocol/ext-apps`, checked
+ * directly rather than inferred.
+ *
+ * What remains genuinely unverified, and is not resolved by any source
+ * available to this repository: whether declaring `https://www.interndex.dev`
+ * is sufficient to satisfy ChatGPT's live app-submission validator, as
+ * opposed to merely being the correctly-shaped, documentation-backed value
+ * the reference example itself demonstrates. The gap between "the reference
+ * docs call this optional" and "the connector UI / submission checklist flags
+ * it" is real and independently reported, and this repository cannot close it
+ * from documentation alone — see `docs/chatgpt-app.md` for how that is
+ * tracked.
+ *
  * There are two views, one per tool that needs a visual result:
  *
  * - `list_jobs` points at the application-list view, unchanged from before.
@@ -97,6 +201,79 @@ export const SAVE_CONFIRMATION_VIEW_LABELS: AppViewLabels = {
 };
 
 /**
+ * One view's Content Security Policy, in the vocabulary this file's callers
+ * use — the MCP Apps / `@modelcontextprotocol/ext-apps` names. `widgetCsp()`
+ * translates this into both wire spellings, so a caller states a view's
+ * network requirements exactly once regardless of which spelling a host
+ * reads.
+ */
+export type WidgetCsp = {
+  /** Origins the view's own script may `fetch`/`XHR`/open a WebSocket to. */
+  connectDomains: readonly string[];
+  /** Origins the view may load a script, style, font, image or media from. */
+  resourceDomains: readonly string[];
+};
+
+/**
+ * Both Interndex views today: no `fetch`, no `<img src="https://…">`, no
+ * `<script src>`, no external stylesheet or font. `registerInterndexAppViews`
+ * passes this to both `registerView` calls below, and
+ * `tests/unit/mcp-widget-csp.test.ts` greps each view's actual HTML for the
+ * patterns that would require widening it, so this cannot silently go stale
+ * if a future change adds one.
+ */
+export const NO_EXTERNAL_DOMAINS: WidgetCsp = {
+  connectDomains: [],
+  resourceDomains: [],
+};
+
+/**
+ * The `_meta["openai/widgetCSP"]` key ChatGPT's own indicator reads, kept as
+ * its own constant because its field names — snake_case — differ from the
+ * MCP Apps spelling `ui.csp` uses, even though the values are the same.
+ */
+export const LEGACY_WIDGET_CSP_META_KEY = "openai/widgetCSP";
+
+/** `ui.csp` (MCP Apps / SEP-1865): domains, camelCase, nested under `ui`. */
+function uiCsp(csp: WidgetCsp) {
+  return {
+    connectDomains: [...csp.connectDomains],
+    resourceDomains: [...csp.resourceDomains],
+  } as const;
+}
+
+/** `openai/widgetCSP` (the older flat ChatGPT key): same domains, snake_case. */
+function legacyWidgetCsp(csp: WidgetCsp) {
+  return {
+    connect_domains: [...csp.connectDomains],
+    resource_domains: [...csp.resourceDomains],
+  } as const;
+}
+
+/**
+ * The stable, already-deployed origin every Interndex MCP resource is served
+ * from — the same one `NEXT_PUBLIC_SITE_URL` names in production
+ * (`docs/mcp.md`'s deployment setup). Declared as `ui.domain` for both views
+ * below: an absolute HTTPS origin, exactly the shape
+ * `developers.openai.com/plugins/build/chatgpt-ui`'s own resource
+ * registration example uses (`domain: "https://example.com"`) — applied to
+ * the app's real domain, not the documentation's placeholder one, and never a
+ * preview URL or an invented hostname.
+ */
+export const INTERNDEX_WIDGET_DOMAIN = "https://www.interndex.dev";
+
+/**
+ * `ui.domain` for the application-list view. Same value as
+ * `SAVE_CONFIRMATION_VIEW_DOMAIN` — see this file's top comment for why
+ * nothing in OpenAI's documentation or its own example servers requires two
+ * resources of one app to declare distinct values.
+ */
+export const APPLICATION_LIST_VIEW_DOMAIN = INTERNDEX_WIDGET_DOMAIN;
+
+/** `ui.domain` for the save-confirmation view. See `APPLICATION_LIST_VIEW_DOMAIN`. */
+export const SAVE_CONFIRMATION_VIEW_DOMAIN = INTERNDEX_WIDGET_DOMAIN;
+
+/**
  * The `_meta` that associates a tool with a UI resource.
  *
  * Three spellings of one fact — the Apps SDK's `openai/outputTemplate`, the
@@ -130,14 +307,28 @@ export function appViewToolMeta(resourceUri: string, labels: AppViewLabels) {
  *
  * `ui.prefersBorder` is the MCP Apps half, and false because each view draws
  * its own hairline and rounded corners; a host frame around that is a border
- * inside a border. No `csp` block is declared because neither document loads
- * anything at all — no script, style, font or image leaves its own origin.
+ * inside a border.
+ *
+ * `csp` is required here, not optional, precisely so a future view cannot be
+ * registered without its author stating what it needs — see this file's
+ * top-of-file comment for why an explicit empty policy is not the same
+ * declaration as no policy at all. `domain` is required for the same reason:
+ * ChatGPT's connector UI flags its absence even though the generic MCP Apps
+ * spec calls it optional — see the top-of-file comment on `ui.domain` for
+ * what the declared value is, why it is not invented, and what about this
+ * remains unverified. There is no flat legacy alias to repeat it under; see
+ * that same comment for why one is not added.
  */
-export function appViewResourceMeta(resourceUri: string) {
+export function appViewResourceMeta(
+  resourceUri: string,
+  csp: WidgetCsp,
+  domain: string,
+) {
   return {
     [OUTPUT_TEMPLATE_META_KEY]: resourceUri,
     "openai/widgetAccessible": false,
-    ui: { prefersBorder: false },
+    [LEGACY_WIDGET_CSP_META_KEY]: legacyWidgetCsp(csp),
+    ui: { prefersBorder: false, csp: uiCsp(csp), domain },
   } as const;
 }
 
@@ -164,19 +355,19 @@ const SAVE_CONFIRMATION_VIEW_DESCRIPTION =
   "Renders the single application save_job just created — never a list, and never any other saved application.";
 
 /** One document, offered under both MIME types. ChatGPT's comes first. */
-function viewContents(uri: string, html: string) {
+function viewContents(uri: string, html: string, csp: WidgetCsp, domain: string) {
   return [
     {
       uri,
       mimeType: APP_VIEW_MIME_TYPE,
       text: html,
-      _meta: appViewResourceMeta(uri),
+      _meta: appViewResourceMeta(uri, csp, domain),
     },
     {
       uri,
       mimeType: MCP_APPS_VIEW_MIME_TYPE,
       text: html,
-      _meta: appViewResourceMeta(uri),
+      _meta: appViewResourceMeta(uri, csp, domain),
     },
   ];
 }
@@ -198,6 +389,8 @@ function registerView(
   uri: string,
   description: string,
   html: string,
+  csp: WidgetCsp,
+  domain: string,
 ): void {
   server.registerResource(
     name,
@@ -206,9 +399,9 @@ function registerView(
       title: name,
       description,
       mimeType: APP_VIEW_MIME_TYPE,
-      _meta: appViewResourceMeta(uri),
+      _meta: appViewResourceMeta(uri, csp, domain),
     },
-    async () => ({ contents: viewContents(uri, html) }),
+    async () => ({ contents: viewContents(uri, html, csp, domain) }),
   );
 
   server.registerResource(
@@ -218,9 +411,9 @@ function registerView(
       title: name,
       description,
       mimeType: APP_VIEW_MIME_TYPE,
-      _meta: appViewResourceMeta(uri),
+      _meta: appViewResourceMeta(uri, csp, domain),
     },
-    async () => ({ contents: viewContents(uri, html) }),
+    async () => ({ contents: viewContents(uri, html, csp, domain) }),
   );
 }
 
@@ -238,6 +431,8 @@ export function registerInterndexAppViews(server: McpServer): void {
     APPLICATION_LIST_VIEW_URI,
     APPLICATION_LIST_VIEW_DESCRIPTION,
     APPLICATION_LIST_VIEW_HTML,
+    NO_EXTERNAL_DOMAINS,
+    APPLICATION_LIST_VIEW_DOMAIN,
   );
   registerView(
     server,
@@ -245,5 +440,7 @@ export function registerInterndexAppViews(server: McpServer): void {
     SAVE_CONFIRMATION_VIEW_URI,
     SAVE_CONFIRMATION_VIEW_DESCRIPTION,
     SAVE_CONFIRMATION_VIEW_HTML,
+    NO_EXTERNAL_DOMAINS,
+    SAVE_CONFIRMATION_VIEW_DOMAIN,
   );
 }

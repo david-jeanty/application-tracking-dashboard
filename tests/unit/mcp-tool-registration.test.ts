@@ -16,8 +16,10 @@ import { APPLICATION_LIST_VIEW_HTML } from "@/lib/mcp/app-views/application-list
 import { SAVE_CONFIRMATION_VIEW_HTML } from "@/lib/mcp/app-views/save-confirmation-html";
 import {
   APP_VIEW_MIME_TYPE,
+  APPLICATION_LIST_VIEW_DOMAIN,
   APPLICATION_LIST_VIEW_URI,
   MCP_APPS_VIEW_MIME_TYPE,
+  SAVE_CONFIRMATION_VIEW_DOMAIN,
   SAVE_CONFIRMATION_VIEW_URI,
 } from "@/lib/mcp/app-views";
 import {
@@ -1378,6 +1380,71 @@ describe("the save-confirmation view served by the real server", () => {
     expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("/api/");
     expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("supabase");
   });
+
+  /*
+   * The regression this pins: a ChatGPT connector showed "Widget CSP is not
+   * set" and "Widget domain is not set" for this exact resource, because
+   * `appViewResourceMeta` never declared either at all — an absent key, not
+   * an empty one, and `ui.domain`'s absence is flagged by ChatGPT's connector
+   * UI even though the generic MCP Apps spec calls the field optional. The
+   * declared value is Interndex's real production origin
+   * (`https://www.interndex.dev`), not an invented one — see
+   * lib/mcp/app-views.ts's top-of-file comment. These assert both
+   * declarations reach the wire on every place `_meta` can appear: the
+   * resource listing, and each content item a `resources/read` returns.
+   */
+  it("declares an explicit, empty CSP and a present ui.domain on the resource listing", async () => {
+    const connection = await connectServer();
+
+    const resource = (await connection.listResources()).find(
+      (candidate) => candidate.uri === SAVE_CONFIRMATION_VIEW_URI,
+    );
+
+    expect(resource!._meta?.ui).toMatchObject({
+      csp: { connectDomains: [], resourceDomains: [] },
+      domain: SAVE_CONFIRMATION_VIEW_DOMAIN,
+    });
+    expect(resource!._meta?.["openai/widgetCSP"]).toEqual({
+      connect_domains: [],
+      resource_domains: [],
+    });
+    await connection.close();
+  });
+
+  it("declares the same CSP and ui.domain on every resources/read content item", async () => {
+    const connection = await connectServer();
+
+    const read = await connection.readResource(SAVE_CONFIRMATION_VIEW_URI);
+
+    for (const item of read.contents) {
+      expect(item._meta?.ui).toMatchObject({
+        csp: { connectDomains: [], resourceDomains: [] },
+        domain: SAVE_CONFIRMATION_VIEW_DOMAIN,
+      });
+      expect(item._meta?.["openai/widgetCSP"]).toEqual({
+        connect_domains: [],
+        resource_domains: [],
+      });
+    }
+    await connection.close();
+  });
+
+  it("declares the same ui.domain as the application-list view", async () => {
+    // Both views are the same app's resources; nothing in OpenAI's
+    // documented example or its own example servers requires distinct
+    // ui.domain values per resource, so both share Interndex's one real
+    // origin rather than an invented per-resource label.
+    const connection = await connectServer();
+
+    const resource = (await connection.listResources()).find(
+      (candidate) => candidate.uri === SAVE_CONFIRMATION_VIEW_URI,
+    );
+
+    expect((resource!._meta?.ui as { domain?: string } | undefined)?.domain).toBe(
+      APPLICATION_LIST_VIEW_DOMAIN,
+    );
+    await connection.close();
+  });
 });
 
 /**
@@ -1527,6 +1594,42 @@ describe("Apps SDK view served by the real server", () => {
     await connection.close();
   });
 
+  /*
+   * The regression this pins: a live ChatGPT connector showed "Widget CSP is
+   * not set" and "Widget domain is not set" for this exact resource, because
+   * `appViewResourceMeta` never declared either at all. Both CSP spellings a
+   * host might read must reach the wire — the modern `ui.csp` (camelCase) and
+   * the legacy flat `openai/widgetCSP` (snake_case) — with an explicit empty
+   * policy, since this view fetches and loads nothing of its own. `ui.domain`
+   * must also be present, set to Interndex's real production origin
+   * (`https://www.interndex.dev`, the same value the save-confirmation view
+   * declares) — not an invented hostname, and not required to differ between
+   * the two views. See lib/mcp/app-views.ts's top comment for why.
+   */
+  it("declares an explicit, empty CSP and a present ui.domain on the resource listing", async () => {
+    const connection = await connectServer();
+
+    const resource = (await connection.listResources()).find(
+      (candidate) => candidate.uri === APPLICATION_LIST_VIEW_URI,
+    );
+
+    expect(resource!._meta?.ui).toMatchObject({
+      csp: { connectDomains: [], resourceDomains: [] },
+      domain: APPLICATION_LIST_VIEW_DOMAIN,
+    });
+    expect(resource!._meta?.["openai/widgetCSP"]).toEqual({
+      connect_domains: [],
+      resource_domains: [],
+    });
+    // Same value as the save-confirmation view's domain: both are the same
+    // app's resources, and nothing in OpenAI's documentation requires
+    // per-resource distinct ui.domain values.
+    expect((resource!._meta?.ui as { domain?: string } | undefined)?.domain).toBe(
+      SAVE_CONFIRMATION_VIEW_DOMAIN,
+    );
+    await connection.close();
+  });
+
   it("advertises the view as a resource template as well", async () => {
     const connection = await connectServer();
 
@@ -1572,6 +1675,16 @@ describe("Apps SDK view served by the real server", () => {
       expect(item.text).toContain("<!doctype html>");
       expect(item._meta).toMatchObject({
         "openai/outputTemplate": APPLICATION_LIST_VIEW_URI,
+      });
+      // Declared on every content item a resources/read can return, not only
+      // on the resource listing — a host is entitled to read either.
+      expect(item._meta?.ui).toMatchObject({
+        csp: { connectDomains: [], resourceDomains: [] },
+        domain: APPLICATION_LIST_VIEW_DOMAIN,
+      });
+      expect(item._meta?.["openai/widgetCSP"]).toEqual({
+        connect_domains: [],
+        resource_domains: [],
       });
     }
     await connection.close();
