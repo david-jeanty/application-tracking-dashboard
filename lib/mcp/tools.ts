@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/server";
+import { displayOptionalText } from "@/lib/applications/mapper";
 import type {
   ApplicationListFilters,
   ApplicationUpdateResult,
@@ -9,10 +10,13 @@ import type {
   ApplicationRecord,
 } from "@/lib/applications/types";
 import {
+  APPLICATION_LIST_VIEW_LABELS,
   APPLICATION_LIST_VIEW_URI,
   appViewResultMeta,
   appViewToolMeta,
   registerInterndexAppViews,
+  SAVE_CONFIRMATION_VIEW_LABELS,
+  SAVE_CONFIRMATION_VIEW_URI,
 } from "@/lib/mcp/app-views";
 import { runGetJob } from "@/lib/mcp/get-job";
 import { runImportJobs } from "@/lib/mcp/import-jobs";
@@ -116,6 +120,16 @@ export function registerJobTrackTools(
         "Saves a job to the student's application tracker. Use this when they share a job posting and want it recorded, or say they have applied somewhere. Pass the full job description verbatim when it is available so they can reread it later. Fill in company_domain with the employer's own website whenever you can identify the employer, so the saved application shows its logo without the student having to ask for it.",
       inputSchema: saveJobInputSchema,
       outputSchema: saveJobOutputSchema,
+      // save_job gets its own compact, single-record view rather than sharing
+      // list_jobs's. A save that renders nothing of its own is a save that
+      // invites a host — or the model driving it — to reach for the one tool
+      // that does render something, which is how a plain-text confirmation
+      // ended up displaying somebody's whole tracker above it. See
+      // `lib/mcp/app-views/save-confirmation-html.ts`.
+      _meta: appViewToolMeta(
+        SAVE_CONFIRMATION_VIEW_URI,
+        SAVE_CONFIRMATION_VIEW_LABELS,
+      ),
     },
     async (args, ctx) =>
       instrumentToolCall("save_job", ctx, async () => {
@@ -152,7 +166,9 @@ export function registerJobTrackTools(
 
         // The sentence a student reads, and the same facts as data for a client
         // that would otherwise have to list the tracker again to find the id it
-        // just created. No ownership column is in either.
+        // just created. No ownership column is in either. work_term and
+        // location fall back to null rather than the internal "Not specified"
+        // sentinel, exactly as list_jobs's own records do.
         return {
           content: [
             {
@@ -165,7 +181,15 @@ export function registerJobTrackTools(
             company: parsed.data.companyName,
             job_title: parsed.data.originalJobTitle,
             status: parsed.data.currentStatus,
+            work_term: displayOptionalText(parsed.data.workTermSeason),
+            location: displayOptionalText(parsed.data.location),
           },
+          // The view association again, travelling with the payload the host
+          // is about to render — a single saved job, never a list.
+          _meta: appViewResultMeta(
+            SAVE_CONFIRMATION_VIEW_URI,
+            SAVE_CONFIRMATION_VIEW_LABELS,
+          ),
         };
       }),
   );
@@ -232,7 +256,7 @@ export function registerJobTrackTools(
       // The only change this tool needed to gain a ChatGPT app: a pointer to
       // the view that renders its result. The arguments, repository call and
       // structured content below stay shared with every MCP client.
-      _meta: appViewToolMeta(APPLICATION_LIST_VIEW_URI),
+      _meta: appViewToolMeta(APPLICATION_LIST_VIEW_URI, APPLICATION_LIST_VIEW_LABELS),
     },
     async (args, ctx) =>
       instrumentToolCall("list_jobs", ctx, async () => {
@@ -266,7 +290,7 @@ export function registerJobTrackTools(
           // The view association again, travelling with the payload the host is
           // about to render. Purely additive: the text block and the structured
           // content above are what every other client reads, unchanged.
-          _meta: appViewResultMeta(APPLICATION_LIST_VIEW_URI),
+          _meta: appViewResultMeta(APPLICATION_LIST_VIEW_URI, APPLICATION_LIST_VIEW_LABELS),
         };
       }),
   );
