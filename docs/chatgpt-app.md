@@ -298,18 +298,79 @@ connector still disagrees with either spelling after this change ships, that
 is the next thing to check, and the one verification this repository cannot
 perform on itself — see the acceptance checklist below.
 
-**`Widget domain is not set` is expected to remain, and that is correct.**
-It reports a *different* MCP Apps field, `_meta.ui.domain` — a request for a
-dedicated, stable sandbox origin, useful for a view that needs one for an
-OAuth redirect target, a CORS-restricted API call, or browser storage keyed
-to one origin. Neither Interndex view calls a network API, opens a link, or
-persists anything at all, so there is nothing to stabilize; the spec's own
-default behaviour — "host uses default sandbox origin" — is already correct.
-Inventing a hostname (a new DNS record, a temporary Vercel preview URL, or
-anything else) to make that indicator disappear would be declaring a need
-that does not exist. `tests/unit/mcp-widget-csp.test.ts` pins the omission
-so nobody adds one later without updating that test and explaining why it
-has become necessary.
+**`Widget domain is not set` — this repository's first answer was wrong, and
+it is now fixed.** The first pass at this reasoned from the generic MCP Apps
+spec alone: `_meta.ui.domain` is documented there as optional, useful only
+for a view with an OAuth redirect, a CORS-restricted call, or origin-keyed
+storage, none of which either Interndex view does, so omitting it looked
+correct. That conflates two different questions. **"Does this view have a
+technical need for a stable sandbox origin right now"** is still correctly
+"no" for both views, unchanged by anything below — neither fetches, opens a
+link, or persists anything, so nothing about their *runtime behavior*
+requires this field. But **"does ChatGPT require this field to be declared
+for app submission"** is a separate question with a separate, stricter
+answer: yes. A third-party OpenAI-submission readiness checker
+(independent of this repository, built to grade servers against OpenAI's own
+published policy references) classifies a UI resource with no `_meta.ui.domain`
+as a submission blocker, and requires every declared value to be unique
+per resource — a live Interndex connector's own settings page said the same
+thing directly. The platform's stated submission requirement is the
+acceptance criterion, not the generic spec's looser default-case framing, and
+this file's earlier version answered the wrong question.
+
+Both views now declare `ui.domain`, derived from the one already-stable,
+already-deployed canonical origin, never an invented hostname:
+
+| View | `ui.domain` |
+|---|---|
+| `ui://interndex/application-list.html` | `application-list.www-interndex-dev.oaiusercontent.com` |
+| `ui://interndex/save-confirmation.html` | `save-confirmation.www-interndex-dev.oaiusercontent.com` |
+
+The value follows the exact "URL-derived subdomain" pattern
+`@modelcontextprotocol/ext-apps`'s own reference documents as ChatGPT's
+convention (`www-example-com.oaiusercontent.com` for `https://www.example.com`
+in its worked example): dots in `www.interndex.dev` become dashes, and
+`.oaiusercontent.com` — OpenAI's own asset domain, not Interndex's — is
+appended, with the resource's own slug prefixed so the two views get distinct
+values. Interndex hosts nothing at that address and is not asked to prove
+ownership of it: the string identifies which sandbox origin ChatGPT should key
+the view to, the same way Claude keys its own equivalent on
+`sha256(<connector URL>)[:32] + ".claudemcpcontent.com"` — a value *it*
+computes, not one a server invents. **No new DNS record and no Vercel preview
+URL were introduced**; `tests/unit/mcp-widget-csp.test.ts` pins both the
+literal values and that neither contains `vercel.app` or `localhost`.
+
+Two things this fix does not have primary-source confirmation for, stated
+plainly rather than glossed over:
+
+- **The exact per-resource algorithm.** No source found gives ChatGPT's domain
+  derivation the way Claude's sha256 rule is documented — "a per-plugin
+  label" is the most specific description located. The value above is a
+  documented *pattern* applied to Interndex's own real origin, not a value
+  confirmed byte-for-byte against a live ChatGPT backend. If a live
+  connector's submission check rejects this exact shape, only the two
+  constants in `lib/mcp/app-views.ts` need to change — presence and
+  per-resource uniqueness are the confirmed requirements, not this literal
+  string.
+- **No flat legacy alias is declared for `domain`**, unlike `csp`'s
+  `openai/widgetCSP`. The one sighting of a name like that, `openai/widgetDomain`,
+  is recorded as *unsupported* in a third-party host-compatibility catalog,
+  for a different MCP-Apps-compatible client — not confirmed as something
+  ChatGPT reads. Adding an alias nothing reads would be exactly the kind of
+  unverified addition this fix is trying to avoid.
+
+**A cross-host trade-off worth knowing before this ships**: `_meta` is one
+wire payload both Claude and ChatGPT read from the same resource. Claude's own
+readiness tooling treats a *present* `ui.domain` as required to exactly equal
+its own sha256-based value when one is declared at all — a value chosen for
+ChatGPT's convention will not match that. Neither Interndex widget needs a
+stable origin for Claude either (no OAuth, no CORS, no origin-keyed storage),
+so this is not expected to break rendering for Claude — worst case it is a
+readiness-linter nitpick, not a broken widget, because Claude computes and
+uses its own sandbox origin regardless of what is declared. It is called out
+here rather than silently accepted because it is a real trade-off, not a
+non-issue: `docs/mcp.md` still describes Claude as this server's original MCP
+client.
 
 ## Local testing
 
@@ -390,6 +451,24 @@ The literals they would have supplied are pinned by tests instead.
   MCP Apps `postMessage` handshake. Whether a given ChatGPT build then chooses
   to render either, and whether the model still reaches for `list_jobs`
   anyway, can only be confirmed against a live connector.
+- **`ui.domain`'s exact value is a documented pattern, not a confirmed
+  algorithm.** Its presence and per-resource uniqueness are required by
+  ChatGPT's own submission checklist, confirmed independently of this
+  repository. The literal string each view declares follows OpenAI's own
+  worked example of the derivation pattern, applied to Interndex's real
+  canonical origin — but no source gives the exact per-resource algorithm the
+  way Claude's `sha256(<connector URL>)` rule is documented, so only a live
+  connector can confirm ChatGPT accepts this specific shape. See "Widget CSP
+  and domain metadata" above.
+- **Declaring `ui.domain` for ChatGPT may not match what Claude computes for
+  the same resource.** The same `_meta` is read by both hosts, and Claude's
+  own readiness tooling requires a *declared* `ui.domain` to exactly equal its
+  own sha256-based value or be absent — a value chosen for ChatGPT's
+  convention will not match Claude's computation. Neither Interndex widget
+  needs a stable origin for Claude either, so this is not expected to break
+  rendering there (Claude uses its own computed sandbox origin regardless of
+  what is declared), but it is a real trade-off between the two hosts' stated
+  requirements, not a non-issue.
 - **Theme follows the host.** `hostContext.theme` and `prefers-color-scheme`
   are honoured; the student's chosen Interndex accent is not, because neither
   view reads their settings.
@@ -454,16 +533,19 @@ and company-domain inference too.
    rather than reusing a cached view of its resources, then open its
    connector settings for both `ui://interndex/application-list.html` and
    `ui://interndex/save-confirmation.html`.
-   - **Expected:** `Widget CSP` reads as declared/set (an explicit empty
-     policy), not `is not set`, and the shell's `CSP off` indicator should be
-     gone or reworded to reflect a declared-but-empty policy. `Widget domain`
-     is expected to still read `is not set` — see "Widget CSP and domain
-     metadata" above for why that one is correct as-is. If `Widget CSP` still
-     shows `is not set` after a genuine refresh, that means ChatGPT's
-     production host is reading a third metadata shape neither
-     `@modelcontextprotocol/ext-apps` nor the working examples this change is
-     based on use — worth reporting back precisely, rather than guessing at
-     a fourth spelling.
+   - **Expected:** both `Widget CSP` and `Widget domain` read as declared/set
+     (an explicit empty CSP policy, and the derived `*.oaiusercontent.com`
+     value respectively — not literal domains anyone can browse to, but
+     present, non-empty values), and the shell's `CSP off` indicator should be
+     gone or reworded. See "Widget CSP and domain metadata" above for exactly
+     what each value is and why. If either still reads `is not set` after a
+     genuine refresh, that is the one thing this repository could not verify
+     for itself — see that section's own note on which parts are confirmed
+     (the field names, and that presence/uniqueness is required) versus best-effort
+     (`ui.domain`'s exact per-resource value, since no source gave a
+     ChatGPT-specific derivation algorithm the way Claude's sha256 rule is
+     documented). Report back precisely which indicator persisted rather than
+     guessing at a fourth spelling.
 2. Paste a full job posting — company, title, location, work term, and a
    multi-paragraph description — and say "add this to my tracker."
    - **Expected tool sequence:** exactly one `tools/call`, to `save_job`. No
