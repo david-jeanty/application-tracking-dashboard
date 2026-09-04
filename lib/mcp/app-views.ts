@@ -1,5 +1,6 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/server";
 import { APPLICATION_LIST_VIEW_HTML } from "@/lib/mcp/app-views/application-list-html";
+import { SAVE_CONFIRMATION_VIEW_HTML } from "@/lib/mcp/app-views/save-confirmation-html";
 
 /**
  * The ChatGPT Apps SDK layer, expressed as metadata on the MCP server we
@@ -10,7 +11,7 @@ import { APPLICATION_LIST_VIEW_HTML } from "@/lib/mcp/app-views/application-list
  * document, and a `_meta` pointer on a tool saying "render my result in that
  * document". Everything else — authentication, the repository, row-level
  * security, the tool's own arguments and output — is untouched, which is why
- * this file registers a resource and builds metadata objects and does nothing
+ * this file registers resources and builds metadata objects and does nothing
  * else. There is no query in it and no Supabase client in it.
  *
  * Two host contracts exist for that association and they disagree on the MIME
@@ -23,9 +24,19 @@ import { APPLICATION_LIST_VIEW_HTML } from "@/lib/mcp/app-views/application-list
  * server most resembles — uses the Skybridge type on the resource listing, the
  * resource-template listing and the read result alike.
  *
- * So the Skybridge type is what this resource advertises, and the MCP Apps
- * type rides along as a second content item on the read. One document, two
- * labels, no second view to drift.
+ * So the Skybridge type is what every resource here advertises, and the MCP
+ * Apps type rides along as a second content item on each read. One document
+ * per view, two labels, no second view to drift.
+ *
+ * There are two views, one per tool that needs a visual result:
+ *
+ * - `list_jobs` points at the application-list view, unchanged from before.
+ * - `save_job` points at its own, separate save-confirmation view — a single
+ *   record, never a list. It exists precisely so a save has something visual
+ *   of its own, removing the reason ChatGPT's own orchestration was observed
+ *   reaching for `list_jobs` after (or before) a save just to put something
+ *   visual next to a plain-text confirmation. See
+ *   `lib/mcp/app-views/save-confirmation-html.ts` for the full account.
  *
  * The `@modelcontextprotocol/ext-apps` server helpers are deliberately not a
  * dependency: they are typed against the MCP TypeScript SDK v1
@@ -59,14 +70,31 @@ export const LEGACY_RESOURCE_URI_META_KEY = "ui/resourceUri";
 /** The ChatGPT Apps SDK key naming a tool's view. This is the one that binds. */
 export const OUTPUT_TEMPLATE_META_KEY = "openai/outputTemplate";
 
-/** The one view this slice ships: the result of `list_jobs`. */
+/** The list view: every result of `list_jobs`. */
 export const APPLICATION_LIST_VIEW_URI = "ui://interndex/application-list.html";
-
 export const APPLICATION_LIST_VIEW_NAME = "Interndex application list";
 
-/** What ChatGPT shows while the tool runs, and once it has. */
-const INVOKING_LABEL = "Reading your applications";
-const INVOKED_LABEL = "Showed your applications";
+/** The confirmation view: one result of `save_job`, and nothing else. */
+export const SAVE_CONFIRMATION_VIEW_URI = "ui://interndex/save-confirmation.html";
+export const SAVE_CONFIRMATION_VIEW_NAME = "Interndex save confirmation";
+
+/** What ChatGPT shows while a tool with a view runs, and once it has. */
+export type AppViewLabels = { invoking: string; invoked: string };
+
+export const APPLICATION_LIST_VIEW_LABELS: AppViewLabels = {
+  invoking: "Reading your applications",
+  invoked: "Showed your applications",
+};
+
+/**
+ * Deliberately distinct wording from the list view's, and deliberately never
+ * "Reading" or "Showing": this is what runs while `save_job` is writing a new
+ * row, not while anything is being read back for display.
+ */
+export const SAVE_CONFIRMATION_VIEW_LABELS: AppViewLabels = {
+  invoking: "Saving your application",
+  invoked: "Saved your application",
+};
 
 /**
  * The `_meta` that associates a tool with a UI resource.
@@ -76,15 +104,16 @@ const INVOKED_LABEL = "Showed your applications";
  * — so the association is discoverable by every host currently shipping. They
  * must always name the same URI; nothing here lets them diverge.
  *
- * `openai/widgetAccessible` is false on purpose: this view reads a result and
- * renders it, and is not permitted to call tools back. Read-only stays
- * read-only. It gates what the view may do, not whether it renders.
+ * `openai/widgetAccessible` is false on purpose for every Interndex view: each
+ * one reads a result and renders it, and is not permitted to call tools back.
+ * Read-only stays read-only. It gates what the view may do, not whether it
+ * renders.
  */
-export function appViewToolMeta(resourceUri: string) {
+export function appViewToolMeta(resourceUri: string, labels: AppViewLabels) {
   return {
     [OUTPUT_TEMPLATE_META_KEY]: resourceUri,
-    "openai/toolInvocation/invoking": INVOKING_LABEL,
-    "openai/toolInvocation/invoked": INVOKED_LABEL,
+    "openai/toolInvocation/invoking": labels.invoking,
+    "openai/toolInvocation/invoked": labels.invoked,
     "openai/widgetAccessible": false,
     ui: { resourceUri },
     [LEGACY_RESOURCE_URI_META_KEY]: resourceUri,
@@ -99,10 +128,10 @@ export function appViewToolMeta(resourceUri: string) {
  * template and a read content item, and a host is entitled to look at any of
  * the three.
  *
- * `ui.prefersBorder` is the MCP Apps half, and false because the view draws
+ * `ui.prefersBorder` is the MCP Apps half, and false because each view draws
  * its own hairline and rounded corners; a host frame around that is a border
- * inside a border. No `csp` block is declared because the document loads
- * nothing at all — no script, style, font or image leaves its own origin.
+ * inside a border. No `csp` block is declared because neither document loads
+ * anything at all — no script, style, font or image leaves its own origin.
  */
 export function appViewResourceMeta(resourceUri: string) {
   return {
@@ -120,75 +149,101 @@ export function appViewResourceMeta(resourceUri: string) {
  * once at connection time, while this travels with the payload the host is
  * about to render.
  */
-export function appViewResultMeta(resourceUri: string) {
+export function appViewResultMeta(resourceUri: string, labels: AppViewLabels) {
   return {
     [OUTPUT_TEMPLATE_META_KEY]: resourceUri,
-    "openai/toolInvocation/invoking": INVOKING_LABEL,
-    "openai/toolInvocation/invoked": INVOKED_LABEL,
+    "openai/toolInvocation/invoking": labels.invoking,
+    "openai/toolInvocation/invoked": labels.invoked,
   } as const;
 }
 
 const APPLICATION_LIST_VIEW_DESCRIPTION =
   "Renders the applications returned by list_jobs as a compact Interndex list.";
 
-/** The document, offered under both MIME types. ChatGPT's comes first. */
-function applicationListContents() {
+const SAVE_CONFIRMATION_VIEW_DESCRIPTION =
+  "Renders the single application save_job just created — never a list, and never any other saved application.";
+
+/** One document, offered under both MIME types. ChatGPT's comes first. */
+function viewContents(uri: string, html: string) {
   return [
     {
-      uri: APPLICATION_LIST_VIEW_URI,
+      uri,
       mimeType: APP_VIEW_MIME_TYPE,
-      text: APPLICATION_LIST_VIEW_HTML,
-      _meta: appViewResourceMeta(APPLICATION_LIST_VIEW_URI),
+      text: html,
+      _meta: appViewResourceMeta(uri),
     },
     {
-      uri: APPLICATION_LIST_VIEW_URI,
+      uri,
       mimeType: MCP_APPS_VIEW_MIME_TYPE,
-      text: APPLICATION_LIST_VIEW_HTML,
-      _meta: appViewResourceMeta(APPLICATION_LIST_VIEW_URI),
+      text: html,
+      _meta: appViewResourceMeta(uri),
     },
   ];
 }
 
 /**
- * Registers the Interndex UI resources on an MCP server.
+ * Registers one Interndex UI resource, as both a concrete resource — what
+ * `resources/list` and `resources/read` answer with — and a resource
+ * template, because that is the third place OpenAI's servers advertise a
+ * widget and a host is entitled to look there. The template lists nothing of
+ * its own — `list: undefined` — so `resources/list` is not doubled.
  *
- * Called from `registerJobTrackTools`, so the resource a client can resolve is
- * the one the route serves and the one the tests drive — the same reason the
- * tools have a single registration function.
- *
- * The view is registered twice over: once as a concrete resource, which is
- * what `resources/list` and `resources/read` answer with, and once as a
- * resource template, because that is the third place OpenAI's servers
- * advertise a widget and a host is entitled to look there. The template lists
- * nothing of its own — `list: undefined` — so `resources/list` stays a single
- * entry rather than the same view twice.
- *
- * The document is static. It holds no student data, so serving it needs no
+ * Each document is static and holds no student data, so serving it needs no
  * authentication decision of its own; the data it renders arrives later, in a
- * `list_jobs` result the caller had to be authenticated to obtain.
+ * tool result the caller had to be authenticated to obtain.
  */
-export function registerInterndexAppViews(server: McpServer): void {
+function registerView(
+  server: McpServer,
+  name: string,
+  uri: string,
+  description: string,
+  html: string,
+): void {
   server.registerResource(
-    APPLICATION_LIST_VIEW_NAME,
-    APPLICATION_LIST_VIEW_URI,
+    name,
+    uri,
     {
-      title: APPLICATION_LIST_VIEW_NAME,
-      description: APPLICATION_LIST_VIEW_DESCRIPTION,
+      title: name,
+      description,
       mimeType: APP_VIEW_MIME_TYPE,
-      _meta: appViewResourceMeta(APPLICATION_LIST_VIEW_URI),
+      _meta: appViewResourceMeta(uri),
     },
-    async () => ({ contents: applicationListContents() }),
+    async () => ({ contents: viewContents(uri, html) }),
   );
 
   server.registerResource(
-    `${APPLICATION_LIST_VIEW_NAME} template`,
-    new ResourceTemplate(APPLICATION_LIST_VIEW_URI, { list: undefined }),
+    `${name} template`,
+    new ResourceTemplate(uri, { list: undefined }),
     {
-      title: APPLICATION_LIST_VIEW_NAME,
-      description: APPLICATION_LIST_VIEW_DESCRIPTION,
+      title: name,
+      description,
       mimeType: APP_VIEW_MIME_TYPE,
-      _meta: appViewResourceMeta(APPLICATION_LIST_VIEW_URI),
+      _meta: appViewResourceMeta(uri),
     },
-    async () => ({ contents: applicationListContents() }),
+    async () => ({ contents: viewContents(uri, html) }),
+  );
+}
+
+/**
+ * Registers every Interndex UI resource on an MCP server.
+ *
+ * Called from `registerJobTrackTools`, so the resources a client can resolve
+ * are the ones the route serves and the ones the tests drive — the same
+ * reason the tools have a single registration function.
+ */
+export function registerInterndexAppViews(server: McpServer): void {
+  registerView(
+    server,
+    APPLICATION_LIST_VIEW_NAME,
+    APPLICATION_LIST_VIEW_URI,
+    APPLICATION_LIST_VIEW_DESCRIPTION,
+    APPLICATION_LIST_VIEW_HTML,
+  );
+  registerView(
+    server,
+    SAVE_CONFIRMATION_VIEW_NAME,
+    SAVE_CONFIRMATION_VIEW_URI,
+    SAVE_CONFIRMATION_VIEW_DESCRIPTION,
+    SAVE_CONFIRMATION_VIEW_HTML,
   );
 }

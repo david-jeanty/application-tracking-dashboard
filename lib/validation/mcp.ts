@@ -35,12 +35,25 @@ export const saveJobInputSchema = newJobRecordSchema;
 
 export type SaveJobInput = NewJobRecord;
 
-/** What `save_job` reports back, so a client need not re-read the record. */
+/**
+ * What `save_job` reports back, so a client need not re-read the record — and
+ * need not call `list_jobs` to show the student what was just saved. This is
+ * also exactly what the save-confirmation view renders: the whole confirmation
+ * a save needs, deliberately containing no other application and no list.
+ */
 export const saveJobOutputSchema = z.object({
   application_id: z.string(),
   company: z.string(),
   job_title: z.string(),
   status: z.enum(APPLICATION_STATUSES),
+  work_term: z
+    .string()
+    .nullable()
+    .describe("The work term, when the posting or the student named one."),
+  location: z
+    .string()
+    .nullable()
+    .describe("The role's location, when it is known."),
 });
 
 export { toApplicationCreationValues };

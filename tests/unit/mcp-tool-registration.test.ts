@@ -13,10 +13,12 @@ import type {
   ApplicationRecord,
 } from "@/lib/applications/types";
 import { APPLICATION_LIST_VIEW_HTML } from "@/lib/mcp/app-views/application-list-html";
+import { SAVE_CONFIRMATION_VIEW_HTML } from "@/lib/mcp/app-views/save-confirmation-html";
 import {
   APP_VIEW_MIME_TYPE,
   APPLICATION_LIST_VIEW_URI,
   MCP_APPS_VIEW_MIME_TYPE,
+  SAVE_CONFIRMATION_VIEW_URI,
 } from "@/lib/mcp/app-views";
 import {
   registerJobTrackTools,
@@ -1223,16 +1225,38 @@ describe("save_job reports what it created", () => {
       status: "Applied",
     });
 
+    // work_term and location fall back to null, matching list_jobs's own
+    // records, rather than the internal "Not specified" sentinel or an
+    // absent field a client would have to special-case.
     expect(saved.structuredContent).toEqual({
       application_id: MISSING_ID,
       company: "Nokia",
       job_title: "Marketing Student",
       status: "Applied",
+      work_term: null,
+      location: null,
     });
     // The sentence a student reads is unchanged.
     expect(saved.content[0].text).toBe(
       "Saved Marketing Student at Nokia with status Applied.",
     );
+    await connection.close();
+  });
+
+  it("reports the work term and location when the posting named them", async () => {
+    const connection = await connectServer();
+
+    const saved = await connection.callTool("save_job", {
+      company: "RBC",
+      job_title: "Business Analyst Intern",
+      work_term: "Summer 2027",
+      location: "Toronto, ON",
+    });
+
+    expect(saved.structuredContent).toMatchObject({
+      work_term: "Summer 2027",
+      location: "Toronto, ON",
+    });
     await connection.close();
   });
 
@@ -1251,6 +1275,108 @@ describe("save_job reports what it created", () => {
     expect(saved.isError).toBeUndefined();
     expect(saved.structuredContent!.company).toBe("Telus");
     await connection.close();
+  });
+});
+
+/*
+ * The regression this pins: ChatGPT showed a student two existing RBC
+ * application cards from the generic list widget above the confirmation of
+ * a job that had just saved correctly. `save_job` carries no widget
+ * association of its own, so the widget could only have reached that
+ * response by ChatGPT separately calling `list_jobs` to put something
+ * visual next to a plain-text confirmation. Giving `save_job` its own view
+ * removes the reason for that: these tests pin that it renders its own
+ * confirmation, never list-shaped data, and never reads the tracker as part
+ * of the save itself.
+ */
+describe("save_job stays confirmation-only", () => {
+  it("attaches its own save-confirmation view, never the application list", async () => {
+    const connection = await connectServer();
+
+    const saveJob = (await connection.listTools()).find(
+      (candidate) => candidate.name === "save_job",
+    );
+    // The descriptor, read once at connection time: `ui.resourceUri` names
+    // save_job's own view.
+    expect(saveJob!._meta?.["openai/outputTemplate"]).toBe(
+      SAVE_CONFIRMATION_VIEW_URI,
+    );
+    expect(saveJob!._meta?.ui).toMatchObject({
+      resourceUri: SAVE_CONFIRMATION_VIEW_URI,
+    });
+
+    const saved = await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
+    });
+
+    // The result, travelling with the payload the host is about to render.
+    expect(saved._meta?.["openai/outputTemplate"]).toBe(
+      SAVE_CONFIRMATION_VIEW_URI,
+    );
+    expect(saved._meta?.["openai/outputTemplate"]).not.toBe(
+      APPLICATION_LIST_VIEW_URI,
+    );
+    await connection.close();
+  });
+
+  it("never carries list-shaped data — no applications array, ever", async () => {
+    const connection = await connectServer();
+
+    const saved = await connection.callTool("save_job", {
+      company: "Nokia",
+      job_title: "Marketing Student",
+    });
+
+    expect(saved.structuredContent).not.toHaveProperty("applications");
+    expect(saved.structuredContent).not.toHaveProperty("returned");
+    expect(saved.structuredContent).not.toHaveProperty("has_more");
+    await connection.close();
+  });
+});
+
+describe("the save-confirmation view served by the real server", () => {
+  it("is registered as its own resource, distinct from the application list", async () => {
+    const connection = await connectServer();
+
+    const resource = (await connection.listResources()).find(
+      (candidate) => candidate.uri === SAVE_CONFIRMATION_VIEW_URI,
+    );
+
+    expect(resource).toBeDefined();
+    expect(resource!.mimeType).toBe(APP_VIEW_MIME_TYPE);
+    await connection.close();
+  });
+
+  it("reads as skybridge first, MCP Apps second, exactly like the list view", async () => {
+    const connection = await connectServer();
+
+    const read = await connection.readResource(SAVE_CONFIRMATION_VIEW_URI);
+
+    expect(read.contents.map((item) => item.mimeType)).toEqual([
+      APP_VIEW_MIME_TYPE,
+      MCP_APPS_VIEW_MIME_TYPE,
+    ]);
+    for (const item of read.contents) {
+      expect(item.text).toBe(SAVE_CONFIRMATION_VIEW_HTML);
+      expect(item.text).toContain("<!doctype html>");
+    }
+    await connection.close();
+  });
+
+  it("carries no markup shaped like the application list", async () => {
+    // The whole point of a separate view: it cannot accidentally render a
+    // list even if a host fed it one, because it has no list markup at all.
+    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("ix-list");
+    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("ix-row");
+    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("No applications match");
+  });
+
+  it("never fetches anything of its own", async () => {
+    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("fetch(");
+    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("XMLHttpRequest");
+    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("/api/");
+    expect(SAVE_CONFIRMATION_VIEW_HTML).not.toContain("supabase");
   });
 });
 
@@ -1346,14 +1472,23 @@ describe("Apps SDK view served by the real server", () => {
     await connection.close();
   });
 
-  it("leaves every other tool without a view", async () => {
+  it("gives each tool at most its own view, never another tool's", async () => {
     const connection = await connectServer();
 
-    const withViews = (await connection.listTools())
-      .filter((tool) => tool._meta?.["openai/outputTemplate"])
-      .map((tool) => tool.name);
+    const templates = new Map(
+      (await connection.listTools()).map((tool) => [
+        tool.name,
+        tool._meta?.["openai/outputTemplate"],
+      ]),
+    );
 
-    expect(withViews).toEqual(["list_jobs"]);
+    expect(templates.get("list_jobs")).toBe(APPLICATION_LIST_VIEW_URI);
+    expect(templates.get("save_job")).toBe(SAVE_CONFIRMATION_VIEW_URI);
+    // import_jobs, get_job and update_job render no widget: nothing points
+    // one of them at either view, or at any view at all.
+    expect(templates.get("import_jobs")).toBeUndefined();
+    expect(templates.get("get_job")).toBeUndefined();
+    expect(templates.get("update_job")).toBeUndefined();
     await connection.close();
   });
 
@@ -1575,6 +1710,10 @@ describe("database round trips per tool call", () => {
     });
 
     expect(calls.createApplication).toBe(1);
+    // The regression this half pins: a save must never read the tracker on
+    // its own, which is what would let a stray list read hide inside the
+    // save path itself rather than arriving as ChatGPT's own separate call.
+    expect(calls.listApplications).toBe(0);
     await connection.close();
   });
 

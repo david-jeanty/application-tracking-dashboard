@@ -55,7 +55,7 @@ Claude ──1── POST /api/mcp  (no token)
 | `lib/mcp/user.ts` | Reads the verified user id off a request |
 | `lib/supabase/bearer.ts` | Token-scoped Supabase client (no cookies) |
 | `lib/validation/mcp.ts` | Every tool's wire contract and field mapping |
-| `lib/mcp/app-views.ts` | The ChatGPT Apps SDK UI resource — see `docs/chatgpt-app.md` |
+| `lib/mcp/app-views.ts` | The ChatGPT Apps SDK UI resources — see `docs/chatgpt-app.md` |
 | `app/api/oauth-protected-resource/route.ts` | RFC 9728 discovery document |
 | `app/oauth/consent/page.tsx` | Consent screen Supabase redirects users to |
 | `lib/oauth/actions.ts` | Approve / deny decision |
@@ -193,8 +193,15 @@ express would be a field the other quietly stored better.
 | `company_domain` | no | The employer's canonical domain, e.g. `shopify.com`. Claude fills this in |
 
 It returns structured output as well as its sentence:
-`{ application_id, company, job_title, status }`, so a client need not list the
-tracker again to find what it just created.
+`{ application_id, company, job_title, status, work_term, location }`, so a
+client need not list the tracker again to find what it just created —
+`work_term` and `location` fall back to `null` rather than the internal
+`Not specified` sentinel, matching `list_jobs`'s own records.
+
+On ChatGPT, `save_job` carries its own compact save-confirmation view — one
+saved job, never a list — so a save has something visual of its own without
+reaching for `list_jobs`. See `docs/chatgpt-app.md` for why, and for the
+regression this exists to close.
 
 `work_term_season` is a required column that a posting rarely states, so it
 falls back to the same `Not specified` sentinel the web form uses.
