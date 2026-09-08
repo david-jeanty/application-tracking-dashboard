@@ -126,21 +126,60 @@ async function deleteStudent(student: Student): Promise<void> {
   }
 }
 
-/** A student with an ordinary web session, the kind the app itself holds. */
+/**
+ * A student with an ordinary web session, the kind the app itself holds.
+ *
+ * With a service-role key the student is created through the admin API,
+ * already confirmed, so a project that requires email confirmation (as
+ * production does) issues a session and sends no confirmation email to the
+ * disposable address. Without one, the public sign-up is used, which only
+ * yields a session where confirmation is off, as it is locally.
+ */
 async function signUpStudent(): Promise<Student> {
+  const email = `oauth-authority-${Date.now()}-${randomBytes(4).toString("hex")}@example.test`;
+  const password = `disposable-${randomBytes(12).toString("hex")}`;
   const anonymous = createClient(SUPABASE_URL, PUBLISHABLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const { data, error } = await anonymous.auth.signUp({
-    email: `oauth-authority-${Date.now()}-${randomBytes(4).toString("hex")}@example.test`,
-    password: `disposable-${randomBytes(12).toString("hex")}`,
-  });
+
+  if (SERVICE_ROLE_KEY) {
+    const created = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+      method: "POST",
+      headers: authHeaders({
+        authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+        "content-type": "application/json",
+      }),
+      body: JSON.stringify({ email, password, email_confirm: true }),
+    });
+    if (!created.ok) {
+      throw new Error(`creating the disposable student failed: ${created.status}`);
+    }
+    const { data, error } = await anonymous.auth.signInWithPassword({ email, password });
+    if (error || !data.session || !data.user) {
+      throw new Error(`sign-in failed: ${error?.message ?? "no session returned"}`);
+    }
+    return { userId: data.user.id, accessToken: data.session.access_token };
+  }
+
+  const { data, error } = await anonymous.auth.signUp({ email, password });
   if (error || !data.session || !data.user) {
     throw new Error(
       `sign-up failed: ${error?.message ?? "no session returned (is email confirmation disabled locally?)"}`,
     );
   }
   return { userId: data.user.id, accessToken: data.session.access_token };
+}
+
+/** Removes the client registered for this run, so a real project keeps none. */
+async function deleteClient(clientId: string): Promise<void> {
+  if (!SERVICE_ROLE_KEY) return;
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/oauth/clients/${clientId}`, {
+    method: "DELETE",
+    headers: authHeaders({ authorization: `Bearer ${SERVICE_ROLE_KEY}` }),
+  });
+  if (!response.ok) {
+    throw new Error(`deleting the test OAuth client failed: ${response.status}`);
+  }
 }
 
 /**
@@ -256,6 +295,7 @@ async function archivedAtAs(client: BearerClient, id: string) {
 }
 
 describe("a connected client's authority, with a real OAuth token against PostgREST", () => {
+  let clientId: string;
   let student: Student;
   let web: BearerClient;
   let clientToken: string;
@@ -263,7 +303,7 @@ describe("a connected client's authority, with a real OAuth token against PostgR
 
   beforeAll(async () => {
     await expectStackReachable();
-    const clientId = await registerPublicClient();
+    clientId = await registerPublicClient();
     student = await signUpStudent();
     web = createBearerClient(student.accessToken);
     clientToken = await grantAccess(clientId, student);
@@ -272,6 +312,7 @@ describe("a connected client's authority, with a real OAuth token against PostgR
 
   afterAll(async () => {
     if (student) await deleteStudent(student);
+    if (clientId) await deleteClient(clientId);
   });
 
   it("issues the client a token that names the client, unlike the student's own session", () => {
