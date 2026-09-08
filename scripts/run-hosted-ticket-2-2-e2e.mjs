@@ -21,6 +21,7 @@ function runPlaywright(environment, args) {
 
 function withoutServiceCredential(environment) {
   const sanitized = { ...environment };
+  delete sanitized.SUPABASE_SECRET_KEY;
   delete sanitized.SUPABASE_SERVICE_ROLE_KEY;
   return sanitized;
 }
@@ -114,10 +115,11 @@ if (!url || !publishableKey) {
   throw new Error("The public Supabase environment is not configured.");
 }
 
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const serviceKey =
+  process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!serviceKey) {
   throw new Error(
-    "The ephemeral SUPABASE_SERVICE_ROLE_KEY environment variable is required.",
+    "An ephemeral SUPABASE_SECRET_KEY (or legacy SUPABASE_SERVICE_ROLE_KEY) environment variable is required.",
   );
 }
 
