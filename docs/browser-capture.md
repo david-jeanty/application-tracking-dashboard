@@ -65,139 +65,98 @@ No service-role key, JWT signing secret, bespoke API-key table, or server-side
 RLS bypass exists on this path. Authentication fails closed when verification
 does not produce a user, including when Supabase cannot validate the token.
 
-Supabase OAuth scopes affect identity-token contents, not Postgres privileges.
-Consequently, an OAuth grant shown in Settings is revocable but is not itself a
-database capability boundary. Before any public Chrome Web Store release, use a
-dedicated extension OAuth client and complete a least-privilege review. That
-review must decide whether client-id-aware RLS/policies are required to limit
-the extension client to capture rather than the full privileges of an ordinary
-authenticated session.
+Supabase OAuth scopes affect identity-token contents, not Postgres
+privileges, so an OAuth grant is not narrowed by the scope it was issued
+with. What narrows it is the token itself: Supabase Auth's OAuth 2.1 server
+writes the client's id into every access token it issues as a top-level
+`client_id` claim, and a password or session login carries none. The
+database keys on that claim, as the next section describes.
 
-### Least-privilege review (launch hardening, completed)
+### Connected-client authority (enforced)
 
-The extension already registers as its own OAuth client (`lib/auth/bearer-identity.ts`
-resolves `app_metadata.client_id` per token, distinct from the MCP client), so
-its grant is independently visible and revocable in Settings without affecting
-a connected assistant. That client id is read into `BearerIdentity` but is not
-currently used to gate anything: `lib/mcp/identity.ts` forwards it for
-observability only, and no route or RLS policy branches on it. `grep` across
-`app/`, `lib/mcp`, and `lib/auth` confirms no `client_id`-keyed authorization
-check exists anywhere in this codebase today.
+The consent screen (`lib/mcp/capabilities.ts`) tells a student that a
+connected client can see, add, and update their applications and cannot
+delete or archive them. Until 2026-09-08 that described the clients' code,
+not a ceiling the database held. An extension or assistant token was an
+ordinary `authenticated` JWT, and whoever held one could call PostgREST
+directly and delete, archive, or restore any of that student's records, or
+rewrite their profile. This was reproduced end to end against a running
+stack — dynamic client registration, the PKCE flow, consent, token exchange,
+then `DELETE` and `PATCH` on `applications` with the client's token — and
+before the fix every one of those succeeded.
 
-**Threat model.** An extension access token is an ordinary Supabase JWT
-(`sub` = the user, `role` = `authenticated`) exchanged through
-`createBearerClient`, identical in shape and privilege to a web-session token
-or an MCP token for the same user. Whoever holds a valid extension token can
-therefore do anything RLS permits that user to do directly against
-PostgREST/`supabase-js` — not only call `POST /api/browser-capture` — because
-RLS authorizes by `user_id`, never by which OAuth client obtained the token.
-Two things bound the actual blast radius:
+**What is enforced now.** `supabase/migrations/20260908000100_oauth_client_authority.sql`
+adds one predicate, `public.is_oauth_client_session()`, true exactly when
+`auth.jwt() ->> 'client_id'` is present, and applies it in three places:
 
-- **Cross-user isolation is unaffected.** RLS still authorizes strictly by
-  `auth.uid()`; a leaked or malicious extension token grants no access to any
-  other student's rows, regardless of "scope."
-- **No privilege escalation exists.** There is no service-role key or elevated
-  path reachable from a bearer token of any kind (`lib/supabase/bearer.ts`), so
-  the ceiling is "everything this one user could already do to their own data,"
-  never more.
+| Operation, as a client session | Result |
+| --- | --- |
+| `SELECT` on `applications` | unchanged |
+| `INSERT` an application | unchanged (capture, `save_job`, `import_jobs`) |
+| `UPDATE` details, dates, status — archived records included | unchanged (`update_job`) |
+| `UPDATE` that changes `archived_at` (archive or restore) | refused by a `BEFORE UPDATE OF archived_at` trigger: SQLSTATE `42501`, HTTP 403 |
+| `INSERT` with `archived_at` already set | refused by a restrictive policy: `42501`, HTTP 403 |
+| `DELETE` on `applications` | filtered out by a restrictive policy: zero rows, whatever the predicate |
+| `INSERT`, `UPDATE`, `DELETE` on `profiles` | filtered out by restrictive policies |
 
-What is *not* bounded: the consent screen's "will be able to / will not be
-able to" list (`lib/mcp/capabilities.ts`) describes the extension's intended
-behavior, not an enforced ceiling. A compromised extension build, a stolen
-`chrome.storage.local` refresh token (unencrypted on disk, a documented
-tradeoff — see the extension's OAuth section), or a rogue client registered
-under the extension's flow could use that one grant to read, edit, or delete
-any of that single user's applications — a materially larger capability than
-"capture jobs" — without RLS or the API layer objecting.
+Restrictive policies are ANDed with the existing owner policies rather than
+replacing them, and a web session carries no `client_id`, so it passes every
+new predicate unchanged: the student still archives, restores, and deletes
+from the app exactly as before. Archive is a trigger rather than a policy
+because "this column may not change" needs `OLD` and `NEW` together, which a
+policy's `USING` and `WITH CHECK` pair cannot see; the trigger raises rather
+than filtering, so the caller learns it was refused.
 
-**Classification: acceptable with residual risk for the current state, not a
-launch blocker for the web/MCP launch this audit covers.** The extension is
-distributed only as an unpacked local install (see "Explicitly deferred"
-below) with a small, trusted user base — not the Chrome Web Store — so the
-realistic exposure is a single user's own data under attacker conditions
-(disk access, a tampered build) that already carry a comparable blast radius
-through other vectors on that user's own machine. Client-id-aware RLS is not
-implemented here, deliberately: it would need a real design (a policy
-predicate on `app_metadata.client_id`, decisions about which mutations a
-capture-only client may perform, and its own test suite) that this audit's
-narrow-fix mandate does not justify inventing speculatively. This remains
-exactly the gate `docs/browser-capture.md` already named: resolve it — either
-by shipping client-id-aware policies or by making an explicit, documented
-risk-acceptance decision — before any public Chrome Web Store distribution,
-which is unchanged and still pending as of this review.
+**Why the database, and why the claim's presence rather than a stored id.**
+The alternative — a brokered API layer that checks a client's capabilities
+before touching Supabase — cannot close this gap on its own, because
+PostgREST accepts the token whether or not the client goes through the API.
+It could only work by taking direct table access away from every user token
+and re-granting it through a service-role path, which is strictly more
+attack surface than the app has today. A policy predicate on a claim the
+authorization server signs, evaluated by the same row-level-security
+machinery that already authorises every row, adds no key, no route, and no
+new trust. Keying on the claim's presence rather than on the extension's
+registered id means every client — the extension, a connected assistant,
+anything registered tomorrow — gets exactly the ceiling the consent screen
+shows all of them, with nothing to store and no migration when a client is
+registered. Hiding the actions in a client's UI was never an option: the
+token, not the UI, is what a holder uses.
 
-### Chrome Web Store release review (this review)
+**Why not narrower still.** The extension's own behaviour is capture only,
+but the consent screen promises it the same list it promises an assistant,
+updates included, and that promise is what is enforced. Restricting the
+extension's client to `INSERT` alone would need its id in the database and a
+second consent text; neither is warranted until a product reason appears.
 
-This is the gate named above, revisited now that public distribution is
-actually being prepared (`docs/chrome-web-store-release.md`).
+**Proof.** `supabase/tests/006_oauth_client_authority.test.sql` proves every
+row of the table above against a real Postgres, for the extension's client
+id and for an assistant's, plus cross-user isolation and the unchanged web
+session (`npm run test:db`). `tests/integration/oauth-client-authority.test.ts`
+(`npm run test:oauth-authority`) proves the claim is really in the token: it
+registers a public client, obtains a token through the real
+authorization-code flow, and asserts each refusal through the same
+`createBearerClient` the API layer uses, against PostgREST directly. Run
+without the migration, its five refusal cases fail and its three
+unchanged-path cases pass.
 
-**Is there a trustworthy signal to key a policy on?** Yes, in principle.
-`docs/mcp.md` already identifies it: when Supabase issues an access token
-through its OAuth 2.1 authorization server — which is how both the MCP
-client and the extension's dedicated public client obtain tokens — the
-issued JWT carries `client_id` as a token claim distinct from an ordinary
-password/session login, which carries none. Postgres verifies the JWT
-signature before RLS ever evaluates `auth.jwt() ->> 'client_id'`, so a caller
-cannot forge that value the way it could forge a request header or a body
-field. This is not the same question as "does OAuth `scope` limit access" —
-it does not, and no code here pretends otherwise — it is "does the token
-itself carry a claim the extension's holder cannot rewrite," and the answer
-is yes.
+**What was already bounded, and still is.** Cross-user isolation is
+`auth.uid()`'s job and is unchanged: a leaked or malicious client token
+grants no access to another student's rows. No service-role key or elevated
+path is reachable from a bearer token of any kind (`lib/supabase/bearer.ts`).
+What changed is the ceiling: a compromised extension build, a stolen
+`chrome.storage.local` refresh token, or a rogue client under the extension's
+flow now reaches "see, add, and update this one student's applications" —
+the consent screen's list — rather than everything the student can do to
+their own data.
 
-**Why it is not implemented in this PR.** Being trustworthy in principle is
-not the same as being safe to ship blind. Three concrete gaps make writing
-the policy now the wrong call rather than the cautious one:
-
-1. **The extension's real `client_id` does not exist yet.** It is issued when
-   the dedicated OAuth client is registered against a real Supabase project
-   (see `docs/chrome-web-store-release.md`, OAuth section), which itself
-   depends on the Chrome Web Store item existing. A policy authored today
-   would have to reference a value nobody has yet, hardcoded or otherwise.
-2. **No environment in this review can execute the pgTAP suite.** Docker is
-   unavailable here, as in the prior audit, and RLS is exactly the kind of
-   change where "the SQL parses" is not evidence it is correct: a
-   `client_id`-restricted policy that fails closed for the wrong role, or
-   fails open because of `NULL` comparison semantics on an ordinary
-   session's absent `client_id` claim, is a materially worse outcome than
-   today's status quo — a bug here can break every user's access, not just
-   the extension's.
-3. **The design has real decisions still open**, not just an SQL predicate:
-   whether a capture-only client should be blocked from `UPDATE`/`DELETE`
-   entirely (matching the product's stated single purpose) or only from
-   specific columns, how the policy behaves for tokens with no `client_id`
-   claim at all (every existing web-session and password-login token), and
-   how it composes with the existing owner-scoped policies rather than
-   replacing them.
-
-**Recommended follow-up design**, for the PR that does implement this against
-a real Postgres project: store the extension's registered `client_id` in a
-small server-side settings table (not hardcoded into a migration, since the
-value is assigned at OAuth-client-registration time and must remain
-changeable without a schema change), and add a policy that permits `INSERT`
-unconditionally for `authenticated` (capture's only operation) while
-restricting `UPDATE`/`DELETE` on `applications` to rows where
-`auth.jwt() ->> 'client_id'` is either absent or does not equal the stored
-extension client id. That policy, and the settings table it reads, need
-their own pgTAP coverage proving both the restriction and that an ordinary
-web/MCP session is unaffected, run against a real Postgres before merge —
-not asserted from this review.
-
-**What is unchanged from the prior audit's classification, and what is new.**
-Cross-user isolation is still absolute and unaffected by any of this: RLS
-authorizes strictly by `auth.uid()`, so a leaked or malicious extension
-token still grants no access to another student's rows regardless of
-`client_id`. No service-role key or elevated path is reachable from a bearer
-token of any kind. What changes with a public Chrome Web Store release is
-exposure, not blast radius: more installations mean more chances for a
-tampered build or a stolen `chrome.storage.local` refresh token, but each
-compromised grant still reaches only that one user's own data — never more
-than an ordinary authenticated session already could.
-
-**Recommendation:** accept this as a documented residual risk for this
-release rather than block on an RLS change this review cannot safely test.
-This is an explicit human risk-acceptance decision, not a default — see
-`docs/chrome-web-store-release.md` for the recommendation in the context of
-the overall Store-readiness GO/CONDITIONAL GO/NO-GO call.
+**History.** The launch-hardening review and the Chrome Web Store release
+review both classified this as a documented residual risk, because the
+policy could not be verified against a real Postgres in those environments
+and an unverified change to row-level security risks every user's access.
+That verification is now done, above, and the gap is closed; the
+recommendation in `docs/chrome-web-store-release.md` to accept the risk for
+the release is superseded.
 
 ## Validation and defaults
 
@@ -995,20 +954,21 @@ something **wrong** is a bug in this one.
 
 ### The least-privilege question
 
-Supabase OAuth scopes affect what an identity token contains, not what Postgres
-will accept. An authorized client therefore holds the authority of an ordinary
-authenticated session — which is why the consent screen shows the extension the
-same capability list it shows an assistant, and why that list is accurate rather
-than merely convenient.
+Supabase OAuth scopes affect what an identity token contains, not what
+Postgres will accept, so an OAuth grant is not narrowed by the scope it was
+issued with. It is narrowed by the `client_id` claim the authorization server
+puts in every token it issues: the database refuses a client session's
+deletes, archives, restores, born-archived inserts, and profile writes, and
+allows its reads, inserts, and detail updates — exactly the list the consent
+screen shows every client, which is why that list is accurate rather than
+merely convenient. See "Connected-client authority (enforced)" under "Trust
+and authentication boundaries" for the mechanism, the reasoning, and the
+proof.
 
-The extension confines itself to capture by construction: it calls one endpoint
-and has no code that does anything else. That is a property of this client, not
-a boundary the server enforces. See "Least-privilege review (launch hardening,
-completed)" under "Trust and authentication boundaries" above for the full
-threat model and classification: acceptable with residual risk for the current
-unpacked/local-install distribution, not a launch blocker for the web/MCP
-launch. Client-id-aware policies, if a review ever concludes they are
-warranted, remain deferred to PR #29 along with Chrome Web Store submission.
+The extension confines itself further, to capture, by construction: it calls
+one endpoint and has no code that does anything else. That narrower boundary
+is a property of this client rather than one the server enforces, and it is
+deliberately not enforced — see "Why not narrower still" in the same section.
 
 ## Explicitly deferred
 
@@ -1019,8 +979,7 @@ go; a generalized scraping framework; background monitoring; built-in AI;
 classification; resume matching or tailoring; cover letters; autofill;
 auto-apply; submission detection; recommendations; job discovery;
 email or calendar integration; notifications; fuzzy deduplication; global URL
-uniqueness; a browser-capture idempotency migration; client-id-aware RLS;
-capture analytics, telemetry or an error-monitoring SDK; and Chrome Web Store
+uniqueness; a browser-capture idempotency migration; capture analytics, telemetry or an error-monitoring SDK; and Chrome Web Store
 submission, listing or screenshots.
 
 PR #28 proves the capture loop. PR #29 makes it reliable enough to distribute.
