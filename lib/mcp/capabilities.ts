@@ -11,13 +11,17 @@
  * is ever added or removed, this list changes with it.
  *
  * The list is also what the consent screen shows the Interndex Capture browser
- * extension, and that is accurate rather than convenient: an OAuth grant issues
- * an ordinary Supabase user token, and Supabase scopes affect what is inside an
- * identity token, not what the database will accept. Any authorized client
- * therefore holds this same authority whether or not it exercises all of it.
- * Narrowing that for the extension is a real piece of work — client-id-aware
- * policies — and `docs/browser-capture.md` records it as the open
- * least-privilege question rather than implying it is already solved.
+ * extension, and it is the ceiling the database holds every client to, not a
+ * description of what well-behaved clients happen to do. Supabase scopes affect
+ * what is inside an identity token, not what the database will accept, so the
+ * enforcement keys on something else: the `client_id` claim the authorization
+ * server writes into every token it issues. Row-level security and a trigger
+ * (`supabase/migrations/20260908000100_oauth_client_authority.sql`) refuse a
+ * client session's deletes, archives, and restores, and leave its reads,
+ * inserts, and updates alone — exactly `ASSISTANT_CAN` and `ASSISTANT_CANNOT`.
+ * If either list changes, that migration's rules change with it, and
+ * `supabase/tests/006_oauth_client_authority.test.sql` is where the two are
+ * proved to agree. `docs/browser-capture.md` has the reasoning.
  */
 
 /**

@@ -52,8 +52,29 @@ npm run test:db
 ```
 
 The pgTAP suite uses two identities in a transaction and checks RLS, ownership,
-history automation, and immutable history. A missing Docker runtime means these
-tests are blocked, not passed.
+history automation, immutable history, and — in
+`006_oauth_client_authority.test.sql` — what a connected OAuth client's
+session may and may not do compared with the student's own session. A missing
+Docker runtime means these tests are blocked, not passed.
+
+## Connected-client authority, with a real token
+
+```bash
+npm run db:start
+npm run test:oauth-authority
+```
+
+`tests/integration/oauth-client-authority.test.ts` registers a public OAuth
+client, signs up a disposable student, runs the real authorization-code + PKCE
+flow to obtain the client's access token, and calls PostgREST directly with it
+— bypassing the app — to assert that deleting, archiving, restoring, and
+rewriting the profile are refused by the database while capture, detail
+updates, and the student's own session keep working. It defaults to the local
+stack's URL and demo keys and reads the same `NEXT_PUBLIC_*` variables as the
+app to target another isolated project, plus `SUPABASE_SERVICE_ROLE_KEY` to
+delete the disposable student afterwards — supplied ephemerally, under the
+same rule as the hosted verifiers below. It fails, rather than skipping, when
+no stack is reachable.
 
 ## Authenticated browser test
 

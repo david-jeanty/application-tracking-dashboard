@@ -87,19 +87,19 @@ Claude ──1── POST /api/mcp  (no token)
   authorization attempt elsewhere.
 
 Note that OAuth *scopes* do not restrict database access — Supabase states that
-`openid`/`email`/`profile`/`phone` only affect ID-token contents. The consent
-screen therefore describes access truthfully but does not enforce it. To
-genuinely restrict what an MCP client may do relative to the website, add
-policies keyed on `auth.jwt() ->> 'client_id'`.
-
-The same limitation applies to browser capture: the foundation endpoint accepts
-a valid Supabase-issued bearer token and relies on the existing owner RLS, but
-that token's nominal OAuth scopes are not a write-only database capability. A
-public Chrome Web Store release therefore requires a dedicated extension OAuth
-client and an explicit least-privilege review, including whether `client_id`-
-aware policies should restrict that client to the intended capture operation.
-The current Settings grant list and consent copy describe/revoke OAuth clients;
-they do not create database-level capability restrictions.
+`openid`/`email`/`profile`/`phone` only affect ID-token contents. What does
+restrict it is the `client_id` claim Supabase's authorization server writes
+into every access token it issues, which a password or session login lacks.
+`supabase/migrations/20260908000100_oauth_client_authority.sql` keys on that
+claim: a client session — an MCP connector's or the browser extension's — can
+read, insert, and update applications but cannot delete, archive, or restore
+one, create one already archived, or write the profile. That is the consent
+screen's list (`lib/mcp/capabilities.ts`), enforced by the database rather
+than described by it; the Settings grant list and consent copy remain the way
+a student sees and revokes a grant. The rule keys on the claim's presence,
+so every client gets the same ceiling and no client id is stored anywhere.
+`docs/browser-capture.md` ("Connected-client authority") has the reasoning
+and the proof.
 
 ## Client compatibility aliases (`/authorize`, `/token`)
 
