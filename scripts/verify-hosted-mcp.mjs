@@ -19,7 +19,8 @@
  * around `revokeGrantAction` plus the documented manual acceptance test in
  * docs/mcp.md.
  *
- * Credentials: reads `SUPABASE_SERVICE_ROLE_KEY` only from the process
+ * Credentials: reads `SUPABASE_SECRET_KEY` (or the legacy
+ * `SUPABASE_SERVICE_ROLE_KEY`) only from the process
  * environment, for creating and deleting disposable users. Never put it in a
  * file. Nothing in this script prints a token or a key.
  *
@@ -144,7 +145,8 @@ async function verify() {
   assert("configured publishable key is readable", Boolean(publishableKey));
   assert("configured site URL is readable", Boolean(siteUrl));
 
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey =
+    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   assert(
     "ephemeral cleanup credential environment variable is readable",
     Boolean(serviceKey),

@@ -71,9 +71,10 @@ flow to obtain the client's access token, and calls PostgREST directly with it
 rewriting the profile are refused by the database while capture, detail
 updates, and the student's own session keep working. It defaults to the local
 stack's URL and demo keys and reads the same `NEXT_PUBLIC_*` variables as the
-app to target another isolated project, plus `SUPABASE_SERVICE_ROLE_KEY` to
-delete the disposable student afterwards — supplied ephemerally, under the
-same rule as the hosted verifiers below. It fails, rather than skipping, when
+app to target another isolated project, plus an admin credential to create
+and delete the disposable student: `SUPABASE_SECRET_KEY` (an `sb_secret_…`
+key, preferred) or the legacy `SUPABASE_SERVICE_ROLE_KEY` JWT — supplied
+ephemerally, under the same rule as the hosted verifiers below. It fails, rather than skipping, when
 no stack is reachable.
 
 ## Authenticated browser test
@@ -102,8 +103,8 @@ not use a production account.
 ## Hosted Ticket 2.1 verification
 
 The hosted verifier creates confirmed disposable users without sending email.
-It reads the cleanup credential only from an ephemeral
-`SUPABASE_SERVICE_ROLE_KEY` process environment variable. Enter or inject that
+It reads the cleanup credential only from an ephemeral `SUPABASE_SECRET_KEY`
+(or legacy `SUPABASE_SERVICE_ROLE_KEY`) process environment variable. Enter or inject that
 value through a trusted terminal/secret manager; never add it to `.env.local`,
 another file, shell history, or source control:
 
@@ -144,9 +145,10 @@ node --env-file=.env.local scripts/run-hosted-ticket-2-2-e2e.mjs
 ```
 
 Neither script reads the service credential from source, a fixture, or
-`.env.local`; `SUPABASE_SERVICE_ROLE_KEY` must be injected into the process
-environment by a trusted terminal or secret manager. The runner removes that
-variable before spawning Playwright or the application server.
+`.env.local`; `SUPABASE_SECRET_KEY` (or legacy `SUPABASE_SERVICE_ROLE_KEY`)
+must be injected into the process environment by a trusted terminal or secret
+manager. The runner removes both variables before spawning Playwright or the
+application server.
 
 ## Manual browser-extension check
 
@@ -190,9 +192,9 @@ node --env-file=.env.local scripts/verify-hosted-mcp.mjs
 
 Creates two disposable users, drives the deployed `/api/mcp` over HTTP with
 real access tokens, and asserts protocol, all four tools, database agreement,
-and two-user isolation before deleting both users. Reads
-`SUPABASE_SERVICE_ROLE_KEY` only from the process environment, and prints no
-token or key.
+and two-user isolation before deleting both users. Reads `SUPABASE_SECRET_KEY`
+(or legacy `SUPABASE_SERVICE_ROLE_KEY`) only from the process environment, and
+prints no token or key.
 
 OAuth grant revocation is not covered here: these tokens come from a password
 sign-in rather than the authorization-code flow an MCP client uses, so revoking

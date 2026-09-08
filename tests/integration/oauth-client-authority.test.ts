@@ -46,7 +46,12 @@ import { createBearerClient } from "@/lib/supabase/bearer";
 const environment = getPublicEnvironment();
 const SUPABASE_URL = environment.NEXT_PUBLIC_SUPABASE_URL.replace(/\/$/, "");
 const PUBLISHABLE_KEY = environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+/**
+ * The elevated credential for creating and removing the disposable student:
+ * a secret key (`sb_secret_…`) by preference, or the legacy `service_role`
+ * JWT. Only read from the environment; never defaulted for a real project.
+ */
+const ADMIN_KEY = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 /** The shape of the redirect URI Chrome gives an extension. */
 const REDIRECT_URI =
@@ -71,6 +76,17 @@ function base64Url(bytes: Buffer): string {
 /** Every request to the authorization server carries the publishable key. */
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return { apikey: PUBLISHABLE_KEY, ...extra };
+}
+
+/**
+ * Headers for an admin request. A secret key is not a JWT and goes only in
+ * the `apikey` header, never as a bearer token; the legacy `service_role`
+ * JWT is a bearer token alongside the publishable key.
+ */
+function adminHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  if (!ADMIN_KEY) throw new Error("no admin credential is set");
+  if (ADMIN_KEY.startsWith("sb_secret_")) return { apikey: ADMIN_KEY, ...extra };
+  return authHeaders({ authorization: `Bearer ${ADMIN_KEY}`, ...extra });
 }
 
 async function expectStackReachable(): Promise<void> {
@@ -112,14 +128,14 @@ type Student = { userId: string; accessToken: string };
 
 /** Removes the disposable student, and with them every row they own. */
 async function deleteStudent(student: Student): Promise<void> {
-  if (!SERVICE_ROLE_KEY) {
+  if (!ADMIN_KEY) {
     throw new Error(
-      "SUPABASE_SERVICE_ROLE_KEY is not set, so the disposable student was left behind; remove it before running `npm run test:db` on this database.",
+      "Neither SUPABASE_SECRET_KEY nor SUPABASE_SERVICE_ROLE_KEY is set, so the disposable student was left behind; remove it before running `npm run test:db` on this database.",
     );
   }
   const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${student.userId}`, {
     method: "DELETE",
-    headers: authHeaders({ authorization: `Bearer ${SERVICE_ROLE_KEY}` }),
+    headers: adminHeaders(),
   });
   if (!response.ok) {
     throw new Error(`deleting the disposable student failed: ${response.status}`);
@@ -129,7 +145,7 @@ async function deleteStudent(student: Student): Promise<void> {
 /**
  * A student with an ordinary web session, the kind the app itself holds.
  *
- * With a service-role key the student is created through the admin API,
+ * With an admin credential the student is created through the admin API,
  * already confirmed, so a project that requires email confirmation (as
  * production does) issues a session and sends no confirmation email to the
  * disposable address. Without one, the public sign-up is used, which only
@@ -142,13 +158,10 @@ async function signUpStudent(): Promise<Student> {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  if (SERVICE_ROLE_KEY) {
+  if (ADMIN_KEY) {
     const created = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
       method: "POST",
-      headers: authHeaders({
-        authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-        "content-type": "application/json",
-      }),
+      headers: adminHeaders({ "content-type": "application/json" }),
       body: JSON.stringify({ email, password, email_confirm: true }),
     });
     if (!created.ok) {
@@ -172,10 +185,10 @@ async function signUpStudent(): Promise<Student> {
 
 /** Removes the client registered for this run, so a real project keeps none. */
 async function deleteClient(clientId: string): Promise<void> {
-  if (!SERVICE_ROLE_KEY) return;
+  if (!ADMIN_KEY) return;
   const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/oauth/clients/${clientId}`, {
     method: "DELETE",
-    headers: authHeaders({ authorization: `Bearer ${SERVICE_ROLE_KEY}` }),
+    headers: adminHeaders(),
   });
   if (!response.ok) {
     throw new Error(`deleting the test OAuth client failed: ${response.status}`);

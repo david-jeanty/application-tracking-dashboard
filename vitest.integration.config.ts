@@ -21,7 +21,8 @@ const LOCAL_PUBLISHABLE_KEY =
  * The local stack's demo service-role key, used only to delete the disposable
  * student afterwards. It is public and works only against `supabase start`;
  * a real project's key is never defaulted and must arrive through the
- * environment, ephemerally.
+ * environment, ephemerally: `SUPABASE_SECRET_KEY` (an `sb_secret_…` key,
+ * preferred) or `SUPABASE_SERVICE_ROLE_KEY` (the legacy JWT).
  */
 const LOCAL_SERVICE_ROLE_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
@@ -49,6 +50,7 @@ export default defineConfig({
         LOCAL_PUBLISHABLE_KEY,
       NEXT_PUBLIC_SITE_URL:
         process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+      SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY ?? "",
       SUPABASE_SERVICE_ROLE_KEY:
         process.env.SUPABASE_SERVICE_ROLE_KEY ??
         (targetsLocalStack ? LOCAL_SERVICE_ROLE_KEY : ""),

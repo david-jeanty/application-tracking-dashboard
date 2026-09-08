@@ -44,7 +44,8 @@ async function verify() {
   assert("configured URL is readable", Boolean(url));
   assert("configured publishable key is readable", Boolean(publishableKey));
 
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceKey =
+    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   assert(
     "ephemeral cleanup credential environment variable is readable",
     Boolean(serviceKey),
