@@ -25,12 +25,22 @@ const variants = {
 
 type Variant = keyof typeof variants;
 
+/**
+ * The class name a `Button` or `ButtonLink` would render, for the rare
+ * control that cannot be either — a plain `<a download>`, for one, since
+ * `next/link` intercepts a click before the browser can treat it as a
+ * download.
+ */
+export function buttonClassName(variant: Variant = "primary", className?: string) {
+  return cn(base, variants[variant], className);
+}
+
 export function Button({
   className,
   variant = "primary",
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
-  return <button className={cn(base, variants[variant], className)} {...props} />;
+  return <button className={buttonClassName(variant, className)} {...props} />;
 }
 
 export function ButtonLink({
@@ -44,7 +54,7 @@ export function ButtonLink({
   variant?: Variant;
 }) {
   return (
-    <Link className={cn(base, variants[variant], className)} {...props}>
+    <Link className={buttonClassName(variant, className)} {...props}>
       {children}
     </Link>
   );

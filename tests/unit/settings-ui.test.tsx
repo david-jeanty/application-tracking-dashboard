@@ -55,7 +55,7 @@ describe("the shape of the page", () => {
     ).toBeInTheDocument();
   });
 
-  it("keeps Appearance and the connections section", async () => {
+  it("keeps Appearance, Connections, and Data & account", async () => {
     render(await renderPage());
 
     expect(
@@ -63,6 +63,9 @@ describe("the shape of the page", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { level: 2, name: "Connections" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Data & account" }),
     ).toBeInTheDocument();
   });
 
@@ -250,5 +253,24 @@ describe("the connected assistants", () => {
     expect(
       screen.getByRole("button", { name: "Disconnect Interndex Capture" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("data and account", () => {
+  it("links the export download to the API route", async () => {
+    render(await renderPage());
+
+    expect(
+      screen.getByRole("link", { name: "Download my data" }),
+    ).toHaveAttribute("href", "/api/account/export");
+  });
+
+  it("sends deletion to its own confirmation page rather than acting inline", async () => {
+    render(await renderPage());
+
+    const deleteLink = screen.getByRole("link", { name: "Delete my account" });
+    expect(deleteLink).toHaveAttribute("href", "/settings/delete-account");
+    // No form, no submit button: this control only navigates.
+    expect(deleteLink.closest("form")).toBeNull();
   });
 });
