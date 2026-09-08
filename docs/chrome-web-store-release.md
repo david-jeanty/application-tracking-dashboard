@@ -367,49 +367,56 @@ concern; see §9F for the exact remote-code declaration.
 
 ## 6. Least-privilege / OAuth-grant security review
 
-Full analysis: `docs/browser-capture.md`, "Chrome Web Store release review
-(this review)" (new section added by this PR, under "Trust and
-authentication boundaries").
+**Superseded on 2026-09-08.** When this review was written it recommended
+accepting a residual risk for this release: an extension or assistant token
+was an ordinary `authenticated` JWT with the same database ceiling as the
+student's own session, and the `client_id`-aware policy that would narrow
+it could not be verified against a real Postgres from the review's
+environment. That gap has since been closed and verified, so there is no
+longer a risk to accept and the earlier recommendation is no longer
+current guidance. What holds now:
 
-Summary of the conclusion, restated here because it is a release-gating
-decision:
+- **The enforcement exists.**
+  `supabase/migrations/20260908000100_oauth_client_authority.sql` adds
+  `public.is_oauth_client_session()`, true exactly when the verified access
+  token carries the top-level `client_id` claim Supabase's OAuth 2.1 server
+  writes into every token it issues (a password or session login carries
+  none), and applies it as restrictive policies plus an `archived_at`
+  trigger. A client session — the extension's or a connected assistant's —
+  can read, insert, and update applications and cannot delete, archive, or
+  restore one, create one already archived, or write the profile: the
+  consent screen's list, enforced by the database rather than described.
+- **It is verified against a real Postgres.**
+  `supabase/tests/006_oauth_client_authority.test.sql` (`npm run test:db`)
+  proves every rule for the extension's client id and an assistant's, plus
+  cross-user isolation and the unchanged web session, and
+  `tests/integration/oauth-client-authority.test.ts`
+  (`npm run test:oauth-authority`) obtains a token through the real
+  authorization-code + PKCE flow and asserts each refusal against PostgREST
+  directly.
+- **Nothing per-client was stored.** The rule keys on the claim's presence,
+  so the extension's registered client id (§1) appears in no policy and no
+  migration was needed to register it.
 
-- The extension already uses Authorization Code + PKCE (`S256` only), an
-  unpredictable 32-byte `state`, state verified before any callback data is
-  trusted, no client secret, no token logging, full token-response
-  validation before storage, and refresh-token rotation handling
-  (`extension/src/auth.ts`, `extension/src/pkce.ts`). No defect was found;
-  none of this was changed.
-- A trustworthy, cryptographically-verified signal to distinguish the
-  extension's grant **does exist**: Supabase's OAuth 2.1 authorization
-  server embeds `client_id` as a JWT claim on tokens issued through it,
-  which Postgres validates via the JWT signature before any RLS policy
-  reads `auth.jwt() ->> 'client_id'` — this is not a caller-supplied value
-  and not something a stolen token can rewrite.
-- It is **not implemented in this PR**. Writing and shipping a
-  `client_id`-aware RLS policy requires (a) the extension's real,
-  registered `client_id`, which does not exist until §2 completes, and (b)
-  verification against a real Postgres instance via the pgTAP suite, which
-  this session cannot run (Docker unavailable — see §12). Shipping an RLS
-  change of this sensitivity unverified risks breaking access for every
-  user, not just narrowing the extension's — a materially worse outcome
-  than the current, bounded residual risk.
-- **What is bounded regardless:** cross-user isolation is absolute (RLS
-  authorizes strictly by `auth.uid()`); there is no service-role key or
-  elevated path reachable from any bearer token. A compromised extension
-  grant reaches only that one user's own data, at the same ceiling an
-  ordinary authenticated web session already has.
-- **What changes with public distribution:** exposure, not blast radius.
-  More installs mean more opportunities for a tampered build or a stolen
-  `chrome.storage.local` refresh token, but the ceiling per compromised
-  grant is unchanged.
+The extension's own OAuth handling was reviewed here and is unchanged:
+Authorization Code + PKCE (`S256` only), an unpredictable 32-byte `state`
+verified before any callback data is trusted, no client secret, no token
+logging, full token-response validation before storage, and refresh-token
+rotation handling (`extension/src/auth.ts`, `extension/src/pkce.ts`). No
+defect was found in it.
 
-**This review's recommendation: accept the residual risk for this release**
-and track the `client_id`-aware RLS design (sketched in
-`docs/browser-capture.md`) as a follow-up implemented and pgTAP-verified
-against a real Postgres project before it ships. This is called out
-explicitly as a human decision in §14 — it is not this review's call to
-make silently.
+**What is bounded, restated for the release decision.** Cross-user
+isolation was never in question and is unchanged: RLS authorizes strictly
+by `auth.uid()`, and no service-role key or elevated path is reachable from
+any bearer token. What public distribution changes is exposure, not blast
+radius — more installs mean more opportunities for a tampered build or a
+stolen `chrome.storage.local` refresh token — and the ceiling per
+compromised grant is now "see, add, and update this one student's
+applications", not everything the student can do to their own data.
+
+Full mechanism, reasoning, and the enforced operation table:
+`docs/browser-capture.md`, "Connected-client authority (enforced)" under
+"Trust and authentication boundaries".
 
 ## 7. Privacy / data-flow audit
 
@@ -1019,9 +1026,10 @@ is the next action.
 Out of scope and not changed: new job-site extractors, AI features,
 auto-apply, background monitoring, popup redesign, analytics, new
 application-status features, homepage/dashboard work, dependency upgrades,
-or any architectural rewrite. The `client_id`-aware RLS design in §6 is
-described, not implemented, for exactly this reason plus the inability to
-verify it here — see §6 for the full reasoning.
+or any architectural rewrite. The `client_id`-aware enforcement noted in §6
+landed separately and after this review, with its own migration, pgTAP
+suite, and integration test; it is not part of the packaging change this
+document describes.
 
 ## 16. Recommendation
 
@@ -1053,10 +1061,9 @@ Conditions that must be satisfied before actual submission:
    zero."
 2. Run the full manual QA checklist in §13 against that exact build and
    record the results (PASS/FAIL per item, not assumed).
-3. Decide on §6's residual risk: accept it for this release (this review's
-   recommendation) or require the `client_id`-aware RLS follow-up first.
-   This is unchanged by production config being confirmed — it was never
-   blocked on that.
+3. ~~Decide on §6's residual risk.~~ **Resolved (2026-09-08):** the
+   `client_id`-aware enforcement is implemented and verified (§6), so no
+   risk-acceptance decision remains for this item.
 4. Resolve §9H's open items (screenshots, support contact, category,
    distribution settings).
 5. Only after 1–2 pass, upload the real `0.1.0` package to the Store draft,

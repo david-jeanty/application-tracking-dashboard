@@ -257,15 +257,21 @@ above.
 threat model. Summary: an extension access token is an ordinary
 per-user Supabase JWT: RLS grants it the same privileges as any other
 session for that one user, not a "capture-only" subset, because the
-`client_id` recorded in `app_metadata` is read but never enforced by any
-route or policy today. Cross-user isolation is unaffected (RLS still
-authorizes strictly by `auth.uid()`), and no path to service-role/elevated
-access exists. **Classification: acceptable with residual risk for the
+`client_id` claim the authorization server writes into the token was not
+enforced by any route or policy at the time. Cross-user isolation is
+unaffected (RLS still authorizes strictly by `auth.uid()`), and no path to
+service-role/elevated access exists. **Classification: acceptable with residual risk for the
 current unpacked/local-install distribution; not a launch blocker for this
 web/MCP launch.** It must be resolved — either with client-id-aware
 policies or an explicit, documented risk-acceptance decision — before any
 public Chrome Web Store distribution, which remains unchanged, deferred,
 and not part of this launch.
+
+**Superseded (2026-09-08):** the client-id-aware policies now exist and are
+verified against a real Postgres; see `docs/browser-capture.md`,
+"Connected-client authority (enforced)". (An earlier revision of this
+paragraph placed the claim in `app_metadata`; it is a top-level token claim,
+and nothing ever read it from `app_metadata` successfully.)
 
 ## Email findings
 

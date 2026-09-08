@@ -138,7 +138,12 @@ registers a public client, obtains a token through the real
 authorization-code flow, and asserts each refusal through the same
 `createBearerClient` the API layer uses, against PostgREST directly. Run
 without the migration, its five refusal cases fail and its three
-unchanged-path cases pass.
+unchanged-path cases pass. It also asserts that `lib/auth/bearer-identity.ts`
+resolves the same `client_id` from that token — the value MCP telemetry
+records per tool call. Until 2026-09-08 that read looked in `app_metadata`,
+where Supabase never puts the claim, so every client session logged as
+`unknown`; the database was unaffected, because the policies read the claim
+from the token themselves through `auth.jwt()`.
 
 **What was already bounded, and still is.** Cross-user isolation is
 `auth.uid()`'s job and is unchanged: a leaked or malicious client token

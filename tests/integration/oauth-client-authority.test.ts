@@ -20,7 +20,10 @@
  *
  * The refusals come from `supabase/migrations/20260908000100_oauth_client_
  * authority.sql`, keyed on the `client_id` claim the authorization server
- * puts in the token. Step 3 is what proves that claim is really there.
+ * puts in the token. Step 3 is what proves that claim is really there, and
+ * one case checks that `lib/auth/bearer-identity.ts` — the API layer's own
+ * read of the same token, which MCP telemetry records — resolves that same
+ * client id rather than a placeholder.
  *
  * Needs a running Supabase stack (`npm run db:start`) with the OAuth server
  * and dynamic client registration enabled, as `supabase/config.toml` does.
@@ -36,6 +39,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { NO_OAUTH_CLIENT, verifyBearerToken } from "@/lib/auth/bearer-identity";
 import { getPublicEnvironment } from "@/lib/env";
 import { createBearerClient } from "@/lib/supabase/bearer";
 
@@ -276,6 +280,17 @@ describe("a connected client's authority, with a real OAuth token against PostgR
     expect(claims.sub).toBe(student.userId);
     expect(claims.role).toBe("authenticated");
     expect(claims.client_id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("resolves that same client id at the API layer, where telemetry reads it", async () => {
+    const identity = await verifyBearerToken(clientToken);
+    expect(identity?.userId).toBe(student.userId);
+    expect(identity?.clientId).toBe(claimsOf(clientToken).client_id);
+    expect(identity?.clientId).not.toBe(NO_OAUTH_CLIENT);
+
+    expect((await verifyBearerToken(student.accessToken))?.clientId).toBe(
+      NO_OAUTH_CLIENT,
+    );
   });
 
   it("cannot delete an application, even one the student already archived", async () => {

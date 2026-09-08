@@ -154,13 +154,16 @@ select is(
   2,
   'a real status change adds one history event'
 );
+-- The transition event is the one row with a previous status. Both history
+-- rows are written inside this single transaction, so their `changed_at`
+-- values are identical (`now()` is the transaction's start time), and an
+-- `order by changed_at desc` would break that tie on a random uuid.
 select ok(
   (
     select previous_status = 'Interested' and new_status = 'Applied'
     from public.application_status_history
     where application_id = 'a0000000-0000-0000-0000-000000000001'
-    order by changed_at desc, id desc
-    limit 1
+      and previous_status is not null
   ),
   'transition history contains the previous and new status'
 );
