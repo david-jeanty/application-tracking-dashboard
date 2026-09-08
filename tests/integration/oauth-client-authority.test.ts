@@ -25,8 +25,12 @@
  * Needs a running Supabase stack (`npm run db:start`) with the OAuth server
  * and dynamic client registration enabled, as `supabase/config.toml` does.
  * A stack that is not reachable fails the suite rather than skipping it: a
- * blocked check is not a passed one. Disposable users are left behind in
- * that local database; their applications are removed at the end.
+ * blocked check is not a passed one. The disposable student is deleted at
+ * the end through the Auth admin API, so the pgTAP suite's whole-table
+ * counts (`npm run test:db`) stay true on the same database. That needs
+ * `SUPABASE_SERVICE_ROLE_KEY`, which the config defaults to the local
+ * stack's demo key; against another project supply it the way the hosted
+ * verifiers do — ephemerally, never in a file.
  */
 
 import { createHash, randomBytes } from "node:crypto";
@@ -38,6 +42,7 @@ import { createBearerClient } from "@/lib/supabase/bearer";
 const environment = getPublicEnvironment();
 const SUPABASE_URL = environment.NEXT_PUBLIC_SUPABASE_URL.replace(/\/$/, "");
 const PUBLISHABLE_KEY = environment.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 /** The shape of the redirect URI Chrome gives an extension. */
 const REDIRECT_URI =
@@ -100,6 +105,22 @@ async function registerPublicClient(): Promise<string> {
 }
 
 type Student = { userId: string; accessToken: string };
+
+/** Removes the disposable student, and with them every row they own. */
+async function deleteStudent(student: Student): Promise<void> {
+  if (!SERVICE_ROLE_KEY) {
+    throw new Error(
+      "SUPABASE_SERVICE_ROLE_KEY is not set, so the disposable student was left behind; remove it before running `npm run test:db` on this database.",
+    );
+  }
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${student.userId}`, {
+    method: "DELETE",
+    headers: authHeaders({ authorization: `Bearer ${SERVICE_ROLE_KEY}` }),
+  });
+  if (!response.ok) {
+    throw new Error(`deleting the disposable student failed: ${response.status}`);
+  }
+}
 
 /** A student with an ordinary web session, the kind the app itself holds. */
 async function signUpStudent(): Promise<Student> {
@@ -246,7 +267,7 @@ describe("a connected client's authority, with a real OAuth token against PostgR
   });
 
   afterAll(async () => {
-    await web?.from("applications").delete().eq("user_id", student.userId);
+    if (student) await deleteStudent(student);
   });
 
   it("issues the client a token that names the client, unlike the student's own session", () => {

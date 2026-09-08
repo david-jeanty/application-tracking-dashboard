@@ -70,9 +70,11 @@ flow to obtain the client's access token, and calls PostgREST directly with it
 — bypassing the app — to assert that deleting, archiving, restoring, and
 rewriting the profile are refused by the database while capture, detail
 updates, and the student's own session keep working. It defaults to the local
-stack's URL and demo publishable key and reads the same `NEXT_PUBLIC_*`
-variables as the app to target another isolated project. It fails, rather
-than skipping, when no stack is reachable.
+stack's URL and demo keys and reads the same `NEXT_PUBLIC_*` variables as the
+app to target another isolated project, plus `SUPABASE_SERVICE_ROLE_KEY` to
+delete the disposable student afterwards — supplied ephemerally, under the
+same rule as the hosted verifiers below. It fails, rather than skipping, when
+no stack is reachable.
 
 ## Authenticated browser test
 
