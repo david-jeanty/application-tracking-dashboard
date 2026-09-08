@@ -186,10 +186,16 @@ export default function PrivacyPage() {
                 How a connected AI assistant fits in
               </h2>
               <p className="mt-4">
-                Interndex does not run its own AI. It has no parser, no
-                chatbot, and no model of its own, and it never sends your
-                application data to an AI provider on its own initiative. When
-                you connect an assistant like Claude or a ChatGPT connector,
+                Interndex itself does not run any AI. It has no chatbot and no
+                model of its own, and it never sends your application data to
+                an AI provider on its own initiative. The Interndex Capture
+                extension does include a deterministic, rule-based parser —
+                no AI or machine learning involved — that reads structured
+                posting data from the page you open it on to fill in fields
+                like title, company, and location; see &ldquo;The Interndex
+                Capture browser extension&rdquo; below for exactly what it
+                reads and sends. When you connect an assistant like Claude or
+                a ChatGPT connector,
                 that assistant is your own tool, signed in as you, reading a
                 job posting or a spreadsheet you gave it directly — Interndex
                 never sees that posting or that file. The assistant only
@@ -295,11 +301,13 @@ export default function PrivacyPage() {
                   Logo.dev
                 </a>{" "}
                 to show that employer&apos;s logo. Your browser requests that
-                image directly from Logo.dev using the company&apos;s domain,
-                which is the only thing Logo.dev sees — never your name,
-                email, or any other Interndex data. Leave the company website
-                field empty and Interndex shows a plain lettermark instead,
-                with no request to Logo.dev at all.
+                image directly from Logo.dev using the company&apos;s domain.
+                Along with that domain, Logo.dev receives the ordinary
+                request metadata any website sees when your browser contacts
+                it — such as your IP address and browser user agent — but
+                never your name, email, or any other Interndex data. Leave
+                the company website field empty and Interndex shows a plain
+                lettermark instead, with no request to Logo.dev at all.
               </p>
             </section>
 
@@ -339,16 +347,9 @@ export default function PrivacyPage() {
               <p className="mt-4">
                 Interndex runs on two hosting providers: Vercel for the
                 website and Supabase for the database and authentication.
-                Both may process or store data outside Canada,
-                including in the United States, depending on the region
-                configured for the Interndex project.{" "}
-                <em>
-                  The exact region has not been confirmed in this document —
-                  Interndex will state it precisely once verified against the
-                  live deployment.
-                </em>{" "}
-                Optional company logos are requested directly from Logo.dev,
-                described above.
+                Both are configured to run in the Canada (Central) region, so
+                your data is processed and stored in Canada. Optional company
+                logos are requested directly from Logo.dev, described above.
               </p>
             </section>
 
