@@ -31,7 +31,7 @@
     "@supabase/supabase-js": "2.110.8",
     "lucide-react": "1.26.0",
     "mcp-handler": "2.1.1",
-    "next": "16.2.11",
+    "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "4.4.3"
@@ -47,11 +47,21 @@
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.4",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.2.11",
+    "eslint-config-next": "16.3.4",
     "jsdom": "29.1.1",
     "supabase": "2.109.1",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "js-yaml": "^4.3.2",
+    "nanoid": "^3.3.18",
+    "minimatch@3.1.5": {
+      "brace-expansion": "^1.1.18"
+    },
+    "minimatch@10.2.5": {
+      "brace-expansion": "^5.0.9"
+    }
   }
 }
