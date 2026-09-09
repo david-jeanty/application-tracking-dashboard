@@ -16,21 +16,13 @@ const nextConfig: NextConfig = {
         source: "/.well-known/oauth-protected-resource/:path*",
         destination: "/api/oauth-protected-resource",
       },
-    ];
-  },
-  async headers() {
-    return [
-      // The file has no extension, so Vercel's static server would otherwise
-      // serve it as application/octet-stream, which some domain-verification
-      // fetchers refuse to read as text.
+      // OpenAI apps domain verification. Handled by a route handler instead
+      // of a static file so we control the response headers exactly —
+      // Vercel adds a `content-disposition: inline; filename=...` header to
+      // extensionless static files, which some verifiers reject.
       {
         source: "/.well-known/openai-apps-challenge",
-        headers: [
-          {
-            key: "Content-Type",
-            value: "text/plain; charset=utf-8",
-          },
-        ],
+        destination: "/api/openai-apps-challenge",
       },
     ];
   },
