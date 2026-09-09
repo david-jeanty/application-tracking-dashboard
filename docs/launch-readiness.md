@@ -309,9 +309,15 @@ this session had no access to. See "Manual verification required."
   hardcoded origin was found.
 - Every env var read by app code is either `NEXT_PUBLIC_*` (intentionally
   public: Supabase URL, publishable key, site URL, an optional Logo.dev
-  publishable token) or absent from client/server app code entirely.
-  `SUPABASE_SERVICE_ROLE_KEY` exists only in `scripts/*.mjs` operator
-  scripts, never imported by `app/`, `components/`, or `lib/`.
+  publishable token) or absent from client/server app code entirely, with one
+  deliberate exception: `SUPABASE_SECRET_KEY`, read only by
+  `lib/supabase/admin.ts` (`import "server-only"`) and used only by
+  `app/api/account/delete/route.ts` to call the Supabase Auth admin API for
+  self-serve account deletion. It is never imported by anything under
+  `components/`, never read in a Client Component, and never present in
+  `getPublicEnvironment()`'s schema. The legacy `SUPABASE_SERVICE_ROLE_KEY` is
+  disabled project-wide and remains absent from `app/`, `components/`, and
+  `lib/` — it exists only in `scripts/*.mjs` operator tooling.
 - No committed secrets: `.env.example` contains only placeholders, and no
   `.env`/`.env.local` is committed to the repository.
 - `extension/src/config.ts` and `extension/manifest.json` still carry

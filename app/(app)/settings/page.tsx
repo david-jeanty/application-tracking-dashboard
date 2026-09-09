@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
@@ -6,6 +7,7 @@ import {
   ConnectedClients,
   type ConnectedClient,
 } from "@/components/settings/connected-clients";
+import { buttonClassName } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import {
   ASSISTANT_CAN,
@@ -270,6 +272,49 @@ export default async function SettingsPage({
               <ConnectedClients clients={clients} />
             )}
           </div>
+        </Subsection>
+      </section>
+
+      <section aria-labelledby="data-account-heading" className="space-y-8">
+        <div className="border-b border-border pb-2">
+          <h2
+            className="text-[17px] font-medium text-foreground"
+            id="data-account-heading"
+          >
+            Data &amp; account
+          </h2>
+        </div>
+
+        <Subsection title="Export your data">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
+            Download your profile, every application you have tracked, and its
+            status history as one JSON file.
+          </p>
+          <a
+            className={buttonClassName("secondary", "mt-4")}
+            href="/api/account/export"
+          >
+            Download my data
+          </a>
+        </Subsection>
+
+        <Subsection title="Delete your account">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
+            Permanently deletes your profile, every application you have
+            tracked, and its status history. This cannot be undone.
+          </p>
+          {/*
+            Quiet on purpose, like the archive's "Delete permanently": this is
+            only the entry to a confirmation page that re-checks your
+            password, and the destructive path should take a deliberate step
+            rather than be reachable by aiming badly at a bold button.
+          */}
+          <Link
+            className="mt-4 inline-block rounded-sm text-sm text-danger underline decoration-danger/30 underline-offset-4 hover:decoration-danger focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger"
+            href="/settings/delete-account"
+          >
+            Delete my account
+          </Link>
         </Subsection>
       </section>
     </div>
