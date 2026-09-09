@@ -18,6 +18,22 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async headers() {
+    return [
+      // The file has no extension, so Vercel's static server would otherwise
+      // serve it as application/octet-stream, which some domain-verification
+      // fetchers refuse to read as text.
+      {
+        source: "/.well-known/openai-apps-challenge",
+        headers: [
+          {
+            key: "Content-Type",
+            value: "text/plain; charset=utf-8",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
