@@ -14,12 +14,13 @@
  *      `lib/oauth/actions.ts` does, to obtain the client's access token;
  *   4. uses that token through the same `createBearerClient` the API layer
  *      uses, but against the tables directly, and asserts that deleting,
- *      archiving, restoring, and rewriting the profile are refused by the
- *      database — while capture, detail updates, and the student's own
+ *      archiving, restoring, and reading or rewriting the profile are refused
+ *      by the database — while capture, detail updates, and the student's own
  *      session keep working.
  *
  * The refusals come from `supabase/migrations/20260908000100_oauth_client_
- * authority.sql`, keyed on the `client_id` claim the authorization server
+ * authority.sql` and `20260910000100_oauth_client_profile_reads.sql`, keyed on
+ * the `client_id` claim the authorization server
  * puts in the token. Step 3 is what proves that claim is really there, and
  * one case checks that `lib/auth/bearer-identity.ts` — the API layer's own
  * read of the same token, which MCP telemetry records — resolves that same
@@ -402,6 +403,30 @@ describe("a connected client's authority, with a real OAuth token against PostgR
 
     expect(status).toBe(403);
     expect(error?.code).toBe(INSUFFICIENT_PRIVILEGE);
+  });
+
+  it("cannot read the student's profile, while their own session still can", async () => {
+    // The consent screen offers applications and only applications. A client
+    // holding this token can reach PostgREST directly, so the refusal has to
+    // come from the database rather than from which endpoints the client uses.
+    const listed = await client.from("profiles").select("user_id,full_name");
+    expect(listed.error).toBeNull();
+    expect(listed.data).toEqual([]);
+
+    // Naming the owner it already knows from its own `sub` claim changes
+    // nothing: the restrictive policy is ANDed with the owner predicate.
+    const byOwner = await client
+      .from("profiles")
+      .select("user_id,full_name")
+      .eq("user_id", student.userId);
+    expect(byOwner.error).toBeNull();
+    expect(byOwner.data).toEqual([]);
+
+    // The student's own session is unaffected — this is the read the account
+    // export (`lib/account/export.ts`) makes, on the cookie session.
+    const own = await web.from("profiles").select("user_id");
+    expect(own.error).toBeNull();
+    expect(own.data).toEqual([{ user_id: student.userId }]);
   });
 
   it("cannot rewrite or remove the student's profile", async () => {

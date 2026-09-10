@@ -67,6 +67,15 @@ allow_dynamic_registration = true
 enable_signup = true
 double_confirm_changes = true
 enable_confirmations = false
+# Deliberately left as it is, pending verification. With this false, GoTrue
+# authorizes a password change on a valid bearer token alone. Whether it
+# applies that to a token its own OAuth server issued — one carrying a
+# `client_id` claim, which the database policies hold to the consent screen's
+# list but the Auth API does not — is an open question, not a finding. Flipping
+# it here before that is answered would only hide the thing being measured;
+# `scripts/verify-client-token-authority.mjs` and the "Unverified: the reach of
+# a client token at the Auth API" procedure in `docs/launch-readiness.md` are
+# what settle it, against a throwaway project and never against production.
 secure_password_change = false
 max_frequency = "1m0s"
 otp_length = 6

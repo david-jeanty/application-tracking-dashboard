@@ -87,7 +87,9 @@ before the fix every one of those succeeded.
 
 **What is enforced now.** `supabase/migrations/20260908000100_oauth_client_authority.sql`
 adds one predicate, `public.is_oauth_client_session()`, true exactly when
-`auth.jwt() ->> 'client_id'` is present, and applies it in three places:
+`auth.jwt() ->> 'client_id'` is present, and applies it in three places;
+`20260910000100_oauth_client_profile_reads.sql` adds the fourth, the last row
+below:
 
 | Operation, as a client session | Result |
 | --- | --- |
@@ -98,6 +100,20 @@ adds one predicate, `public.is_oauth_client_session()`, true exactly when
 | `INSERT` with `archived_at` already set | refused by a restrictive policy: `42501`, HTTP 403 |
 | `DELETE` on `applications` | filtered out by a restrictive policy: zero rows, whatever the predicate |
 | `INSERT`, `UPDATE`, `DELETE` on `profiles` | filtered out by restrictive policies |
+| `SELECT` on `profiles` | filtered out by a restrictive policy: zero rows |
+
+The profile *read* was missed on 2026-09-08 and closed on 2026-09-10. The
+question that migration answered was what a client may *do* to a student's
+data, and the three write refusals answered it; nothing asked what a client
+may *see*. A client session could `GET /rest/v1/profiles?select=*` and receive
+the student's full name, school, academic program, graduation year, and both
+consent timestamps — none of which is an application, and none of which the
+consent screen mentions. It was never a cross-user leak, because
+`profiles_select_own` still scoped the read to `auth.uid()`; it was a promise
+the database was not holding the client to. Nothing in the product reads
+`profiles` on a client path — the account export is the only profile read
+there is, and it runs on the student's own cookie session — so the policy
+changes no behaviour.
 
 Restrictive policies are ANDed with the existing owner policies rather than
 replacing them, and a web session carries no `client_id`, so it passes every

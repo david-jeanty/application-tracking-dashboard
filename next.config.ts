@@ -5,30 +5,33 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   async headers() {
     return [
-      // These routes handle credentials or authorization decisions and have
-      // no reason to be framed by another site, so they get an explicit
-      // clickjacking defense. Not applied site-wide: most routes (including
-      // /privacy and /auth/callback) have no such need.
+      /*
+        No page of this application may be framed by another site.
+
+        This used to name four routes — /oauth/consent, /login, /signup and
+        /settings — on the reasoning that they were the ones handling
+        credentials or authorization decisions. Two things were wrong with
+        that. `source` matches a path exactly, so /settings covered the
+        settings page but not /settings/delete-account beneath it; and the
+        routes it left uncovered include every one-click destructive control
+        in the product — permanent deletion at /applications/[id]/delete,
+        archive and restore on /applications and /archive, the quick status
+        change on a detail page. Each is an ordinary form posting to a Server
+        Action, and Server Actions' own origin check does not help here: a
+        framed page posts to its own origin, so a click landing on a hidden
+        frame is same-origin and succeeds.
+
+        Site-wide is also simply the correct default. Nothing in Interndex is
+        meant to be embedded anywhere, so the interesting list was never "the
+        routes that need this" but "the routes that could do without it", and
+        that list is empty.
+
+        `frame-ancestors` alone, deliberately. A wider policy — script-src and
+        the rest — is worth having and is not this change: it needs a
+        report-only rollout first, because a CSP that breaks does so silently.
+      */
       {
-        source: "/oauth/consent",
-        headers: [
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
-        ],
-      },
-      {
-        source: "/login",
-        headers: [
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
-        ],
-      },
-      {
-        source: "/signup",
-        headers: [
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
-        ],
-      },
-      {
-        source: "/settings",
+        source: "/:path*",
         headers: [
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
         ],

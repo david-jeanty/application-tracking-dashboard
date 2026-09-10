@@ -600,6 +600,108 @@ deployment.
     one email step in the journey. None of this was exercised end-to-end
     in this session (see "Blocked" above); it requires a deployed
     environment and real credentials.
+12. **Whether a `client_id`-bearing token can change an account password
+    through GoTrue** — see the dedicated procedure below. This is
+    **unverified, not confirmed**: it is a question this repository cannot
+    answer, and no claim should be made about it in either direction until
+    the procedure has been run and its result recorded.
+
+## Unverified: the reach of a client token at the Auth API
+
+**Status: OPEN QUESTION. Nothing below asserts that this is exploitable.**
+
+`supabase/migrations/20260908000100_oauth_client_authority.sql` and
+`20260910000100_oauth_client_profile_reads.sql` hold a connected client to
+the consent screen's list *in the database*. Both work by keying
+row-level-security policies on the `client_id` claim, and both therefore
+constrain exactly one thing: what that token can do through PostgREST.
+
+The same token is also an ordinary Supabase user token at the **Auth API**,
+and nothing in this repository constrains it there. `supabase/config.toml`
+carries `secure_password_change = false`, which in GoTrue means a password
+change is authorized by a valid bearer token alone — no current password and
+no recent-login requirement. If GoTrue applies that rule to a token issued by
+its own OAuth server, then a holder of a client token could set the account's
+password, sign in to the web app, and arrive as an ordinary web session — one
+carrying no `client_id` claim, and so subject to none of the restrictions
+above. That would make every database-level ceiling reachable around rather
+than through.
+
+Whether GoTrue actually accepts a `client_id`-bearing token at that endpoint
+is the thing that is unknown. It may already refuse it; that would be a
+complete answer and would close this item. The question is cheap to settle and
+must be settled before the answer is assumed.
+
+### Procedure
+
+**Run this only against a throwaway Supabase project, with a throwaway
+account created for the purpose. Never against production, never against the
+hosted Interndex project, and never with a real student's account, token, or
+email address — a successful run changes the password of whatever account it
+is pointed at.** Nothing in this procedure belongs in CI.
+
+Set up a scratch project whose auth configuration matches this repository's
+(`supabase/config.toml`): OAuth server on, dynamic client registration on,
+`secure_password_change = false`. A local stack (`npm run db:start`) is the
+cheapest way to get one and is the recommended target.
+
+1. **Obtain a real client token through the full PKCE flow.** Do not
+   hand-craft a JWT or add a `client_id` claim to a session token: the point
+   is to test the token the authorization server actually issues.
+   `tests/integration/oauth-client-authority.test.ts` already performs every
+   step — register a public client, create a disposable student, authorize,
+   consent, exchange the code — and `scripts/verify-client-token-authority.mjs`
+   runs that same sequence standalone and stops with the token in hand.
+2. **Confirm the token carries the claim.** Decode the payload and check for a
+   top-level `client_id`. Without it the run proves nothing, because the token
+   under test is not a client token.
+3. **Attempt the password change.**
+   ```
+   PUT <project>/auth/v1/user
+   apikey: <publishable key>
+   Authorization: Bearer <client access token>
+   Content-Type: application/json
+
+   {"password": "<a new throwaway password>"}
+   ```
+4. **Record the exact status and body.** A `2xx` means the ceiling is
+   reachable around and H-1 is confirmed; a `401`/`403` means GoTrue already
+   refuses client tokens here and H-1 is closed. Record the verbatim response
+   either way, with the GoTrue version — this answer can change with a
+   Supabase release, so it is a dated result, not a permanent one.
+5. **Prove the outcome rather than trusting the status.** Try to sign in with
+   the new password. A `2xx` that did not actually change the credential is a
+   different finding from one that did.
+6. **Repeat with `secure_password_change = true`.** Change it in the scratch
+   project's config, restart, obtain a *fresh* client token, and run steps 3–5
+   again. This is what establishes whether that one setting is a sufficient
+   remediation or only a partial one.
+7. **Also try `{"email": "..."}`** in the same two configurations. Email
+   change is the other route to an account, and `double_confirm_changes` is
+   the setting that governs it.
+8. **Tear down.** Delete the disposable student and the registered client, as
+   the integration suite's `afterAll` does.
+
+### What to do with the result
+
+- **If refused in step 4:** record it here with the date and GoTrue version,
+  close H-1, and add a regression case to
+  `tests/integration/oauth-client-authority.test.ts` so a future Supabase
+  release cannot reopen it silently.
+- **If accepted in step 4 and refused in step 6:** H-1 is confirmed and
+  `secure_password_change = true` is the remediation. Setting it in the
+  hosted project is a change to production auth behaviour — it makes password
+  change require a recent login — so it belongs to the repository owner, with
+  the reset-password flow (`lib/auth/actions.ts`) re-exercised afterwards.
+- **If accepted in both:** the setting is not a remediation, and the ceiling
+  cannot be enforced at the database alone. That is a design question — a
+  narrower grant for the extension's client, a much shorter `jwt_expiry`, or
+  both — and not a configuration fix.
+
+**No hosted Supabase setting was changed to write any of this, and
+`supabase/config.toml`'s `secure_password_change` is deliberately left at its
+current value** so that step 3 tests the configuration as it stands rather
+than the one being evaluated.
 
 ## Residual risks
 
@@ -616,9 +718,24 @@ deployment.
 - OAuth dynamic client registration for the MCP flow inherits the standard
   DCR consent-phishing exposure common to all MCP OAuth 2.1 + DCR
   implementations (a malicious registered client can request consent under
-  a self-chosen display name); the consent screen's display of the exact
-  redirect destination and the per-user, revocable, RLS-bounded blast
-  radius are the mitigations, consistent with the model MCP itself expects.
+  a self-chosen display name); the per-user, revocable, RLS-bounded blast
+  radius is the structural mitigation, consistent with the model MCP itself
+  expects. Registration stays open — it is what lets a client connect
+  without being pre-arranged — and the consent screen was hardened on
+  2026-09-10 to stop lending it Interndex's voice: the client's name no
+  longer appears in the page heading, it is bounded and flattened by
+  `lib/oauth/client-display.ts` (60 characters, one line, no bidirectional
+  overrides or zero-width characters), it is labelled as the application's
+  own claim, and a fixed "Interndex has not verified this application"
+  warning now sits with the redirect destination's host directly above the
+  Allow button rather than in a footnote below it.
+  `tests/unit/oauth-consent-page.test.tsx` holds all of that, including that
+  Claude's connector and the extension still connect unchanged.
+- **H-1 is open, not confirmed**: whether a `client_id`-bearing token can
+  change an account password through GoTrue is unverified. See "Unverified:
+  the reach of a client token at the Auth API" above for the exact procedure
+  that settles it. No hosted setting was changed, and no claim either way
+  should be made until that procedure has been run.
 
 ## Deferred / out-of-scope findings
 

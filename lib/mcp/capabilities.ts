@@ -17,9 +17,13 @@
  * enforcement keys on something else: the `client_id` claim the authorization
  * server writes into every token it issues. Row-level security and a trigger
  * (`supabase/migrations/20260908000100_oauth_client_authority.sql`) refuse a
- * client session's deletes, archives, and restores, and leave its reads,
- * inserts, and updates alone — exactly `ASSISTANT_CAN` and `ASSISTANT_CANNOT`.
- * If either list changes, that migration's rules change with it, and
+ * client session's deletes, archives, and restores, and leave its application
+ * reads, inserts, and updates alone — exactly `ASSISTANT_CAN` and
+ * `ASSISTANT_CANNOT`. `20260910000100_oauth_client_profile_reads.sql` closes
+ * the one thing neither list mentions and the first migration left open: the
+ * student's profile is not an application, so a client session cannot read it
+ * either, having already been unable to write it.
+ * If either list changes, those migrations' rules change with it, and
  * `supabase/tests/006_oauth_client_authority.test.sql` is where the two are
  * proved to agree. `docs/browser-capture.md` has the reasoning.
  */
