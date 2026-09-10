@@ -2,12 +2,43 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { HomePage } from "@/components/public/home-page";
 import { hasSupabaseEnvironment } from "@/lib/env";
+import {
+  HOMEPAGE_SOCIAL_DESCRIPTION,
+  HOMEPAGE_SOCIAL_IMAGE,
+  HOMEPAGE_SOCIAL_IMAGE_ALT,
+  HOMEPAGE_SOCIAL_TITLE,
+} from "@/lib/metadata/homepage-social";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Interndex: Keep your job search in one place",
   description:
     "Save internship and co-op opportunities from anywhere. The Interndex Chrome extension captures jobs across most career sites and is most accurate on LinkedIn, Indeed, and Workday. Track every application and deadline, and connect an MCP-compatible AI when you want help.",
+  openGraph: {
+    title: HOMEPAGE_SOCIAL_TITLE,
+    description: HOMEPAGE_SOCIAL_DESCRIPTION,
+    url: "https://www.interndex.dev",
+    siteName: "Interndex",
+    images: [
+      {
+        url: HOMEPAGE_SOCIAL_IMAGE,
+        width: 1200,
+        height: 630,
+        alt: HOMEPAGE_SOCIAL_IMAGE_ALT,
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: HOMEPAGE_SOCIAL_TITLE,
+    description: HOMEPAGE_SOCIAL_DESCRIPTION,
+    images: [
+      {
+        url: HOMEPAGE_SOCIAL_IMAGE,
+        alt: HOMEPAGE_SOCIAL_IMAGE_ALT,
+      },
+    ],
+  },
 };
 
 /**
