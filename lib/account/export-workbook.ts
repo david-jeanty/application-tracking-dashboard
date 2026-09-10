@@ -254,9 +254,6 @@ function addProfileSheet(
     ? [
         { field: "Full name", value: profile.full_name },
         { field: "Email", value: account.email },
-        { field: "School", value: profile.school },
-        { field: "Academic program", value: profile.academic_program },
-        { field: "Graduation year", value: profile.graduation_year },
         { field: "Profile created", value: excelDateTime(profile.created_at) },
         { field: "Profile updated", value: excelDateTime(profile.updated_at) },
       ]

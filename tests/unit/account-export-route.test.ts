@@ -25,9 +25,6 @@ const EXPORTED_DATA = {
   account: { id: USER_ID, email: "student@example.com" },
   profile: {
     full_name: "Alex Smith",
-    school: "University of Waterloo",
-    academic_program: "Business Administration",
-    graduation_year: 2027,
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-02T00:00:00.000Z",
   },

@@ -4,12 +4,17 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ApplicationStatus } from "@/lib/applications/constants";
 import type { ApplicationRecord } from "@/lib/applications/types";
 
-/** The exportable columns of one student's `profiles` row. */
+/**
+ * The exportable columns of one student's `profiles` row.
+ *
+ * The `profiles` table's schema also has `school`, `academic_program`, and
+ * `graduation_year` columns, but no signup field, Settings page, or MCP tool
+ * anywhere in the product ever writes to them — they are unreachable, always
+ * null for every real account, and deliberately left out here rather than
+ * exported as blank rows that look like a feature Interndex never built.
+ */
 export type ProfileExportRecord = {
   full_name: string;
-  school: string | null;
-  academic_program: string | null;
-  graduation_year: number | null;
   created_at: string;
   updated_at: string;
 };

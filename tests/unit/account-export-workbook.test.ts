@@ -50,9 +50,6 @@ function baseData(overrides: Partial<AccountExportData> = {}): AccountExportData
     account: { id: USER_ID, email: "student@example.com" },
     profile: {
       full_name: "Alex Smith",
-      school: "University of Waterloo",
-      academic_program: "Business Administration",
-      graduation_year: 2027,
       created_at: "2026-01-01T05:00:00.000Z",
       updated_at: "2026-01-02T05:00:00.000Z",
     },
@@ -307,11 +304,17 @@ describe("buildAccountExportWorkbook", () => {
 
     expect(fields.get("Full name")).toBe("Alex Smith");
     expect(fields.get("Email")).toBe("student@example.com");
-    expect(fields.get("School")).toBe("University of Waterloo");
-    expect(fields.get("Academic program")).toBe("Business Administration");
-    expect(fields.get("Graduation year")).toBe(2027);
     expect(fields.get("Profile created")).toBeInstanceOf(Date);
     expect(fields.get("Profile updated")).toBeInstanceOf(Date);
+    // No product surface — no signup field, Settings page, or MCP tool — ever
+    // writes to the `profiles` table's school/academic_program/graduation_year
+    // columns, so they must never appear as if Interndex collected them.
+    expect([...fields.keys()]).toEqual([
+      "Full name",
+      "Email",
+      "Profile created",
+      "Profile updated",
+    ]);
   });
 
   it("never includes OAuth grants, sessions, credentials, or any raw user id", async () => {
