@@ -1,4 +1,5 @@
 import { buildCaptureRecord } from "./capture.js";
+import { jobtrackUrl } from "./config.js";
 import {
   createCaptureSession,
   readPageIdentity,
@@ -347,6 +348,21 @@ async function save(): Promise<void> {
   apply({ type: "save_result", outcome: outcome ?? { kind: "network_error" } });
 }
 
+/**
+ * What this popup's "Sign out of this browser" button actually does, said
+ * plainly before it happens: it clears the credential this browser holds, not
+ * the grant itself. `auth.ts`'s `disconnect()` cannot revoke that grant — only
+ * Interndex Settings, working from the student's own signed-in session, can
+ * — so the one honest thing this confirmation can do is say that and point
+ * there, rather than let a button labeled like a full disconnect quietly do
+ * less than it implies.
+ */
+const DISCONNECT_CONFIRM_MESSAGE =
+  "Sign out of Interndex Capture on this device?\n\n" +
+  "This clears the connection here only — it does not remove Interndex " +
+  "Capture's access to your account. To fully disconnect it, open Interndex " +
+  "Settings and remove it from your authorized connections there.";
+
 function field(id: string): HTMLInputElement | HTMLSelectElement {
   const found = document.getElementById(id);
   if (!found) throw new Error(`Missing popup field: ${id}`);
@@ -354,7 +370,22 @@ function field(id: string): HTMLInputElement | HTMLSelectElement {
   return found as HTMLInputElement | HTMLSelectElement;
 }
 
+/** Static footer links to Interndex's own pages, not tied to any popup state. */
+function wireFooterLinks(): void {
+  const privacyLink = document.getElementById("privacy-link");
+  if (privacyLink instanceof HTMLAnchorElement) {
+    privacyLink.href = jobtrackUrl("/privacy");
+  }
+
+  const supportLink = document.getElementById("support-link");
+  if (supportLink instanceof HTMLAnchorElement) {
+    supportLink.href = jobtrackUrl("/support");
+  }
+}
+
 function wire(): void {
+  wireFooterLinks();
+
   document.getElementById("connect")?.addEventListener("click", beginConnect);
   document
     .getElementById("connect-retry")
@@ -362,6 +393,8 @@ function wire(): void {
   document.getElementById("reconnect")?.addEventListener("click", beginConnect);
 
   document.getElementById("disconnect")?.addEventListener("click", async () => {
+    if (!window.confirm(DISCONNECT_CONFIRM_MESSAGE)) return;
+
     await ask({ type: "disconnect" });
     apply({ type: "connection", connected: false });
   });

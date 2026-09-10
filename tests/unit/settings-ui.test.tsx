@@ -274,3 +274,25 @@ describe("data and account", () => {
     expect(deleteLink.closest("form")).toBeNull();
   });
 });
+
+describe("legal and support links", () => {
+  it("links Privacy, Terms, and Support from the authenticated shell", async () => {
+    render(await renderPage());
+
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Legal & support" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute(
+      "href",
+      "/privacy",
+    );
+    expect(screen.getByRole("link", { name: "Terms" })).toHaveAttribute(
+      "href",
+      "/terms",
+    );
+    expect(screen.getByRole("link", { name: "Support" })).toHaveAttribute(
+      "href",
+      "/support",
+    );
+  });
+});

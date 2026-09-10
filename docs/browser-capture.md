@@ -1,8 +1,8 @@
 # Browser-capture architecture
 
 Status: server-side foundation implemented (2026-08-25); Interndex Capture
-Chrome extension implemented as a locally loadable unpacked MV3 extension
-(2026-08-26). Not submitted to or approved by the Chrome Web Store.
+Chrome extension implemented as an MV3 extension (2026-08-26) and published,
+approved, and live on the Chrome Web Store.
 
 ## Product boundary
 

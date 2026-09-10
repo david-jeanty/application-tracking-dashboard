@@ -3,6 +3,38 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  async headers() {
+    return [
+      // These routes handle credentials or authorization decisions and have
+      // no reason to be framed by another site, so they get an explicit
+      // clickjacking defense. Not applied site-wide: most routes (including
+      // /privacy and /auth/callback) have no such need.
+      {
+        source: "/oauth/consent",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+      {
+        source: "/login",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+      {
+        source: "/signup",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+      {
+        source: "/settings",
+        headers: [
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return [
       // RFC 9728 discovery for the MCP endpoint. Clients request either the

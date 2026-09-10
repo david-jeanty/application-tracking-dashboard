@@ -16,7 +16,7 @@
  */
 export const EXTENSION_CONFIG = {
   /** The Interndex deployment whose capture endpoint receives the record. */
-  jobtrackOrigin: "https://application-tracking-dashboard-wfgh.vercel.app",
+  jobtrackOrigin: "https://www.interndex.dev",
 
   /** The Supabase project that issues and refreshes access tokens. */
   supabaseUrl: "https://jbkrwbofrctithcjevxy.supabase.co",

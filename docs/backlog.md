@@ -58,9 +58,9 @@ approved: an extension that saves the posting the student is currently viewing
 after an explicit user action.
 
 The server foundation shipped first; the Interndex Capture Chrome extension
-followed as a locally loadable unpacked MV3 package. It is not distributed
-through the Chrome Web Store, and site-specific extraction adapters are
-deliberately not part of it.
+followed as an MV3 package and is now published and distributed through the
+Chrome Web Store. Site-specific extraction adapters are deliberately not
+part of it.
 
 The approved work is capture only. Arbitrary or background scraping, autofill,
 auto-apply, submission detection, built-in AI, job classification, resume

@@ -273,6 +273,11 @@ verified against a real Postgres; see `docs/browser-capture.md`,
 paragraph placed the claim in `app_metadata`; it is a top-level token claim,
 and nothing ever read it from `app_metadata` successfully.)
 
+**Further update:** the extension has since been submitted to, approved by,
+and published on the Chrome Web Store — the "current unpacked/local-install
+distribution" framing above and the "deferred" Chrome Web Store distribution
+it referred to are both no longer the case.
+
 ## Email findings
 
 Email confirmation is intentionally disabled for Interndex signup (a
@@ -602,9 +607,10 @@ deployment.
   (Medium finding above) — accepted tradeoff, not remediated here.
 - The extension OAuth grant is not privilege-limited below "everything this
   one user's session can do" (the deferred least-privilege question,
-  resolved-as-acceptable-with-residual-risk above) — acceptable for the
-  current unpacked/local-install distribution; must be revisited before
-  Chrome Web Store submission.
+  resolved-as-acceptable-with-residual-risk above) — this was the accepted
+  tradeoff for the unpacked/local-install distribution at the time; the
+  client-id-aware enforcement above has since landed, and the extension is
+  now published on the Chrome Web Store.
 - `npm audit`'s 6 high-severity build-tooling advisories are unaddressed
   (out of this audit's scope; none is reachable by user input at runtime).
 - OAuth dynamic client registration for the MCP flow inherits the standard
