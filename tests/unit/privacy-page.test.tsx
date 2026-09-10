@@ -63,11 +63,22 @@ describe("the public privacy route", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /download your profile, applications, and status history as one JSON file from Settings/i,
+        /download your profile, applications, and status history as one Excel workbook from Settings/i,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/manual step/i)).toBeNull();
     expect(screen.queryByText(/planned but not built/i)).toBeNull();
+  });
+
+  it("describes the export as an Excel workbook rather than a JSON file", () => {
+    render(<PrivacyPage />);
+
+    expect(
+      screen.getByText(
+        /tracked, and its status history as one Excel workbook\. If you/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/JSON/i)).toBeNull();
   });
 
   it("discloses the server-only deletion credential without overstating RLS", () => {

@@ -293,7 +293,7 @@ export default async function SettingsPage({
         <Subsection title="Export your data">
           <p className="mt-2 max-w-2xl text-sm leading-6 text-foreground-secondary">
             Download your profile, every application you have tracked, and its
-            status history as one JSON file.
+            status history as one Excel workbook, with a sheet for each.
           </p>
           <a
             className={buttonClassName("secondary", "mt-4")}
