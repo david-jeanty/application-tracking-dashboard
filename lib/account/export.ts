@@ -1,13 +1,39 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ApplicationStatus } from "@/lib/applications/constants";
+import type { ApplicationRecord } from "@/lib/applications/types";
+
+/** The exportable columns of one student's `profiles` row. */
+export type ProfileExportRecord = {
+  full_name: string;
+  school: string | null;
+  academic_program: string | null;
+  graduation_year: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * One full `application_status_history` row, before any join to the
+ * application it belongs to. `previous_status` is null only for the single
+ * creation event a database trigger writes — see
+ * `lib/applications/types.ts`'s `ApplicationTimelineEvent` for the same
+ * contract on the narrower projection other surfaces read.
+ */
+export type StatusHistoryExportRecord = {
+  application_id: string;
+  previous_status: ApplicationStatus | null;
+  new_status: ApplicationStatus;
+  changed_at: string;
+};
 
 export type AccountExportData = {
   exported_at: string;
   account: { id: string; email: string | null };
-  profile: Record<string, unknown> | null;
-  applications: Record<string, unknown>[];
-  application_status_history: Record<string, unknown>[];
+  profile: ProfileExportRecord | null;
+  applications: ApplicationRecord[];
+  application_status_history: StatusHistoryExportRecord[];
 };
 
 export type AccountExportResult =

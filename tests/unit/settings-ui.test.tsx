@@ -265,6 +265,15 @@ describe("data and account", () => {
     ).toHaveAttribute("href", "/api/account/export");
   });
 
+  it("describes the export as an Excel workbook rather than JSON", async () => {
+    render(await renderPage());
+
+    expect(
+      screen.getByText(/as one Excel workbook, with a sheet for each/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/JSON/i)).toBeNull();
+  });
+
   it("sends deletion to its own confirmation page rather than acting inline", async () => {
     render(await renderPage());
 

@@ -11,7 +11,7 @@
  * bump.
  */
 export const TERMS_VERSION = "2026-09-10";
-export const PRIVACY_VERSION = "2026-09-10";
+export const PRIVACY_VERSION = "2026-09-11";
 
 /** Renders a `YYYY-MM-DD` version string as the long-form date shown on the page. */
 export function formatDocumentVersion(version: string): string {

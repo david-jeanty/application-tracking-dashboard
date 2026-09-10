@@ -377,8 +377,8 @@ export default function PrivacyPage() {
                 automatically removes everything tied to it, rather than
                 leaving orphaned rows behind. Before you do, Settings also
                 lets you download your profile, every application you have
-                tracked, and its status history as one JSON file. If you need
-                help with either step, email{" "}
+                tracked, and its status history as one Excel workbook. If you
+                need help with either step, email{" "}
                 <a
                   className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
                   href="mailto:support@interndex.dev"
@@ -429,7 +429,7 @@ export default function PrivacyPage() {
                 in and looking at your applications, your profile, and your
                 Settings page — there is no hidden data — and you can
                 download your profile, applications, and status history as
-                one JSON file from Settings. You can correct
+                one Excel workbook from Settings. You can correct
                 almost anything yourself by editing a record or your account
                 details. For anything you cannot fix in the app — correcting
                 account information, asking what data Interndex holds about
