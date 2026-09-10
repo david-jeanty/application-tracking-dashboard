@@ -231,6 +231,7 @@ export async function listApplications(
   supabase: SupabaseClient,
   authenticatedUserId: string,
   filters: ApplicationListFilters = {},
+  abortSignal?: AbortSignal,
 ) {
   let query = supabase
     .from("applications")
@@ -265,6 +266,7 @@ export async function listApplications(
 
   query = query.order("created_at", { ascending: false });
   if (filters.limit !== undefined) query = query.limit(filters.limit);
+  if (abortSignal) query = query.abortSignal(abortSignal);
 
   return query.returns<ApplicationListItem[]>();
 }
@@ -459,13 +461,16 @@ export async function listApplicationStatusHistory(
 export async function listStatusTimeline(
   supabase: SupabaseClient,
   authenticatedUserId: string,
+  abortSignal?: AbortSignal,
 ) {
-  return supabase
+  let query = supabase
     .from("application_status_history")
     .select("application_id,previous_status,new_status,changed_at")
     .eq("user_id", authenticatedUserId)
-    .order("changed_at", { ascending: false })
-    .returns<ApplicationTimelineEvent[]>();
+    .order("changed_at", { ascending: false });
+
+  if (abortSignal) query = query.abortSignal(abortSignal);
+  return query.returns<ApplicationTimelineEvent[]>();
 }
 
 export async function getApplicationById(

@@ -40,13 +40,32 @@ async function likelyFirstLoadAfterSignIn(): Promise<boolean | null> {
   }
 }
 
-export default async function DashboardPage() {
-  const supabase = await createClient();
+async function resolveDashboardAuth(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+) {
+  const authStartedAt = performance.now();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  const authResolvedMs = Math.round(performance.now() - authStartedAt);
 
-  if (!user) redirect("/login");
+  // `getUser()` above remains the trusted authorization check. This second,
+  // local session read both records whether a JWT was available at the exact
+  // point the database reads began and prevents an internally inconsistent
+  // auth state from falling through to PostgREST as an anonymous request.
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  return { user, sessionExists: Boolean(session), authResolvedMs };
+}
+
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const { user, sessionExists, authResolvedMs } =
+    await resolveDashboardAuth(supabase);
+
+  if (!user || !sessionExists) redirect("/login");
 
   const firstLoad = await likelyFirstLoadAfterSignIn();
   // Temporary incident instrumentation: ties the two reads' failure log
@@ -65,13 +84,33 @@ export default async function DashboardPage() {
   // Each read carries its own small bounded retry (see `lib/dashboard/reads`)
   // for the one class of failure a moment actually fixes: the database or its
   // API not yet ready to answer. A permission or session failure is never
-  // retried, and comes back exactly as issued.
+  // retried, and comes back exactly as issued. A fresh AbortSignal on every
+  // attempt opts these deliberate retries out of React's per-render GET
+  // memoization; without it, attempt two only replays attempt one's response
+  // and never reaches PostgREST.
   const [applications, timeline] = await Promise.all([
-    withTransientReadRetry("applications", DASHBOARD_PATH, firstLoad, requestId, () =>
-      listApplications(supabase, user.id, { archiveState: "all" }),
+    withTransientReadRetry(
+      "applications",
+      DASHBOARD_PATH,
+      firstLoad,
+      requestId,
+      () =>
+        listApplications(
+          supabase,
+          user.id,
+          { archiveState: "all" },
+          new AbortController().signal,
+        ),
+      { sessionExistedAtRead: sessionExists, authResolvedMs },
     ),
-    withTransientReadRetry("statusTimeline", DASHBOARD_PATH, firstLoad, requestId, () =>
-      listStatusTimeline(supabase, user.id),
+    withTransientReadRetry(
+      "statusTimeline",
+      DASHBOARD_PATH,
+      firstLoad,
+      requestId,
+      () =>
+        listStatusTimeline(supabase, user.id, new AbortController().signal),
+      { sessionExistedAtRead: sessionExists, authResolvedMs },
     ),
   ]);
 

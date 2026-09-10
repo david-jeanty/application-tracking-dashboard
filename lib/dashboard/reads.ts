@@ -24,6 +24,12 @@ export type DashboardReadAttempt<Row> = {
   status: number;
 };
 
+/** Authentication state known immediately before the dashboard reads start. */
+export type DashboardAuthDiagnostics = {
+  sessionExistedAtRead: boolean;
+  authResolvedMs: number;
+};
+
 /**
  * Logs a failed dashboard read, and only what a database error already says
  * about itself.
@@ -52,6 +58,8 @@ export function logDashboardReadFailure(input: {
   path: string;
   likelyFirstLoadAfterSignIn: boolean | null;
   requestId: string;
+  sessionExistedAtRead: boolean | null;
+  authResolvedMs: number | null;
 }): void {
   console.error("[dashboard] read failed", {
     read: input.read,
@@ -64,6 +72,33 @@ export function logDashboardReadFailure(input: {
     path: input.path,
     likelyFirstLoadAfterSignIn: input.likelyFirstLoadAfterSignIn,
     requestId: input.requestId,
+    sessionExistedAtRead: input.sessionExistedAtRead,
+    authResolvedMs: input.authResolvedMs,
+  });
+}
+
+function logDashboardReadRecovery(input: {
+  read: DashboardReadName;
+  attempt: number;
+  path: string;
+  requestId: string;
+  status: number;
+  recoveredFromCode: string | null;
+  recoveredFromMessage: string | null;
+  elapsedMs: number;
+  diagnostics?: DashboardAuthDiagnostics;
+}): void {
+  console.info("[dashboard] read recovered", {
+    read: input.read,
+    attempt: input.attempt,
+    path: input.path,
+    requestId: input.requestId,
+    status: input.status,
+    recoveredFromCode: input.recoveredFromCode,
+    recoveredFromMessage: input.recoveredFromMessage,
+    elapsedMs: input.elapsedMs,
+    sessionExistedAtRead: input.diagnostics?.sessionExistedAtRead ?? null,
+    authResolvedMs: input.diagnostics?.authResolvedMs ?? null,
   });
 }
 
@@ -147,6 +182,24 @@ function isTransientReadFailure(
 
 const MAX_ATTEMPTS = 2;
 const RETRY_DELAY_MS = 300;
+const JWT_CLOCK_SKEW_RETRY_DELAY_MS = 1_000;
+
+function retryDelayMs(error: DashboardReadError | null): number {
+  // Supabase's managed-infrastructure incident reports include the same
+  // freshly issued token being rejected and then accepted about 700 ms
+  // later (github.com/orgs/supabase/discussions/48123). The old 300 ms retry
+  // was therefore shorter than the observed failure window. Keep the longer
+  // wait exclusive to the two exact clock-skew messages; every other transient
+  // read keeps the existing bound.
+  if (
+    error?.code === "PGRST303" &&
+    error.message &&
+    TRANSIENT_JWT_CLAIM_MESSAGES.has(error.message)
+  ) {
+    return JWT_CLOCK_SKEW_RETRY_DELAY_MS;
+  }
+  return RETRY_DELAY_MS;
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -171,12 +224,30 @@ export async function withTransientReadRetry<Row>(
   likelyFirstLoadAfterSignIn: boolean | null,
   requestId: string,
   run: () => PromiseLike<DashboardReadAttempt<Row>>,
+  diagnostics?: DashboardAuthDiagnostics,
 ): Promise<{ data: Row[] | null; error: DashboardReadError | null }> {
   let attempt = 1;
+  const startedAt = performance.now();
+  let retryFailure: DashboardReadAttempt<Row> | null = null;
 
   while (true) {
     const result = await run();
-    if (!result.error) return { data: result.data, error: null };
+    if (!result.error) {
+      if (retryFailure) {
+        logDashboardReadRecovery({
+          read,
+          attempt,
+          path,
+          requestId,
+          status: result.status,
+          recoveredFromCode: retryFailure.error?.code ?? null,
+          recoveredFromMessage: retryFailure.error?.message ?? null,
+          elapsedMs: Math.round(performance.now() - startedAt),
+          diagnostics,
+        });
+      }
+      return { data: result.data, error: null };
+    }
 
     logDashboardReadFailure({
       read,
@@ -186,13 +257,16 @@ export async function withTransientReadRetry<Row>(
       path,
       likelyFirstLoadAfterSignIn,
       requestId,
+      sessionExistedAtRead: diagnostics?.sessionExistedAtRead ?? null,
+      authResolvedMs: diagnostics?.authResolvedMs ?? null,
     });
 
     const canRetry =
       attempt < MAX_ATTEMPTS && isTransientReadFailure(result.error, result.status);
     if (!canRetry) return { data: result.data, error: result.error };
 
+    retryFailure = result;
     attempt += 1;
-    await delay(RETRY_DELAY_MS);
+    await delay(retryDelayMs(result.error));
   }
 }

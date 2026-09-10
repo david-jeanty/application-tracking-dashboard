@@ -37,7 +37,18 @@ function recordingClient(rows: unknown[] = []) {
     return builder;
   };
 
-  for (const method of ["select", "eq", "is", "in", "not", "or", "ilike", "order", "limit"]) {
+  for (const method of [
+    "select",
+    "eq",
+    "is",
+    "in",
+    "not",
+    "or",
+    "ilike",
+    "order",
+    "limit",
+    "abortSignal",
+  ]) {
     builder[method] = record(method);
   }
   builder.returns = () => Promise.resolve({ data: rows, error: null });
@@ -221,6 +232,22 @@ describe("exact application URL lookup", () => {
 });
 
 describe("filters reach the query", () => {
+  it("forwards the caller's signal to the applications fetch", async () => {
+    const recorder = recordingClient();
+    const signal = new AbortController().signal;
+
+    await listApplications(
+      recorder.client,
+      USER,
+      { archiveState: "all" },
+      signal,
+    );
+
+    expect(recorder.find("abortSignal")).toEqual([
+      { method: "abortSignal", args: [signal] },
+    ]);
+  });
+
   it("filters by status", async () => {
     const recorder = recordingClient();
 
@@ -463,6 +490,17 @@ describe("the single-application history read", () => {
 });
 
 describe("the status timeline read", () => {
+  it("forwards the caller's signal to the timeline fetch", async () => {
+    const recorder = recordingClient();
+    const signal = new AbortController().signal;
+
+    await listStatusTimeline(recorder.client, USER, signal);
+
+    expect(recorder.find("abortSignal")).toEqual([
+      { method: "abortSignal", args: [signal] },
+    ]);
+  });
+
   it("is scoped to the authenticated owner", async () => {
     const recorder = recordingClient();
 
