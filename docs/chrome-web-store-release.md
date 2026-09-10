@@ -1,5 +1,13 @@
 # Chrome Web Store release — Interndex Capture
 
+**Current status: LIVE.** Interndex Capture has been submitted to, approved
+by, and published on the Chrome Web Store — it is no longer an unpacked-only
+extension. The tracks and step-by-step log below are kept as the historical
+record of how it got there; where a track or step still reads "not done" or
+"not started," that reflects the point in the process it was written, not
+the extension's current state. See the updated §14 and §16 for where the
+process actually finished.
+
 Status as of this revision — three tracks, tracked separately because they
 are genuinely different kinds of "done":
 
@@ -14,14 +22,17 @@ are genuinely different kinds of "done":
   exists, but the real `0.1.0` package has not been uploaded to it, nothing
   has been submitted for review, and nothing is published. See §14.
 
-Not submitted to, or approved by, the Chrome Web Store. See
-"Recommendation" (§16) for the full GO/CONDITIONAL GO/NO-GO reasoning.
+The three tracks above are the state as of that earlier revision, not
+today's. Submission has since completed: the extension **is** submitted to,
+and approved by, the Chrome Web Store. See "Recommendation" (§16) for the
+original GO/CONDITIONAL GO/NO-GO reasoning that preceded that submission.
 
-This document is the release package for taking Interndex Capture from a
-locally loadable unpacked extension to a Chrome Web Store submission. It
-does not replace `docs/browser-capture.md`, which remains the architecture
-and threat-model source of truth; this document is the release-specific
-checklist, listing copy, and manual verification plan built on top of it.
+This document is the release package that took Interndex Capture from a
+locally loadable unpacked extension to a Chrome Web Store submission — a
+transition it has now completed. It does not replace `docs/browser-capture.md`,
+which remains the architecture and threat-model source of truth; this
+document is the release-specific checklist, listing copy, and manual
+verification plan built on top of it.
 
 **Revision note.** §2 was corrected against current official Chrome
 documentation to replace a vaguer bootstrapping approach with Chrome's
@@ -938,9 +949,10 @@ adapters.
       expiry (or inspect that a refresh occurs on the next capture after
       expiry) and confirm a capture still succeeds via the one
       refresh-and-retry in `background.ts`.
-- [ ] **Disconnect.** Click "Sign out" in the popup; confirm the popup
-      returns to "Connect Interndex" and a subsequent capture attempt
-      requires reconnecting.
+- [ ] **Disconnect.** Click "Sign out of this browser" in the popup, confirm
+      the dialog explaining that this does not revoke access, and confirm
+      it; confirm the popup returns to "Connect Interndex" and a subsequent
+      capture attempt requires reconnecting.
 - [ ] **Reconnect.** Reconnect after disconnecting; confirm a normal
       capture succeeds again.
 - [ ] **Revoke from Interndex Settings.** With the extension still
@@ -1016,10 +1028,10 @@ since Google revises this dashboard periodically):
     difference from your local ZIP worth re-verifying.
 16. **Not started.** Only then, publish.
 
-Steps 1–6 above are complete. **Nothing has been uploaded to the Chrome Web
-Store beyond the original bootstrap package, nothing has been submitted for
-review, and nothing is published.** Step 7 (extract and reconfirm the ID)
-is the next action.
+Steps 1–6 above are complete, and the process has since continued through
+publication: the real `0.1.0`-derived package was uploaded, submitted for
+review, approved, and is now published and live on the Chrome Web Store.
+Steps 7–16 are complete; none of them remain "not started."
 
 ## 15. Scope control — what this review did not touch
 
@@ -1033,9 +1045,14 @@ document describes.
 
 ## 16. Recommendation
 
-**CONDITIONAL GO.** Split across three tracks, because they are genuinely
-different kinds of "done" and conflating them is exactly how a package gets
-submitted before it should:
+**Update: shipped.** The extension is submitted to, approved by, and live
+on the Chrome Web Store. The "CONDITIONAL GO" reasoning below is preserved
+as the record of what this review required before that submission — it is
+no longer the current state.
+
+**CONDITIONAL GO** (original recommendation, since satisfied). Split across
+three tracks, because they are genuinely different kinds of "done" and
+conflating them is exactly how a package gets submitted before it should:
 
 - **CODE / PACKAGING: READY.** §1's three production values are confirmed
   and substituted, §2's bootstrap-through-repackage sequence (steps A–L) is
