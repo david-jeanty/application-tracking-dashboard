@@ -322,6 +322,43 @@ export default async function SettingsPage({
           </Link>
         </Subsection>
       </section>
+
+      <section aria-labelledby="legal-support-heading" className="space-y-4">
+        <div className="border-b border-border pb-2">
+          <h2
+            className="text-[17px] font-medium text-foreground"
+            id="legal-support-heading"
+          >
+            Legal &amp; support
+          </h2>
+        </div>
+        <ul className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <li>
+            <Link
+              className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+              href="/privacy"
+            >
+              Privacy
+            </Link>
+          </li>
+          <li>
+            <Link
+              className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+              href="/terms"
+            >
+              Terms
+            </Link>
+          </li>
+          <li>
+            <Link
+              className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
+              href="/support"
+            >
+              Support
+            </Link>
+          </li>
+        </ul>
+      </section>
     </div>
   );
 }

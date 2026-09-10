@@ -1,4 +1,5 @@
 import { buildCaptureRecord } from "./capture.js";
+import { jobtrackUrl } from "./config.js";
 import {
   createCaptureSession,
   readPageIdentity,
@@ -354,7 +355,22 @@ function field(id: string): HTMLInputElement | HTMLSelectElement {
   return found as HTMLInputElement | HTMLSelectElement;
 }
 
+/** Static footer links to Interndex's own pages, not tied to any popup state. */
+function wireFooterLinks(): void {
+  const privacyLink = document.getElementById("privacy-link");
+  if (privacyLink instanceof HTMLAnchorElement) {
+    privacyLink.href = jobtrackUrl("/privacy");
+  }
+
+  const supportLink = document.getElementById("support-link");
+  if (supportLink instanceof HTMLAnchorElement) {
+    supportLink.href = jobtrackUrl("/support");
+  }
+}
+
 function wire(): void {
+  wireFooterLinks();
+
   document.getElementById("connect")?.addEventListener("click", beginConnect);
   document
     .getElementById("connect-retry")

@@ -35,6 +35,8 @@ const RENDER_SELECTORS = [
   "#saved-company",
   "#saved-title",
   "#open-application",
+  "#privacy-link",
+  "#support-link",
 ] as const;
 
 describe("the unpacked extension popup runtime", () => {
