@@ -7,6 +7,7 @@ import {
   ConnectedClients,
   type ConnectedClient,
 } from "@/components/settings/connected-clients";
+import { CopyMcpUrlButton } from "@/components/settings/copy-mcp-url-button";
 import { buttonClassName } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import {
@@ -167,11 +168,15 @@ export default async function SettingsPage({
           {/*
             The one bounded thing on this page, and it earns the box: it is a
             literal value the student has to select and copy, so its edges say
-            where it begins and ends.
+            where it begins and ends. The button beside it is a shortcut, not
+            a replacement — the value stays selectable by hand.
           */}
-          <p className="mt-2 max-w-2xl overflow-x-auto rounded-record border border-border bg-surface-muted px-3 py-2 font-mono text-[13px] text-foreground">
-            {mcpUrl}
-          </p>
+          <div className="mt-2 flex max-w-2xl items-center gap-2">
+            <p className="overflow-x-auto rounded-record border border-border bg-surface-muted px-3 py-2 font-mono text-[13px] text-foreground">
+              {mcpUrl}
+            </p>
+            <CopyMcpUrlButton url={mcpUrl} />
+          </div>
         </Subsection>
 
         <Subsection title="Setting it up in Claude">
