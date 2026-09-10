@@ -7,7 +7,7 @@
   "minimum_chrome_version": "116",
   "permissions": ["activeTab", "scripting", "storage", "identity"],
   "host_permissions": [
-    "https://application-tracking-dashboard-wfgh.vercel.app/*",
+    "https://www.interndex.dev/*",
     "https://jbkrwbofrctithcjevxy.supabase.co/*"
   ],
   "background": {
