@@ -14,8 +14,8 @@
 -- (`lib/mcp/capabilities.ts`), and only that ceiling:
 --
 --   1. a client session cannot delete an application, archive one, restore
---      one, create one already archived, or write the profile — whichever
---      client it is, the extension's or an assistant's;
+--      one, create one already archived, or read or write the profile —
+--      whichever client it is, the extension's or an assistant's;
 --   2. a client session can still read, add, and update an application's
 --      details, including the details of an archived one — the legitimate
 --      work of save_job, import_jobs, update_job, and browser capture;
@@ -31,7 +31,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(40);
+select plan(46);
 
 -- ------------------------------------------------------------- structure ---
 
@@ -62,9 +62,10 @@ select policies_are(
     'profiles_delete_own',
     'profiles_insert_denied_to_oauth_clients',
     'profiles_update_denied_to_oauth_clients',
-    'profiles_delete_denied_to_oauth_clients'
+    'profiles_delete_denied_to_oauth_clients',
+    'profiles_select_denied_to_oauth_clients'
   ],
-  'profiles carries the owner policies plus the three client restrictions'
+  'profiles carries the owner policies plus the four client restrictions'
 );
 
 select has_trigger(
@@ -315,27 +316,34 @@ select throws_ok(
   'the client session cannot insert an application that is already archived'
 );
 
--- Profile: nothing on the consent screen grants this.
+-- Profile: nothing on the consent screen grants this, reading included. The
+-- consent screen offers applications and only applications, so the student's
+-- name, school, program, graduation year and consent record are not the
+-- client's to see any more than they are its to rewrite.
+select is(
+  (select count(*)::int from public.profiles),
+  0,
+  'the client session cannot read the student''s profile'
+);
+select is(
+  (select count(*)::int from public.profiles
+   where user_id = '50000000-0000-0000-0000-000000000001'),
+  0,
+  'nor read it by naming the owner it already knows'
+);
+
+-- The write refusals are attempted here and checked further down, from the
+-- student's own session. They used to be checked in place, by reading the row
+-- back; a client session can no longer read `profiles` at all, so a read-back
+-- here would now return nothing whether the write was refused or not — it
+-- would pass without proving anything. The web session below can see the row,
+-- so that is where the proof belongs.
 update public.profiles
 set full_name = 'Renamed by a client'
 where user_id = '50000000-0000-0000-0000-000000000001';
 
-select is(
-  (select full_name from public.profiles
-   where user_id = '50000000-0000-0000-0000-000000000001'),
-  'User A',
-  'the client session cannot update the student''s profile'
-);
-
 delete from public.profiles
 where user_id = '50000000-0000-0000-0000-000000000001';
-
-select is(
-  (select count(*)::int from public.profiles
-   where user_id = '50000000-0000-0000-0000-000000000001'),
-  1,
-  'the client session cannot delete the student''s profile'
-);
 
 -- -------------------------------------------- user A, an assistant's session ---
 -- A different client (an MCP connector). The rule is about being a client,
@@ -364,6 +372,12 @@ select throws_ok(
   'nor archive one'
 );
 
+select is(
+  (select count(*)::int from public.profiles),
+  0,
+  'nor read the student''s profile: the rule is about being a client'
+);
+
 update public.applications
 set current_status = 'Interview'
 where id = 'e0000000-0000-0000-0000-000000000001';
@@ -390,12 +404,41 @@ select is(
   0,
   'another student''s client session sees none of user A''s applications'
 );
+select is(
+  (select count(*)::int from public.profiles),
+  0,
+  'and no profile at all: neither user A''s, nor its own student''s'
+);
 
 update public.applications
 set notes = 'stolen'
 where id = 'e0000000-0000-0000-0000-000000000001';
 
 delete from public.applications;
+
+-- ------------------------------------------------- user B, web session ---
+-- The profile restriction is about the token, not about the owner. User B's
+-- own session still reads user B's own profile and has never been able to
+-- read user A's — which is what makes the refusals above a narrowing of one
+-- student's clients rather than a new isolation boundary standing in for
+-- `auth.uid()`.
+
+select set_config(
+  'request.jwt.claims',
+  '{"sub":"50000000-0000-0000-0000-000000000002","role":"authenticated"}',
+  true
+);
+
+select is(
+  (select count(*)::int from public.profiles),
+  1,
+  'user B''s web session reads exactly one profile'
+);
+select is(
+  (select user_id from public.profiles),
+  '50000000-0000-0000-0000-000000000002'::uuid,
+  'and it is user B''s own, never user A''s'
+);
 
 -- --------------------------------------------- user A, web session again ---
 -- The student's own session is not a client and keeps its full authority.
@@ -464,6 +507,21 @@ select lives_ok(
        'Not specified', now()
      ) $$,
   'the web session may create an application that is already archived'
+);
+
+-- The profile the clients above tried to rename and delete, read by the one
+-- session that can still see it. Both writes were filtered out, and the row
+-- is exactly as `handle_new_user` left it.
+select is(
+  (select count(*)::int from public.profiles),
+  1,
+  'the web session still reads its own profile'
+);
+select is(
+  (select full_name from public.profiles
+   where user_id = '50000000-0000-0000-0000-000000000001'),
+  'User A',
+  'and no client renamed or deleted it'
 );
 
 update public.profiles
