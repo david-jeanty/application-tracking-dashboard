@@ -50,8 +50,10 @@ export default function SupportPage() {
               </p>
               <p className="mt-3">
                 Use it for a bug, a question about your account or data, a
-                problem connecting an AI assistant, or a request to delete
-                your account. Expect a reply within a few days.
+                problem connecting an AI assistant, or help exporting your data
+                or deleting your account. Both of those are self-service in
+                Settings; email if either does not work for you. Expect a reply
+                within a few days.
               </p>
             </section>
 

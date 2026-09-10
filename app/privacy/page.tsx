@@ -141,8 +141,9 @@ export default function PrivacyPage() {
                 You can withdraw any of these independently: disconnect an AI
                 assistant or the extension&apos;s access in Settings without
                 closing your account, uninstall the extension without
-                affecting your account, or close your account entirely by
-                emailing{" "}
+                affecting your account, or permanently delete your account
+                yourself from Settings after confirming your password. If you
+                would rather have help with any of this, email{" "}
                 <a
                   className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
                   href="mailto:support@interndex.dev"
@@ -151,7 +152,7 @@ export default function PrivacyPage() {
                 </a>
                 . Withdrawing consent for a feature stops that feature; it
                 does not retroactively delete records already saved unless
-                you also ask for those to be deleted.
+                you also delete those records, or your account.
               </p>
             </section>
 
@@ -369,21 +370,22 @@ export default function PrivacyPage() {
                 one yourself, right in the app, whenever you choose.
               </p>
               <p className="mt-3">
-                Deleting your account today is a manual step rather than a
-                self-service button: email{" "}
+                Deleting your account is self-service: open Settings, choose
+                Delete my account, and confirm your password. Your profile,
+                application records, and status history are deleted with it —
+                the database is built so that removing your account
+                automatically removes everything tied to it, rather than
+                leaving orphaned rows behind. Before you do, Settings also
+                lets you download your profile, every application you have
+                tracked, and its status history as one JSON file. If you need
+                help with either step, email{" "}
                 <a
                   className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
                   href="mailto:support@interndex.dev"
                 >
                   support@interndex.dev
-                </a>{" "}
-                and ask. Once your account is deleted, your profile,
-                application records, and status history are deleted with it —
-                the database is built so that removing your account
-                automatically removes everything tied to it, rather than
-                leaving orphaned rows behind. A self-service &ldquo;delete my
-                account&rdquo; control in Settings is planned but not built
-                yet; until then, email is the only way.
+                </a>
+                .
               </p>
             </section>
 
@@ -402,8 +404,16 @@ export default function PrivacyPage() {
                 security in the database itself, so a request for another
                 student&apos;s applications is rejected before it ever
                 reaches application code, not just hidden by the interface.
-                No component of Interndex holds a database key capable of
-                bypassing that protection.
+                Every ordinary request — from the web app, the extension,
+                or a connected assistant — runs as your own account and is
+                held to that protection.
+              </p>
+              <p className="mt-3">
+                The one exception is a server-only privileged credential that
+                Interndex uses solely to carry out an account deletion you
+                started yourself. It never runs in your browser, is never sent
+                to any user, extension, or assistant, and is not used for
+                anything else.
               </p>
             </section>
 
@@ -417,7 +427,9 @@ export default function PrivacyPage() {
               <p className="mt-4">
                 You can see everything Interndex holds about you by signing
                 in and looking at your applications, your profile, and your
-                Settings page — there is no hidden data. You can correct
+                Settings page — there is no hidden data — and you can
+                download your profile, applications, and status history as
+                one JSON file from Settings. You can correct
                 almost anything yourself by editing a record or your account
                 details. For anything you cannot fix in the app — correcting
                 account information, asking what data Interndex holds about

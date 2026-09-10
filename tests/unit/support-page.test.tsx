@@ -26,6 +26,15 @@ describe("the public support route", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers help with export and deletion without making email the only route", () => {
+    render(<SupportPage />);
+
+    expect(
+      screen.getByText(/Both of those are self-service in Settings/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/a request to delete your account/i)).toBeNull();
+  });
+
   it("links Privacy and Terms", () => {
     render(<SupportPage />);
 

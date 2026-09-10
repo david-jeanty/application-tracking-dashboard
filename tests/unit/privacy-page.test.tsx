@@ -52,6 +52,38 @@ describe("the public privacy route", () => {
     expect(screen.getByText(/provides no AI of its own/i)).toBeInTheDocument();
   });
 
+  it("describes self-service deletion and export rather than an email-only process", () => {
+    render(<PrivacyPage />);
+
+    expect(
+      screen.getByText(/permanently delete your account yourself from Settings/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Deleting your account is self-service/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /download your profile, applications, and status history as one JSON file from Settings/i,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/manual step/i)).toBeNull();
+    expect(screen.queryByText(/planned but not built/i)).toBeNull();
+  });
+
+  it("discloses the server-only deletion credential without overstating RLS", () => {
+    render(<PrivacyPage />);
+
+    expect(
+      screen.getByText(/runs as your own account and is held to that protection/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/server-only privileged credential/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No component of Interndex holds a database key/i),
+    ).toBeNull();
+  });
+
   it("keeps the public page accessible and linked home", () => {
     render(<PrivacyPage />);
 

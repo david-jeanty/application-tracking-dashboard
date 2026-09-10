@@ -219,16 +219,18 @@ export default function TermsPage() {
               <p className="mt-4">
                 You may stop using Interndex and delete your data at any time.
                 Archiving and permanently deleting an individual application
-                is self-service, right in the app. Closing your account
-                entirely is currently a manual step: email{" "}
+                is self-service, right in the app. So is closing your account
+                entirely: open Settings, choose Delete my account, and confirm
+                your password, and your account and every record tied to it
+                are deleted. You can download a copy of your data from
+                Settings first. If you need help with either, email{" "}
                 <a
                   className="rounded-sm text-accent underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus"
                   href="mailto:support@interndex.dev"
                 >
                   support@interndex.dev
-                </a>{" "}
-                and your account and every record tied to it are deleted. We
-                may suspend or terminate access for a violation of these
+                </a>
+                . We may suspend or terminate access for a violation of these
                 terms, including the acceptable-use rules above.
               </p>
             </section>
