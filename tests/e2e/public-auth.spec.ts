@@ -73,12 +73,12 @@ test("the public homepage is the front door for a signed-out visitor", async ({
   await expect(
     page.getByRole("heading", {
       level: 1,
-      name: "The job tracker your AI can use.",
+      name: "Keep your job search in one place.",
     }),
   ).toBeVisible();
 });
 
-test("the homepage's first fold holds the message, both CTAs and the product on mobile", async ({
+test("the homepage's first fold holds the message and the primary CTA on mobile", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -87,24 +87,28 @@ test("the homepage's first fold holds the message, both CTAs and the product on 
   const hero = page.getByRole("heading", { level: 1 }).locator("..");
   await expect(hero.getByRole("heading", { level: 1 })).toBeInViewport();
   await expect(
-    page.getByText(/Save every posting and application in one place/),
+    page.getByText(/Save opportunities from anywhere/),
   ).toBeInViewport();
   await expect(
-    hero.getByRole("link", { name: "Connect your AI" }),
+    hero.getByRole("link", { name: "Create your free tracker" }),
   ).toBeInViewport();
-  await expect(
-    hero.getByRole("link", { name: "Explore the demo" }),
-  ).toBeInViewport();
-  await expect(
-    page.getByText("Works with ChatGPT · Claude · MCP-compatible AI"),
-  ).toBeInViewport();
-  // A recognizable part of the real product, not only the copy above it.
-  await expect(
-    page.locator('ul[aria-label="Applications"] > li').first(),
-  ).toBeInViewport();
-  // And nothing else stacked under the actions: the compatibility line is the
-  // last thing in the hero's left column.
   await expect(page.getByText(/Already have an account/)).toHaveCount(0);
+});
+
+test("the extension CTA and the demo link both stay reachable in the hero", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const hero = page.getByRole("heading", { level: 1 }).locator("..");
+  const extensionLink = hero.getByRole("link", { name: "Add the Chrome extension" });
+  await expect(extensionLink).toBeVisible();
+  await expect(extensionLink).toHaveAttribute(
+    "href",
+    "https://chromewebstore.google.com/detail/interndex-capture/llggmpgoichadgcolincmjcfkljpboad",
+  );
+  await expect(extensionLink).toHaveAttribute("target", "_blank");
+  await expect(hero.getByRole("link", { name: "Explore the demo" })).toBeVisible();
 });
 
 test("the homepage header stays a single compact line on mobile", async ({
@@ -187,6 +191,6 @@ test("the demo offers the way back to the homepage", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
-    "The job tracker your AI can use.",
+    "Keep your job search in one place.",
   );
 });
