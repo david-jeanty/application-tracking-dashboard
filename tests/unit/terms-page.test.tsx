@@ -29,6 +29,18 @@ describe("the public terms route", () => {
     expect(screen.getByText(/review and revoke a connected assistant/i)).toBeInTheDocument();
   });
 
+  it("makes closing an account self-service, with support as a fallback", () => {
+    render(<TermsPage />);
+
+    expect(
+      screen.getByText(/So is closing your account entirely/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/download a copy of your data from/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/currently a manual step/i)).toBeNull();
+  });
+
   it("links a support contact", () => {
     render(<TermsPage />);
 
