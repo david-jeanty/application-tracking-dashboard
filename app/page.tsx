@@ -5,9 +5,9 @@ import { hasSupabaseEnvironment } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
-  title: "Interndex — The job tracker your AI can use",
+  title: "Interndex: Keep your job search in one place",
   description:
-    "Save every posting and application in one place, and connect Interndex to ChatGPT, Claude, or another MCP-compatible AI so it can find, update, and remember your job-search context. Explore the demo without an account.",
+    "Save internship and co-op opportunities from anywhere. The Interndex Chrome extension captures jobs across most career sites and is most accurate on LinkedIn, Indeed, and Workday. Track every application and deadline, and connect an MCP-compatible AI when you want help.",
 };
 
 /**
