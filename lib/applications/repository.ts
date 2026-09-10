@@ -206,6 +206,11 @@ export type ApplicationListFilters = {
   limit?: number;
 };
 
+export type PostgrestReadRequestOptions = {
+  abortSignal?: AbortSignal;
+  retry?: boolean;
+};
+
 /**
  * The filters a caller may apply to the active list.
  *
@@ -231,7 +236,7 @@ export async function listApplications(
   supabase: SupabaseClient,
   authenticatedUserId: string,
   filters: ApplicationListFilters = {},
-  abortSignal?: AbortSignal,
+  requestOptions: PostgrestReadRequestOptions = {},
 ) {
   let query = supabase
     .from("applications")
@@ -266,7 +271,12 @@ export async function listApplications(
 
   query = query.order("created_at", { ascending: false });
   if (filters.limit !== undefined) query = query.limit(filters.limit);
-  if (abortSignal) query = query.abortSignal(abortSignal);
+  if (requestOptions.abortSignal) {
+    query = query.abortSignal(requestOptions.abortSignal);
+  }
+  if (requestOptions.retry !== undefined) {
+    query = query.retry(requestOptions.retry);
+  }
 
   return query.returns<ApplicationListItem[]>();
 }
@@ -461,7 +471,7 @@ export async function listApplicationStatusHistory(
 export async function listStatusTimeline(
   supabase: SupabaseClient,
   authenticatedUserId: string,
-  abortSignal?: AbortSignal,
+  requestOptions: PostgrestReadRequestOptions = {},
 ) {
   let query = supabase
     .from("application_status_history")
@@ -469,7 +479,12 @@ export async function listStatusTimeline(
     .eq("user_id", authenticatedUserId)
     .order("changed_at", { ascending: false });
 
-  if (abortSignal) query = query.abortSignal(abortSignal);
+  if (requestOptions.abortSignal) {
+    query = query.abortSignal(requestOptions.abortSignal);
+  }
+  if (requestOptions.retry !== undefined) {
+    query = query.retry(requestOptions.retry);
+  }
   return query.returns<ApplicationTimelineEvent[]>();
 }
 

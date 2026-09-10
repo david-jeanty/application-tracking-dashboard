@@ -48,6 +48,7 @@ function recordingClient(rows: unknown[] = []) {
     "order",
     "limit",
     "abortSignal",
+    "retry",
   ]) {
     builder[method] = record(method);
   }
@@ -240,11 +241,14 @@ describe("filters reach the query", () => {
       recorder.client,
       USER,
       { archiveState: "all" },
-      signal,
+      { abortSignal: signal, retry: false },
     );
 
     expect(recorder.find("abortSignal")).toEqual([
       { method: "abortSignal", args: [signal] },
+    ]);
+    expect(recorder.find("retry")).toEqual([
+      { method: "retry", args: [false] },
     ]);
   });
 
@@ -494,10 +498,16 @@ describe("the status timeline read", () => {
     const recorder = recordingClient();
     const signal = new AbortController().signal;
 
-    await listStatusTimeline(recorder.client, USER, signal);
+    await listStatusTimeline(recorder.client, USER, {
+      abortSignal: signal,
+      retry: false,
+    });
 
     expect(recorder.find("abortSignal")).toEqual([
       { method: "abortSignal", args: [signal] },
+    ]);
+    expect(recorder.find("retry")).toEqual([
+      { method: "retry", args: [false] },
     ]);
   });
 

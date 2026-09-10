@@ -219,13 +219,12 @@ describe("the first dashboard load right after signing in", () => {
         "attempt",
         "authResolvedMs",
         "code",
-        "details",
-        "hint",
         "likelyFirstLoadAfterSignIn",
-        "message",
         "path",
         "read",
         "requestId",
+        "retryClassification",
+        "retryOutcome",
         "sessionExistedAtRead",
         "status",
       ].sort(),
@@ -345,11 +344,24 @@ describe("a brand-new account's first dashboard load, right after confirming by 
     expect(screen.queryByText("Your dashboard could not be loaded")).toBeNull();
     expect(listApplications).toHaveBeenCalledTimes(2);
     expect(listStatusTimeline).toHaveBeenCalledTimes(2);
-    const firstApplicationSignal = listApplications.mock.calls[0]?.[3];
-    const secondApplicationSignal = listApplications.mock.calls[1]?.[3];
+    const firstApplicationOptions = listApplications.mock.calls[0]?.[3];
+    const secondApplicationOptions = listApplications.mock.calls[1]?.[3];
+    const firstTimelineOptions = listStatusTimeline.mock.calls[0]?.[2];
+    const secondTimelineOptions = listStatusTimeline.mock.calls[1]?.[2];
+    const firstApplicationSignal = firstApplicationOptions?.abortSignal;
+    const secondApplicationSignal = secondApplicationOptions?.abortSignal;
+    const firstTimelineSignal = firstTimelineOptions?.abortSignal;
+    const secondTimelineSignal = secondTimelineOptions?.abortSignal;
     expect(firstApplicationSignal).toBeInstanceOf(AbortSignal);
     expect(secondApplicationSignal).toBeInstanceOf(AbortSignal);
     expect(secondApplicationSignal).not.toBe(firstApplicationSignal);
+    expect(firstTimelineSignal).toBeInstanceOf(AbortSignal);
+    expect(secondTimelineSignal).toBeInstanceOf(AbortSignal);
+    expect(secondTimelineSignal).not.toBe(firstTimelineSignal);
+    expect(firstApplicationOptions?.retry).toBe(false);
+    expect(secondApplicationOptions?.retry).toBe(false);
+    expect(firstTimelineOptions?.retry).toBe(false);
+    expect(secondTimelineOptions?.retry).toBe(false);
   });
 
   it("still reports unavailable, honestly, if a same-shaped failure is not actually transient", async () => {

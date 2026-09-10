@@ -58,7 +58,9 @@ describe("withTransientReadRetry", () => {
       .mockResolvedValueOnce(attempt({ data: [{ id: "a" }], status: 200 }));
 
     const pending = withTransientReadRetry("applications", "/dashboard", true, "req-test", run);
-    await vi.runAllTimersAsync();
+    await vi.advanceTimersByTimeAsync(299);
+    expect(run).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
     const result = await pending;
 
     expect(result).toEqual({ data: [{ id: "a" }], error: null });
@@ -92,6 +94,7 @@ describe("withTransientReadRetry", () => {
 
     expect(result).toEqual({ data: null, error: rlsError });
     expect(run).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("never retries an expired-session error", async () => {
@@ -157,7 +160,7 @@ describe("withTransientReadRetry", () => {
           attempt: 2,
           status: 200,
           recoveredFromCode: "PGRST303",
-          recoveredFromMessage: "JWT issued at future",
+          recoveredFromClassification: "jwt_clock_skew",
         }),
       );
     });
@@ -232,13 +235,40 @@ describe("withTransientReadRetry", () => {
       expect(result).toEqual({ data: null, error: unknownError });
       expect(run).toHaveBeenCalledTimes(1);
     });
+
+    it("requires the identified 401 status as well as the exact code and message", async () => {
+      const mismatchedError = {
+        code: "PGRST303",
+        message: "JWT issued at future",
+      };
+      const run = vi
+        .fn()
+        .mockResolvedValue(attempt({ status: 400, error: mismatchedError }));
+
+      const result = await withTransientReadRetry(
+        "applications",
+        "/dashboard",
+        false,
+        "req-test",
+        run,
+      );
+
+      expect(result).toEqual({ data: null, error: mismatchedError });
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 
-  it("logs only the query's own fields, never a secret or personal one", async () => {
+  it("redacts every raw upstream string from a failure log", async () => {
     const run = vi.fn().mockResolvedValue(
       attempt({
         status: 401,
-        error: { code: "PGRST301", message: "JWT expired", details: "x", hint: "y" },
+        error: {
+          code: "PGRST301",
+          message: "Bearer eyJ-secret for student@example.test",
+          details: "cookie=secret; company=Sensitive Company",
+          hint: "password sb-secret",
+        },
       }),
     );
 
@@ -252,24 +282,58 @@ describe("withTransientReadRetry", () => {
         "attempt",
         "authResolvedMs",
         "code",
-        "details",
-        "hint",
         "likelyFirstLoadAfterSignIn",
-        "message",
         "path",
         "read",
         "requestId",
+        "retryClassification",
+        "retryOutcome",
         "sessionExistedAtRead",
         "status",
       ].sort(),
     );
-    // Fields are an allowlist above; this additionally guards against a
-    // secret-shaped *value* slipping into one of those allowed fields, such
-    // as an error message that happened to embed a token or a cookie.
+    expect(payload).toMatchObject({
+      code: "PGRST301",
+      retryClassification: "not_retryable",
+      retryOutcome: "stopped",
+    });
     const serialized = JSON.stringify(payload);
-    for (const forbidden of ["cookie", "Bearer ", "eyJ", "@", "sb-", "password"]) {
+    for (const forbidden of [
+      "cookie",
+      "Bearer ",
+      "eyJ",
+      "@",
+      "sb-",
+      "password",
+      "Sensitive Company",
+    ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it.each([
+    "Bearer eyJ-secret@example.test",
+    "PASSWORD",
+    "PGRST30X",
+    "PGRST303-extra",
+  ])("drops an error code outside the two public identifier formats: %s", async (code) => {
+    const run = vi.fn().mockResolvedValue(
+      attempt({
+        status: 400,
+        error: { code },
+      }),
+    );
+
+    await withTransientReadRetry(
+      "applications",
+      "/dashboard",
+      true,
+      "req-test",
+      run,
+    );
+
+    expect(errorSpy.mock.calls[0]?.[1]).toMatchObject({ code: null });
+    expect(JSON.stringify(errorSpy.mock.calls[0]?.[1])).not.toContain(code);
   });
 
   it("carries the caller's request id through, unchanged, for correlating both reads of one load", async () => {
@@ -290,7 +354,12 @@ describe("withTransientReadRetry", () => {
       .mockResolvedValueOnce(
         attempt({
           status: 401,
-          error: { code: "PGRST303", message: "JWT not yet valid" },
+          error: {
+            code: "PGRST303",
+            message: "JWT not yet valid",
+            details: "Bearer eyJ-secret student@example.test",
+            hint: "Sensitive Company cookie=secret",
+          },
         }),
       )
       .mockResolvedValueOnce(attempt({ data: [], status: 200 }));
@@ -313,10 +382,19 @@ describe("withTransientReadRetry", () => {
       requestId: "incident-auth",
       status: 200,
       recoveredFromCode: "PGRST303",
-      recoveredFromMessage: "JWT not yet valid",
+      recoveredFromClassification: "jwt_clock_skew",
     });
     const serializedRecovery = JSON.stringify(infoSpy.mock.calls[0]?.[1]);
-    expect(serializedRecovery).not.toContain("user_id");
-    expect(serializedRecovery).not.toContain("access_token");
+    for (const forbidden of [
+      "user_id",
+      "access_token",
+      "Bearer ",
+      "eyJ",
+      "@",
+      "cookie",
+      "Sensitive Company",
+    ]) {
+      expect(serializedRecovery).not.toContain(forbidden);
+    }
   });
 });

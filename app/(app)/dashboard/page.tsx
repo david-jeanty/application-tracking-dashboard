@@ -87,7 +87,8 @@ export default async function DashboardPage() {
   // retried, and comes back exactly as issued. A fresh AbortSignal on every
   // attempt opts these deliberate retries out of React's per-render GET
   // memoization; without it, attempt two only replays attempt one's response
-  // and never reaches PostgREST.
+  // and never reaches PostgREST. PostgREST's own per-query retry is disabled
+  // here so the wrapper's two attempts are also the two-request HTTP maximum.
   const [applications, timeline] = await Promise.all([
     withTransientReadRetry(
       "applications",
@@ -99,7 +100,10 @@ export default async function DashboardPage() {
           supabase,
           user.id,
           { archiveState: "all" },
-          new AbortController().signal,
+          {
+            abortSignal: new AbortController().signal,
+            retry: false,
+          },
         ),
       { sessionExistedAtRead: sessionExists, authResolvedMs },
     ),
@@ -109,7 +113,10 @@ export default async function DashboardPage() {
       firstLoad,
       requestId,
       () =>
-        listStatusTimeline(supabase, user.id, new AbortController().signal),
+        listStatusTimeline(supabase, user.id, {
+          abortSignal: new AbortController().signal,
+          retry: false,
+        }),
       { sessionExistedAtRead: sessionExists, authResolvedMs },
     ),
   ]);
