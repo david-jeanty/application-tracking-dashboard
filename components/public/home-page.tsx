@@ -20,6 +20,16 @@ import { ASSISTANT_OWNERSHIP_NOTE } from "@/lib/mcp/capabilities";
 const PREVIEW_STATUSES = ["Offer", "Interview", "Applied", "Interested"] as const;
 
 /**
+ * The live Chrome Web Store listing for Interndex Capture.
+ *
+ * Item ID `llggmpgoichadgcolincmjcfkljpboad` is the permanent Store item ID
+ * recorded in docs/chrome-web-store-release.md, confirmed against the
+ * extension's Load Unpacked ID before the store listing went live.
+ */
+const CHROME_WEB_STORE_URL =
+  "https://chromewebstore.google.com/detail/interndex-capture/llggmpgoichadgcolincmjcfkljpboad";
+
+/**
  * What a student asks their AI, once Interndex is connected.
  *
  * Three sentences somebody would actually say, each one a registered tool:
@@ -35,7 +45,7 @@ const ASSISTANT_ASKS = [
 ] as const;
 
 /**
- * One step of the Capture → Track → Connect sequence.
+ * One step of the three-part save, track, and connect sequence.
  *
  * The rail is the same idea as the lifecycle rail on a record above it — a
  * numbered node with a connector running to the next one — so the sequence
@@ -95,12 +105,12 @@ const workflowLinkClassName =
 /**
  * The public front door.
  *
- * Its job is to say what Interndex is in one line — the job tracker your AI can
- * use — and then show it: the real application list, the things a connected
- * assistant can be asked about it, and the demo, none of which need an account
- * to look at. Creating an account is the primary action because connecting an
- * assistant needs a workspace to connect to; the demo stays beside it at every
- * height of the page.
+ * Its job is to say what Interndex is in one line: a place for a student to
+ * keep a job search, and then show it. The tracker leads, the Chrome
+ * extension is a fast way to save a role into it, and a connected AI is
+ * named once as something to add on top, not the reason to sign up.
+ * Creating a free tracker is the primary action; the extension and the demo
+ * stay beside it, none of which need an account to look at.
  *
  * It reads no request, no cookie and no database. Everything below is either
  * static text or the demo fixture, which is why this page renders whether or
@@ -131,48 +141,62 @@ export function HomePage() {
       <main id="main-content">
         {/* ------------------------------------------------------------ hero */}
         {/*
-          One claim, one line saying which AI it holds for, and two ways in.
-          Beside it, the product: the same list component Interndex renders,
-          holding four demo rows across four stages. What a connected AI can be
-          asked lives in its own section below — inside the preview it made the
-          hero read as an explanation rather than as the thing explained.
+          The tracker leads: one line on who it is for, the promise, and what
+          a student can do about it today. The Chrome extension gets its own,
+          visually distinct button rather than sharing the primary one, and
+          the demo stays a lower-emphasis link so the hero reads as one clear
+          path rather than three competing ones. Beside it, the product: the
+          same list component Interndex renders, holding four demo rows
+          across four stages. What a connected AI can be asked lives in its
+          own section below, so it stays a bonus rather than the headline.
         */}
         <section className="border-b border-border bg-brand-soft">
           <div className="mx-auto max-w-[1120px] px-5 py-10 sm:px-8 sm:py-14 lg:grid lg:grid-cols-[minmax(0,44fr)_minmax(0,56fr)] lg:items-start lg:gap-14 lg:py-20">
             <div>
               <p className="text-[13px] font-semibold uppercase tracking-[0.16em] text-accent">
-                Your AI&rsquo;s job-search context
+                For students applying to internships and co-ops
               </p>
-              <h1 className="mt-4 max-w-[16ch] text-[30px] font-medium leading-[1.12] tracking-tight text-foreground sm:mt-5 sm:text-[40px] sm:leading-[1.1] lg:text-[46px]">
-                The job tracker your AI can use.
+              <h1 className="mt-4 max-w-[20ch] text-[30px] font-medium leading-[1.12] tracking-tight text-foreground sm:mt-5 sm:text-[40px] sm:leading-[1.1] lg:text-[46px]">
+                Keep your job search in one place.
               </h1>
-              <p className="mt-4 max-w-md text-[15px] leading-7 text-foreground-secondary sm:text-[16px] sm:leading-8">
-                Save every posting and application in one place. Connect
-                ChatGPT, Claude, or another MCP-compatible AI so it has the
-                context to help with your search.
+              <p className="mt-4 max-w-lg text-[15px] leading-7 text-foreground-secondary sm:text-[16px] sm:leading-8">
+                Save opportunities from anywhere. The Interndex Chrome
+                extension can capture jobs across most career sites and is
+                most accurate on LinkedIn, Indeed, and Workday. Track every
+                application, deadline, note, and next step. Connect an
+                MCP-compatible AI when you want help.
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3 sm:mt-8">
                 <ButtonLink className="min-h-11 px-5 text-[15px]" href="/signup">
-                  Connect your AI
+                  Create your free tracker
                 </ButtonLink>
                 <ButtonLink
                   className="min-h-11 px-5 text-[15px]"
-                  href="/demo"
+                  href={CHROME_WEB_STORE_URL}
+                  rel="noopener noreferrer"
+                  target="_blank"
                   variant="secondary"
                 >
-                  Explore the demo
+                  {/* eslint-disable-next-line @next/next/no-img-element -- local PNG brand asset. */}
+                  <img
+                    alt=""
+                    aria-hidden="true"
+                    className="h-4 w-4"
+                    src="/brand/extension/icon-32.png"
+                  />
+                  Add the Chrome extension
                 </ButtonLink>
               </div>
               {/*
-                The one line under the actions, and it answers the question the
-                primary button raises — which AI? — where the question is
-                asked. Everything else a visitor might want here (no account
-                for the demo, signing in) is a scroll or a header away, and
-                stacking it all under the buttons is what made the hero heavy.
+                Lower emphasis than either button above, on purpose: the demo
+                is a way to look before signing up, not a third action of
+                equal weight to creating a tracker or adding the extension.
               */}
-              <p className="mt-4 text-[13px] leading-6 text-foreground-secondary">
-                Works with ChatGPT · Claude · MCP-compatible AI
+              <p className="mt-4 text-[14px] leading-6">
+                <Link className={workflowLinkClassName} href="/demo">
+                  Explore the demo
+                </Link>
               </p>
             </div>
 
@@ -207,7 +231,7 @@ export function HomePage() {
           </div>
         </section>
 
-        {/* -------------------------------------- capture, track, connect */}
+        {/* ----------------------------------------- save, track, connect */}
         <section aria-labelledby="workflow-heading" className="bg-background">
           <div className="mx-auto max-w-[1120px] px-5 py-14 sm:px-8 sm:py-20">
             <h2
@@ -217,66 +241,32 @@ export function HomePage() {
               Save the posting. Track the process.
             </h2>
             <p className="mt-4 max-w-2xl text-[15px] leading-7 text-foreground-secondary">
-              Everything about a role stays in one record — and that record is
+              Everything about a role stays in one record, and that record is
               what your AI reads when you ask it about your search.
             </p>
 
             <ol className="mt-10 flex flex-col sm:flex-row">
               <WorkflowStep
-                body={
-                  <>
-                    Save a posting from the web — title, employer, deadline —
-                    and it becomes a record in{" "}
-                    <Link
-                      className={workflowLinkClassName}
-                      href="/demo/applications"
-                    >
-                      Applications
-                    </Link>
-                    .
-                  </>
-                }
-                fact="Title · Employer · Deadline"
-                factLabel="Every record starts with"
+                body="Add a role whenever you find it. The Chrome extension can capture jobs across most career sites and is most accurate on LinkedIn, Indeed, and Workday."
+                fact="LinkedIn · Indeed · Workday"
+                factLabel="Most accurate on"
                 number={1}
-                title="Capture"
+                title="Save opportunities your way"
               />
               <WorkflowStep
-                body={
-                  <>
-                    Keep stages, notes, deadlines and history in order. The{" "}
-                    <Link className={workflowLinkClassName} href="/demo/pipeline">
-                      Pipeline
-                    </Link>{" "}
-                    shows where each one stands, the{" "}
-                    <Link className={workflowLinkClassName} href="/demo">
-                      Dashboard
-                    </Link>{" "}
-                    what needs you today, and{" "}
-                    <Link className={workflowLinkClassName} href="/demo/analytics">
-                      Analytics
-                    </Link>{" "}
-                    how the search is going.
-                  </>
-                }
+                body="Keep deadlines, notes, stages, and next steps together from saved role to outcome."
                 fact="Saved → Applied → Interview → Outcome"
                 factLabel="Every record moves through"
                 number={2}
-                title="Track"
+                title="Stay on top of every application"
               />
               <WorkflowStep
-                body={
-                  <>
-                    Ask ChatGPT, Claude, or another compatible AI about the
-                    applications already in Interndex — and let it save and
-                    update them while you talk.
-                  </>
-                }
+                body="Connect an MCP-compatible assistant to find and update your own tracker through a permissioned connection."
                 fact="Status history · Next action"
                 factLabel="Every record keeps"
                 isLast
                 number={3}
-                title="Connect"
+                title="Give your AI the right context"
               />
             </ol>
           </div>
@@ -293,27 +283,26 @@ export function HomePage() {
                 className="max-w-xl text-[26px] font-medium leading-tight tracking-tight text-foreground sm:text-[30px]"
                 id="connect-heading"
               >
-                Your applications stay in Interndex. Your AI gets the context.
+                Your AI gets the context. You stay in control.
               </h2>
               <p className="mt-4 max-w-xl text-[15px] leading-7 text-foreground-secondary">
-                Interndex holds the record — every posting you saved, the stage
-                it is at, the dates and notes around it. Connect the AI you
-                already use and it can read those applications and make the
+                Interndex holds the record: every opportunity you saved, its
+                stage, dates, and notes. Connect an MCP-compatible AI in
+                Settings and it can read those applications and make the
                 updates you ask for, so you stop retyping what you just
                 discussed with it.
               </p>
               <p className="mt-4 max-w-xl text-[14px] leading-7 text-foreground-secondary">
                 The connection uses MCP, the open standard those clients use to
-                reach outside tools. You approve it once from Settings and can
-                remove it there at any time. Interndex does not include an
-                assistant and does not require one; today this has been tested
-                with Claude, and other MCP-compatible clients connect at the
-                same address.
+                reach outside tools. You approve it once and can remove it any
+                time. Interndex does not include an assistant of its own;
+                today this has been tested with Claude, and other
+                MCP-compatible clients connect at the same address.
               </p>
 
               <div className="mt-7 flex flex-wrap items-center gap-3">
                 <ButtonLink className="min-h-11 px-5 text-[15px]" href="/signup">
-                  Connect your AI
+                  Create your free tracker
                 </ButtonLink>
                 <Link className={`text-[14px] ${workflowLinkClassName}`} href="/demo">
                   Explore the demo first

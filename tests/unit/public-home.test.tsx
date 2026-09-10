@@ -19,7 +19,9 @@ const { default: RootPage } = await import("@/app/page");
 const { HomePage } = await import("@/components/public/home-page");
 const { ASSISTANT_OWNERSHIP_NOTE } = await import("@/lib/mcp/capabilities");
 
-const HERO_HEADING = "The job tracker your AI can use.";
+const HERO_HEADING = "Keep your job search in one place.";
+const CHROME_WEB_STORE_URL =
+  "https://chromewebstore.google.com/detail/interndex-capture/llggmpgoichadgcolincmjcfkljpboad";
 
 function signedOut() {
   process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
@@ -81,7 +83,7 @@ describe("the root route", () => {
 });
 
 describe("the homepage's front door", () => {
-  it("names the job tracker and the AI connection in the hero itself", () => {
+  it("names who it's for and what a student can save from anywhere", () => {
     render(<HomePage />);
 
     const hero = screen
@@ -92,15 +94,21 @@ describe("the homepage's front door", () => {
       within(hero).getByRole("heading", { level: 1, name: HERO_HEADING }),
     ).toBeInTheDocument();
     expect(
-      within(hero).getByText("Your AI’s job-search context"),
+      within(hero).getByText("For students applying to internships and co-ops"),
     ).toBeInTheDocument();
-    // ChatGPT and Claude are named before a visitor has to decode an acronym.
+    // The extension and its accuracy claim are named in plain language before
+    // MCP is ever mentioned.
     expect(
-      within(hero).getByText(/Connect ChatGPT, Claude, or another MCP-compatible AI/),
+      within(hero).getByText(/Save opportunities from anywhere/),
+    ).toBeInTheDocument();
+    expect(
+      within(hero).getByText(
+        /most accurate on LinkedIn, Indeed, and Workday/,
+      ),
     ).toBeInTheDocument();
   });
 
-  it("leads with connecting an AI and keeps the demo beside it", () => {
+  it("leads with creating a free tracker and offers the extension and demo beside it", () => {
     render(<HomePage />);
 
     const hero = screen
@@ -108,11 +116,40 @@ describe("the homepage's front door", () => {
       .closest("section") as HTMLElement;
 
     expect(
-      within(hero).getByRole("link", { name: "Connect your AI" }),
+      within(hero).getByRole("link", { name: "Create your free tracker" }),
     ).toHaveAttribute("href", "/signup");
+    const extensionLink = within(hero).getByRole("link", {
+      name: "Add the Chrome extension",
+    });
+    expect(extensionLink).toHaveAttribute("href", CHROME_WEB_STORE_URL);
+    expect(extensionLink).toHaveAttribute("target", "_blank");
+    expect(extensionLink.getAttribute("rel")).toContain("noopener");
     expect(
       within(hero).getByRole("link", { name: "Explore the demo" }),
     ).toHaveAttribute("href", "/demo");
+  });
+
+  it("keeps the extension button visually distinct and the demo a lower-emphasis link", () => {
+    render(<HomePage />);
+
+    const hero = screen
+      .getByRole("heading", { level: 1 })
+      .closest("section") as HTMLElement;
+
+    const primary = within(hero).getByRole("link", {
+      name: "Create your free tracker",
+    });
+    const extension = within(hero).getByRole("link", {
+      name: "Add the Chrome extension",
+    });
+    const demoLink = within(hero).getByRole("link", { name: "Explore the demo" });
+
+    // The extension is a real secondary action (its own button styling), not
+    // a copy of the primary button and not a plain inline link.
+    expect(extension.className).not.toBe(primary.className);
+    // The demo stays a plain link rather than a third button competing with
+    // the two calls to action above it.
+    expect(demoLink.className).not.toMatch(/bg-accent|border-border-strong/);
   });
 
   it("keeps the hero to the product and one line of trust copy", () => {
@@ -138,25 +175,6 @@ describe("the homepage's front door", () => {
     ]) {
       expect(within(hero).queryByText(ask)).not.toBeInTheDocument();
     }
-  });
-
-  it("says which AI clients work, right under the hero actions", () => {
-    render(<HomePage />);
-
-    const hero = screen
-      .getByRole("heading", { level: 1 })
-      .closest("section") as HTMLElement;
-    const heroCta = within(hero).getByRole("link", { name: "Connect your AI" });
-    const ctaRow = heroCta.closest("div") as HTMLElement;
-
-    // The compatibility line answers "which AI?" immediately after the button
-    // that raises the question, rather than somewhere further down the page.
-    expect(ctaRow.nextElementSibling?.textContent).toBe(
-      "Works with ChatGPT · Claude · MCP-compatible AI",
-    );
-    // And it is the only line under the actions, so the hero stays a claim
-    // and a product rather than a stack of small print.
-    expect(ctaRow.nextElementSibling?.nextElementSibling).toBeNull();
   });
 
   it("keeps the header's demo route and account links", () => {
@@ -231,7 +249,7 @@ describe("what the homepage claims", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the Capture, Track, Connect sequence across the connected workspace", () => {
+  it("shows the save, track, and AI-context steps across the connected workspace", () => {
     render(<HomePage />);
 
     const workflow = screen
@@ -240,21 +258,25 @@ describe("what the homepage claims", () => {
     const steps = within(workflow).getAllByRole("listitem");
 
     expect(steps).toHaveLength(3);
-    for (const [index, title] of ["Capture", "Track", "Connect"].entries()) {
+    for (const [index, title] of [
+      "Save opportunities your way",
+      "Stay on top of every application",
+      "Give your AI the right context",
+    ].entries()) {
       expect(
         within(steps[index] as HTMLElement).getByRole("heading", { name: title }),
       ).toBeInTheDocument();
     }
   });
 
-  it("grounds each workflow step in real record fields and stages", () => {
+  it("grounds each workflow step in a concrete fact, including where capture is most accurate", () => {
     render(<HomePage />);
 
     const workflow = screen
       .getByRole("heading", { name: "Save the posting. Track the process." })
       .closest("section") as HTMLElement;
 
-    expect(within(workflow).getByText("Title · Employer · Deadline")).toBeInTheDocument();
+    expect(within(workflow).getByText("LinkedIn · Indeed · Workday")).toBeInTheDocument();
     expect(
       within(workflow).getByText("Saved → Applied → Interview → Outcome"),
     ).toBeInTheDocument();
@@ -263,25 +285,17 @@ describe("what the homepage claims", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows Applications, Pipeline, Dashboard and Analytics as one workspace", () => {
+  it("names the Chrome extension in the first step, without overclaiming site coverage", () => {
     render(<HomePage />);
 
     const workflow = screen
       .getByRole("heading", { name: "Save the posting. Track the process." })
       .closest("section") as HTMLElement;
+    const text = workflow.textContent ?? "";
 
-    expect(
-      within(workflow).getByRole("link", { name: "Applications" }),
-    ).toHaveAttribute("href", "/demo/applications");
-    expect(
-      within(workflow).getByRole("link", { name: "Pipeline" }),
-    ).toHaveAttribute("href", "/demo/pipeline");
-    expect(
-      within(workflow).getByRole("link", { name: "Dashboard" }),
-    ).toHaveAttribute("href", "/demo");
-    expect(
-      within(workflow).getByRole("link", { name: "Analytics" }),
-    ).toHaveAttribute("href", "/demo/analytics");
+    expect(text).toMatch(/Chrome extension can capture jobs across most career sites/);
+    expect(text).toMatch(/most accurate on LinkedIn, Indeed, and Workday/);
+    expect(text).not.toMatch(/every (career )?site|all (career )?sites/i);
   });
 
   it("draws the line between the AI and the record", () => {
@@ -289,7 +303,7 @@ describe("what the homepage claims", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Your applications stay in Interndex. Your AI gets the context.",
+        name: "Your AI gets the context. You stay in control.",
       }),
     ).toBeInTheDocument();
     expect(
@@ -302,7 +316,7 @@ describe("what the homepage claims", () => {
 
     const connect = screen
       .getByRole("heading", {
-        name: "Your applications stay in Interndex. Your AI gets the context.",
+        name: "Your AI gets the context. You stay in control.",
       })
       .closest("section") as HTMLElement;
 
@@ -331,16 +345,15 @@ describe("what the homepage claims", () => {
     expect(text).toMatch(/Interndex does not include an assistant/);
   });
 
-  it("names ChatGPT and Claude before it explains MCP", () => {
+  it("never claims ChatGPT publicly, and refers only to MCP-compatible AI", () => {
     const { container } = render(<HomePage />);
     const text = container.textContent ?? "";
 
-    // The benefit leads; the acronym is supporting proof further down, and it
-    // is spelled out as a standard rather than dropped as jargon.
-    expect(text.indexOf("ChatGPT")).toBeGreaterThan(-1);
-    expect(text.indexOf("Claude")).toBeGreaterThan(-1);
+    // The ChatGPT app is not publicly launched, so the page never names it;
+    // MCP-compatible AI is the only public framing for the connection.
+    expect(text).not.toMatch(/ChatGPT/);
+    expect(text).toMatch(/MCP-compatible AI/);
     expect(text).toMatch(/The connection uses MCP, the open standard/);
-    expect(text.indexOf("ChatGPT")).toBeLessThan(text.indexOf("The connection uses MCP"));
   });
 
   it("promises no AI client it has not verified, and says which one it tested", () => {
@@ -348,16 +361,30 @@ describe("what the homepage claims", () => {
     const text = container.textContent ?? "";
 
     expect(text).toContain("tested with Claude");
-    // ChatGPT and Claude are named as MCP-compatible clients; nothing on the
-    // page claims a listing in either one's app directory.
+    // Nothing on the page claims a listing in an app directory.
     expect(text).not.toMatch(/app store|app directory|available in ChatGPT/i);
     expect(text).not.toMatch(/Gemini|Copilot/i);
   });
 
-  it("never promotes the browser extension", () => {
+  it("promotes the Chrome extension and links it to the live Chrome Web Store listing", () => {
+    const { container } = render(<HomePage />);
+    const text = container.textContent ?? "";
+
+    expect(text).toMatch(/Chrome extension/);
+    const storeLink = screen.getByRole("link", { name: "Add the Chrome extension" });
+    expect(storeLink).toHaveAttribute("href", CHROME_WEB_STORE_URL);
+  });
+
+  it("never uses an em dash anywhere in the homepage's own copy", () => {
     const { container } = render(<HomePage />);
 
-    expect(container.textContent ?? "").not.toMatch(/extension/i);
+    // Scoped to the copy this page authors. The embedded `ApplicationRecords`
+    // preview is the real product component rendering real record labels
+    // ("Saved — reached") that belong to that component, not homepage copy.
+    const preview = container.querySelector('ul[aria-label="Applications"]');
+    preview?.remove();
+
+    expect(container.textContent ?? "").not.toMatch(/—/);
   });
 
   it("promises no action the connection cannot perform", () => {
