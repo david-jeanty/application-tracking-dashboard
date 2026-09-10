@@ -118,17 +118,21 @@ export default async function ConsentPage({
             registered without a name is said so about rather than given one.
           */}
           {clientName ? (
-            <p className="mt-1 break-words text-[15px] text-foreground">
-              {clientName}
-            </p>
+            <>
+              <p className="mt-1 break-words text-[15px] text-foreground">
+                {clientName}
+              </p>
+              <p className="mt-1 text-[13px] leading-5 text-foreground-muted">
+                This name was chosen by the application, not by Interndex.
+              </p>
+            </>
           ) : (
+            // No name means there is nothing to attribute, so the caveat about
+            // who chose it would be describing something that is not there.
             <p className="mt-1 text-[15px] text-foreground-muted">
               This application did not provide a name.
             </p>
           )}
-          <p className="mt-1 text-[13px] leading-5 text-foreground-muted">
-            This name was chosen by the application, not by Interndex.
-          </p>
         </div>
 
         <div className="mt-4 rounded-record border border-border bg-surface-muted p-4">

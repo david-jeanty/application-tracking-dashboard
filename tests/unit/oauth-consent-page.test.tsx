@@ -122,6 +122,12 @@ describe("ConsentPage: the request's own words", () => {
     expect(
       screen.getByText("This application did not provide a name."),
     ).toBeInTheDocument();
+    // There is no name, so there is nothing to attribute to the application.
+    expect(
+      screen.queryByText(
+        "This name was chosen by the application, not by Interndex.",
+      ),
+    ).toBeNull();
   });
 });
 
