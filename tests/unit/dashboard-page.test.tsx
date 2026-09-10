@@ -9,12 +9,16 @@ afterEach(cleanup);
 const listApplications = vi.fn();
 const listStatusTimeline = vi.fn();
 let refererHeader: string | null = null;
+let sessionExists = true;
 
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({
     auth: {
       getUser: async () => ({
         data: { user: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" } },
+      }),
+      getSession: async () => ({
+        data: { session: sessionExists ? { access_token: "redacted" } : null },
       }),
     },
   }),
@@ -73,6 +77,7 @@ describe("the first dashboard load right after signing in", () => {
   beforeEach(() => {
     listApplications.mockReset();
     listStatusTimeline.mockReset();
+    sessionExists = true;
     refererHeader = "https://app.interndex.example/login";
     errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
@@ -102,6 +107,15 @@ describe("the first dashboard load right after signing in", () => {
     expect(listApplications).toHaveBeenCalledTimes(1);
     expect(listStatusTimeline).toHaveBeenCalledTimes(1);
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not start database reads while the verified session is unresolved", async () => {
+    sessionExists = false;
+
+    await expect(DashboardPage()).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(listApplications).not.toHaveBeenCalled();
+    expect(listStatusTimeline).not.toHaveBeenCalled();
   });
 
   it("recovers automatically from a transient read failure, with no visible error", async () => {
@@ -203,19 +217,22 @@ describe("the first dashboard load right after signing in", () => {
     expect(Object.keys(payload).sort()).toEqual(
       [
         "attempt",
+        "authResolvedMs",
         "code",
-        "details",
-        "hint",
         "likelyFirstLoadAfterSignIn",
-        "message",
         "path",
         "read",
         "requestId",
+        "retryClassification",
+        "retryOutcome",
+        "sessionExistedAtRead",
         "status",
       ].sort(),
     );
     expect(payload.path).toBe("/dashboard");
     expect(payload.likelyFirstLoadAfterSignIn).toBe(true);
+    expect(payload.sessionExistedAtRead).toBe(true);
+    expect(typeof payload.authResolvedMs).toBe("number");
     expect(typeof payload.requestId).toBe("string");
     expect((payload.requestId as string).length).toBeGreaterThan(0);
     const serialized = JSON.stringify(payload);
@@ -284,6 +301,7 @@ describe("a brand-new account's first dashboard load, right after confirming by 
   beforeEach(() => {
     listApplications.mockReset();
     listStatusTimeline.mockReset();
+    sessionExists = true;
     // Clicking a confirmation link lands here by following our own server
     // redirect from `/auth/callback`, not a client-side navigation from
     // `/signup` — so, unlike a password sign-in, the referer this request
@@ -326,6 +344,24 @@ describe("a brand-new account's first dashboard load, right after confirming by 
     expect(screen.queryByText("Your dashboard could not be loaded")).toBeNull();
     expect(listApplications).toHaveBeenCalledTimes(2);
     expect(listStatusTimeline).toHaveBeenCalledTimes(2);
+    const firstApplicationOptions = listApplications.mock.calls[0]?.[3];
+    const secondApplicationOptions = listApplications.mock.calls[1]?.[3];
+    const firstTimelineOptions = listStatusTimeline.mock.calls[0]?.[2];
+    const secondTimelineOptions = listStatusTimeline.mock.calls[1]?.[2];
+    const firstApplicationSignal = firstApplicationOptions?.abortSignal;
+    const secondApplicationSignal = secondApplicationOptions?.abortSignal;
+    const firstTimelineSignal = firstTimelineOptions?.abortSignal;
+    const secondTimelineSignal = secondTimelineOptions?.abortSignal;
+    expect(firstApplicationSignal).toBeInstanceOf(AbortSignal);
+    expect(secondApplicationSignal).toBeInstanceOf(AbortSignal);
+    expect(secondApplicationSignal).not.toBe(firstApplicationSignal);
+    expect(firstTimelineSignal).toBeInstanceOf(AbortSignal);
+    expect(secondTimelineSignal).toBeInstanceOf(AbortSignal);
+    expect(secondTimelineSignal).not.toBe(firstTimelineSignal);
+    expect(firstApplicationOptions?.retry).toBe(false);
+    expect(secondApplicationOptions?.retry).toBe(false);
+    expect(firstTimelineOptions?.retry).toBe(false);
+    expect(secondTimelineOptions?.retry).toBe(false);
   });
 
   it("still reports unavailable, honestly, if a same-shaped failure is not actually transient", async () => {
@@ -362,6 +398,7 @@ describe("an existing account's dashboard load right after a fresh sign-in", () 
   beforeEach(() => {
     listApplications.mockReset();
     listStatusTimeline.mockReset();
+    sessionExists = true;
     refererHeader = "https://app.interndex.example/login";
     errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
