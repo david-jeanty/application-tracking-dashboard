@@ -8,7 +8,7 @@ has to set up by hand.
 
 ## Spec 1: Foundation and resume pipeline
 
-**Status:** steps 1 to 7 built and tested locally (2026-11-13). Steps 8 to 10
+**Status:** steps 1 to 8 built and tested locally (2026-11-13). Steps 9 and 10
 in progress. See section 9 for progress.
 **Branch:** `agent-specs`. One PR for all of Spec 1.
 
@@ -561,7 +561,40 @@ one additive column on `applications`. The ledger records `fit_read` and
 `tailor` together when the run is saved, because the fit read is only
 stored at that point.
 
-#### Still open for steps 8 to 10
+#### Step 8: web app, built (2026-11-13)
+
+**What was built**
+
+- **Resumes page** (`/resumes`): every tailored resume, newest first, with
+  role (linking to the application), company, date, template, estimated
+  tokens, the layout result in words, and Open, Download, or "Open to print"
+  when the server could not print a PDF, plus the resume.lol link for design
+  tweaks. Owner only: for every other signed-in student the page is a 404 and
+  no query runs.
+- **Resume panel on each application page**: the newest resume, its layout
+  result, builds left, the same file links, and the estimated usage for that
+  posting per tool. Read only for the owner; a student's page runs exactly the
+  two reads it always did (a test proves the agent query is never called).
+- **File routes**: `/resumes/{id}/pdf` checks the session and the owner gate,
+  then redirects to a signed storage link valid for 60 seconds (with the file
+  name `{Name}_{Company}_{Role}.pdf` on download). `/resumes/{id}/print`
+  serves the stored HTML sandboxed (`Content-Security-Policy: sandbox
+  allow-scripts allow-modals`), so its pagination script and print dialog
+  work but it cannot act as David on Interndex.
+- **Sidebar**: a "Resumes" item for the owner only. Other students' sidebars
+  are unchanged (a test compares them).
+- `/resumes` added to the protected routes list.
+
+**Usage estimate.** Tokens are estimated as bytes / 4 of what Interndex tools
+returned, per application and per tool (each tool is one step of the run).
+It is shown as tokens, not dollars: David runs on a Claude plan, so tokens
+are the unit his usage limits count.
+
+**Tests.** Unit tests: 1,838 pass (20 new in `agent-web`,
+`agent-resume-routes`, `agent-resume-ui`, `agent-resume-pages`). Database,
+render, lint, typecheck, build and extension checks pass.
+
+#### Still open for steps 9 and 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's
   preview user id is needed for Vercel's Preview `OWNER_USER_ID`.

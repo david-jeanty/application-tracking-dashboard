@@ -11,7 +11,10 @@ import {
 import { ApplicationStatusDot } from "@/components/applications/application-status";
 import { LifecycleRail } from "@/components/applications/lifecycle-rail";
 import { QuickUpdate } from "@/components/applications/quick-update";
+import { ApplicationResumePanel } from "@/components/agent/application-resume-panel";
 import { Button, ButtonLink } from "@/components/ui/button";
+import { isAgentOwner } from "@/lib/agent/owner";
+import { readApplicationAgentPanel } from "@/lib/agent/resumes-repository";
 import {
   archiveApplicationAction,
   restoreApplicationAction,
@@ -54,9 +57,14 @@ export default async function ApplicationDetailPage({
   // Two owner-scoped reads, in parallel. The history one is narrowed to this
   // application, so drawing the rail costs a single indexed lookup rather than
   // a scan of everything the student has ever recorded.
-  const [{ data: application, error }, history] = await Promise.all([
+  // The recruiting agent's panel is read only for the OWNER_USER_ID account,
+  // so every other student's page runs exactly the two reads it always has.
+  const [{ data: application, error }, history, agentPanel] = await Promise.all([
     getApplicationById(supabase, user.id, parsedId.data),
     listApplicationStatusHistory(supabase, user.id, parsedId.data),
+    isAgentOwner(user.id)
+      ? readApplicationAgentPanel(supabase, user.id, parsedId.data)
+      : Promise.resolve(null),
   ]);
 
   if (error) throw new Error(`Application query failed (${error.code}).`);
@@ -169,6 +177,7 @@ export default async function ApplicationDetailPage({
           {/* Renders nothing for an archived application; the rule lives inside. */}
           <QuickUpdate application={application} />
           <ApplicationRecordMeta application={application} />
+          {agentPanel?.data ? <ApplicationResumePanel panel={agentPanel.data} /> : null}
         </div>
       </div>
 

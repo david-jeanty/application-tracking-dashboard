@@ -2,6 +2,7 @@ import {
   Archive,
   BarChart3,
   Columns3,
+  FileCheck,
   FileText,
   LayoutDashboard,
   Settings,
@@ -38,6 +39,14 @@ export const primaryNavigationItems: readonly NavigationItem[] = [
 /** Finished work. Kept slightly apart so it does not compete with the above. */
 export const secondaryNavigationItems: readonly NavigationItem[] = [
   { href: "/archive", label: "Archive", icon: Archive },
+];
+
+/**
+ * The recruiting agent's pages. Shown only to the OWNER_USER_ID account
+ * (`WorkspaceIdentity.agentOwner`); every other student's sidebar is unchanged.
+ */
+export const agentNavigationItems: readonly NavigationItem[] = [
+  { href: "/resumes", label: "Resumes", icon: FileCheck },
 ];
 
 /** Sits at the foot of the sidebar rather than in the workflow list. */
