@@ -307,9 +307,10 @@ Results go in this log. The PR is opened only after these pass.
 
 ### 8. What I need from David
 
-1. **OWNER_USER_ID:** I could not look it up. This session has no Supabase
-   access, and reading users by email needs an admin key. Copy it from the
-   Supabase dashboard (steps in the chat reply).
+1. ~~**OWNER_USER_ID**~~ Received 2026-11-13 (production project). Stored in
+   the local `.env.local` only, never in the repo. The preview project needs
+   its own id. `RESUMELOL_API_KEY` also received and stored the same way;
+   David adds both to Vercel himself.
 2. **resume.lol API docs**, and `resume.lol` (plus any API host it uses) allowed
    in this session's network settings, so I can build and test the client.
 3. **The two template references** in resume.lol (Jake's and zero2sudo) and how
