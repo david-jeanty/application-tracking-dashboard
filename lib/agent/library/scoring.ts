@@ -51,6 +51,8 @@ export type RankedVariant = {
 export type RankedStory = {
   story_id: string;
   label: string;
+  /** The story's facts. A new bullet may be written from these. */
+  summary: string | null;
   org: string;
   title: string;
   score: number;
@@ -67,6 +69,8 @@ export type StoryRanking = {
 
 export const MAX_STORIES = 5;
 export const MAX_VARIANTS_PER_STORY = 2;
+/** Longest story summary (its facts) a search result carries. */
+export const MAX_SUMMARY_CHARS = 700;
 
 const STOPWORDS = new Set([
   "a", "an", "the", "and", "or", "of", "in", "on", "at", "to", "for", "by",
@@ -148,6 +152,11 @@ function rankVariants(
     }));
 }
 
+function shorten(text: string | null, max: number): string | null {
+  if (text === null || text.length <= max) return text;
+  return `${text.slice(0, max - 3).trimEnd()}...`;
+}
+
 export function rankStories(
   stories: readonly LibraryStory[],
   query: StoryQuery,
@@ -206,6 +215,7 @@ export function rankStories(
     .map(({ story, matches, score }) => ({
       story_id: story.id,
       label: story.label,
+      summary: shorten(story.summary, MAX_SUMMARY_CHARS),
       org: story.org,
       title: story.official_title,
       score,

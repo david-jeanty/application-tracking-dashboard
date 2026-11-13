@@ -52,6 +52,20 @@ describe("rankStories", () => {
     expect(ranking.unmatched).toEqual([]);
   });
 
+  it("returns each story's facts so a new bullet can be written from them", () => {
+    const facts = "Power BI Premium dashboard over 5M+ records across 50+ regional sites.";
+    const library = LIBRARY.map((story) =>
+      story.variants[0].text.startsWith("Eliminated manual weekly") ? { ...story, summary: facts } : story,
+    );
+    const ranking = rankStories(library, {
+      requirements: ["Build Power BI dashboards over large datasets"],
+      angles: [],
+      template: "zero2sudo",
+    });
+    expect(ranking.stories[0].summary).toBe(facts);
+    expect(ranking.stories.slice(1).every((story) => story.summary === null)).toBe(true);
+  });
+
   it("reports requirements no story touches", () => {
     const ranking = rankStories(LIBRARY, {
       requirements: ["Ticket triage and backlog reduction", "Kubernetes cluster administration"],

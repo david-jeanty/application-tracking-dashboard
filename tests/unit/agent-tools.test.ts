@@ -52,14 +52,15 @@ describe("get_playbook", () => {
       program: "Business Technology Management",
       degree_level: "Bachelor's",
       expected_graduation: "2028-05-01",
-      year_of_study: 3,
+      year_of_study: 4,
+      academic_standing: 3,
       notes: null,
     };
     const playbook = json<{
       phase: string;
       steps: string[];
       standards: string;
-      profile: { school: string };
+      profile: { school: string; year_of_study: number; academic_standing: number };
       saved_rules: { rules: unknown[] };
     }>(await call("get_playbook", { phase: "run" }));
 
@@ -70,6 +71,7 @@ describe("get_playbook", () => {
     // Outreach standards belong to Spec 2's people step, not this phase.
     expect(playbook.standards).not.toContain("## Part 3");
     expect(playbook.profile.school).toBe("University of Ottawa");
+    expect(playbook.profile).toMatchObject({ year_of_study: 4, academic_standing: 3 });
     expect(playbook.saved_rules.rules).toEqual([]);
   });
 
@@ -241,7 +243,7 @@ describe("the story library", () => {
           { story_key: "backlog", text: IRB.bullets[0], style: "house", is_gold: true, explain_note: "Backlog fell after the new triage rules." },
           { story_key: "dashboard", text: IRB.bullets[2], style: "house", is_gold: true, explain_note: "Leadership stopped asking for weekly summaries." },
         ],
-        profile: { school: "University of Ottawa", expected_graduation: "2028-05", year_of_study: 3 },
+        profile: { school: "University of Ottawa", expected_graduation: "2028-05", year_of_study: 4, academic_standing: 3 },
       }),
     );
   }
@@ -253,6 +255,7 @@ describe("the story library", () => {
     expect(second).toMatchObject({ stories: 2, variants_added: 0, variants_existing: 2 });
     expect(store.library).toHaveLength(2);
     expect(store.profile?.expected_graduation).toBe("2028-05-01");
+    expect(store.profile).toMatchObject({ year_of_study: 4, academic_standing: 3 });
   });
 
   it("refuses an import with a broken link or a number without a note, writing nothing", async () => {

@@ -230,6 +230,7 @@ export class FakeAgentStore {
               ? toMonthDate(input.profile.expected_graduation)
               : null,
             year_of_study: input.profile.year_of_study ?? null,
+            academic_standing: input.profile.academic_standing ?? null,
             notes: null,
           };
         }

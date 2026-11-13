@@ -606,6 +606,37 @@ render, lint, typecheck, build and extension checks pass.
   `complete_run`, and the agent pgTAP suites.
 - `docs/testing.md`: the new render suite.
 
+#### Import decisions applied (2026-11-13)
+
+David ran the import phase in Claude Code with his 9 recent resumes and made
+these calls. The library data itself stays out of the repo (it is resume
+content); it is saved in the session transcript and goes in through
+`import_library` once the agent connector is live on the preview.
+
+- **Library is facts, not fixed text** (decision record 0013). The run step
+  now says: reuse a variant as is, or write a new bullet from the story's
+  facts in the posting's language, house style and stretch rules; employers,
+  titles and dates always come from the library unchanged. Story summaries
+  are fact sheets, and `search_stories` returns them (at most 700 characters).
+- **`search_stories` cap raised from 9 KB to 12 KB.** With summaries, David's
+  library measures about 10.2 KB at its largest, and an over-cap result is
+  refused, not trimmed.
+- **Academic standing** (decision record 0004, update). New nullable column
+  `agent_profile.academic_standing` (migration `20261113000400`, pgTAP suite
+  `010`). Year of study and standing can differ; the fit read shows both as
+  plain info. The values live only in the database.
+- **Data calls, saved as rules with `add_rule` after the import:** no
+  "pull requests" counts; StraNexus screening is "40% faster" only; the
+  Exacare wording is the preferred version of the Interndex launch and
+  repositioning stories; Aritzia, the Early Graduate Outcomes research
+  project and Student Ambassador never go on a resume or in the library.
+
+| Check | Result |
+| --- | --- |
+| Unit tests (`npm run test`) | 1,842 pass (4 new: playbook decisions, story facts in results, academic standing) |
+| Database tests (`npm run test:db`, local Docker) | 198 pass (4 new in `010_agent_profile_academic_standing.test.sql`) |
+| Lint, typecheck | Pass (lint: 0 errors, only the existing warnings) |
+
 #### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's
@@ -653,7 +684,8 @@ Chrome binary (see `docs/testing.md`). `build` needs the three public
    and install the skill from `skill/interndex-pipeline/SKILL.md`.
 6. **In that project, calibrate both templates** (see step 6's setup for the
    exact sentence and ids).
-7. **Run the import** with David's 9 recent resumes (phase `import`).
+7. **Run the import.** The payload is prepared (see "Import decisions
+   applied" above): `import_library`, then the four `add_rule` calls.
 8. **At merge:** the same variables in Vercel Production, with the production
    `OWNER_USER_ID`, and the migrations pushed to production.
 

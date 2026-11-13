@@ -7,3 +7,5 @@
 **Alternatives.** Let OAuth clients read `profiles` (reverses a security fix for every user). Hard-code David's facts in the playbook source (personal data in the repository, and a code change every time a fact changes).
 
 **Why.** It keeps the existing security boundary exactly as it is and holds the minimum data the feature needs.
+
+**Update (2026-11-13, import).** A student's year of study (years enrolled) and academic standing (credits) can differ, and postings state eligibility either way. `agent_profile` gained a nullable `academic_standing` column (additive migration `20261113000400`) next to `year_of_study`. The fit read shows both as plain info and counts a year requirement as met if either value meets it.

@@ -304,7 +304,13 @@ export const importLibraryInputSchema = z.object({
       program: z.string().trim().min(1).max(160).optional(),
       degree_level: z.string().trim().min(1).max(80).optional(),
       expected_graduation: z.string().regex(MONTH_OR_DATE).optional().describe("YYYY-MM."),
-      year_of_study: z.int().min(1).max(10).optional(),
+      year_of_study: z.int().min(1).max(10).optional().describe("Years enrolled, for example 4."),
+      academic_standing: z
+        .int()
+        .min(1)
+        .max(10)
+        .optional()
+        .describe("Year of academic standing (credits), when it differs from year_of_study."),
     })
     .optional()
     .describe("The fit-read profile. Send it once; later imports may leave it out."),

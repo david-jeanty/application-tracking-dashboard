@@ -49,6 +49,25 @@ describe("generated playbook files", () => {
   });
 });
 
+describe("David's run decisions are in the playbook", () => {
+  const run = PHASE_DEFINITIONS.run.steps.join("\n");
+
+  it("treats the library as facts: reuse a variant or write from the story's facts", () => {
+    expect(run).toContain("The library is a source of facts, not fixed text.");
+    expect(run).toMatch(/reuse a variant as is, or write a new bullet from the story's facts/);
+    expect(run).toMatch(/mirroring the posting's language/);
+    expect(run).toMatch(/house style and the stretch rules/);
+  });
+
+  it("never changes employers, titles or dates", () => {
+    expect(run).toContain("Employers, titles and dates always come from the library unchanged.");
+  });
+
+  it("shows year of study and academic standing as plain info in the fit read", () => {
+    expect(run).toMatch(/year of study and academic standing as plain info/);
+  });
+});
+
 describe("writing rules on every piece of agent text", () => {
   const originalOwner = process.env.OWNER_USER_ID;
   beforeEach(() => {

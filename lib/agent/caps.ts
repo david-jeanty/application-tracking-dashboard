@@ -17,7 +17,10 @@ export const TOOL_RESULT_CAPS = {
   get_run_state: 1_500,
   get_application_brief: 2_600,
   create_application_from_jd: 1_000,
-  search_stories: 9_000,
+  // Five stories, each with its facts (summary, at most 700 characters) and
+  // two variants with explain notes. David's imported library measures about
+  // 10.2 KB at its largest.
+  search_stories: 12_000,
   save_variant: 600,
   record_edit: 400,
   add_rule: 400,

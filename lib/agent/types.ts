@@ -42,6 +42,8 @@ export type AgentProfile = {
   degree_level: string | null;
   expected_graduation: string | null;
   year_of_study: number | null;
+  /** Year of academic standing (credits). Can differ from year_of_study. */
+  academic_standing: number | null;
   notes: string | null;
 };
 

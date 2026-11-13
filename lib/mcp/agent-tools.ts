@@ -498,7 +498,7 @@ export function registerAgentTools(
     {
       title: "Search story library",
       description:
-        "Finds the library's best stories for the requirements: at most 5 stories, best 2 variants each, with explain notes, plus the requirements no story matched. Deterministic.",
+        "Finds the library's best stories for the requirements: at most 5 stories, each with its facts (summary) and best 2 variants with explain notes, plus the requirements no story matched. Deterministic.",
       inputSchema: searchStoriesInputSchema,
       annotations: READ_ONLY,
     },

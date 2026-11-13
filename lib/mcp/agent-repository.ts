@@ -33,7 +33,7 @@ import { toMonthDate, type ImportLibraryInput } from "@/lib/validation/agent";
  */
 
 const PROFILE_COLUMNS =
-  "school,program,degree_level,expected_graduation,year_of_study,notes";
+  "school,program,degree_level,expected_graduation,year_of_study,academic_standing,notes";
 const TEMPLATE_COLUMNS =
   "id,name,use_for,one_line_chars,two_line_min,two_line_max,calibrated_at";
 const VARIANT_COLUMNS =
