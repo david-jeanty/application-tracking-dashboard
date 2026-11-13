@@ -43,6 +43,7 @@ beforeEach(async () => {
     application_id: APPLICATION_ID,
     company: "Pinterest",
     title: "Strategy & Operations Intern",
+    requirements: [],
     status: "draft",
     build_count: 0,
     content: tailoredContentSchema.parse({

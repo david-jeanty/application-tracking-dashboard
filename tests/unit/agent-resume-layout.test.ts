@@ -143,3 +143,22 @@ describe("countPdfPages", () => {
     expect(countPdfPages(new TextEncoder().encode("<html></html>"))).toBeNull();
   });
 });
+
+describe("evaluateLayout: one full page", () => {
+  it("fails when more than 5% of the page height is empty at the bottom", () => {
+    const short = evaluateLayout(measurement({ bottom_gap: 0.08, top_gap: 0 }), [A, B]);
+    expect(short.failures).toEqual([expect.objectContaining({ rule: "page_not_full" })]);
+    expect(short.failures[0].detail).toContain("8%");
+    expect(evaluateLayout(measurement({ bottom_gap: 0.05, top_gap: 0 }), [A, B]).status).toBe("passed");
+  });
+
+  it("fails a large empty space at the top", () => {
+    const result = evaluateLayout(measurement({ bottom_gap: 0.01, top_gap: 0.07 }), [A, B]);
+    expect(result.failures.map((failure) => failure.rule)).toEqual(["top_gap"]);
+  });
+
+  it("does not call a page that runs over 'not full'", () => {
+    const result = evaluateLayout(measurement({ pages: 2, bottom_gap: 0.3, top_gap: 0 }), [A, B]);
+    expect(result.failures.map((failure) => failure.rule)).toEqual(["one_page"]);
+  });
+});

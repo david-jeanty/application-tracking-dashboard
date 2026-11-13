@@ -36,6 +36,13 @@ export type LayoutMeasurement = {
   bullets: MeasuredBullet[];
   /** How much of the first page's content height is used, 0 to 1. */
   page_fill: number | null;
+  /**
+   * Empty space between the first line and the top margin, and between the
+   * last line and the bottom margin, each as a share of the page height.
+   * Null when the page was not paginated.
+   */
+  top_gap?: number | null;
+  bottom_gap?: number | null;
 };
 
 export type LayoutRule =
@@ -45,7 +52,8 @@ export type LayoutRule =
   | "three_lines"
   | "one_line"
   | "content_mismatch"
-  | "page_not_full";
+  | "page_not_full"
+  | "top_gap";
 
 export type LayoutIssue = { rule: LayoutRule; detail: string; index?: number };
 
@@ -56,8 +64,11 @@ export type LayoutResult = {
   warnings: LayoutIssue[];
 };
 
-/** Below this share of the page height, the page is not fully used. */
+/** Below this share of the page height, the page is not fully used (older measurements). */
 export const PAGE_FILL_WARNING = 0.9;
+
+/** The most empty space allowed at the bottom (or top) of the page, as a share of its height. */
+export const MAX_PAGE_GAP = 0.05;
 
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 
@@ -147,7 +158,23 @@ export function evaluateLayout(
     }
   });
 
-  if (measurement.page_fill !== null && measurement.page_fill < PAGE_FILL_WARNING) {
+  // David's rule: no more than 5% of the page height empty at the bottom
+  // (or the top). Only meaningful on a single page.
+  const { top_gap: topGap, bottom_gap: bottomGap } = measurement;
+  if (typeof bottomGap === "number" || typeof topGap === "number") {
+    if (pages === 1 && typeof bottomGap === "number" && bottomGap > MAX_PAGE_GAP) {
+      failures.push({
+        rule: "page_not_full",
+        detail: `The page leaves ${percent(bottomGap)} of its height empty at the bottom; at most 5% is allowed. Add a bullet.`,
+      });
+    }
+    if (typeof topGap === "number" && topGap > MAX_PAGE_GAP) {
+      failures.push({
+        rule: "top_gap",
+        detail: `The page leaves ${percent(topGap)} of its height empty at the top; at most 5% is allowed.`,
+      });
+    }
+  } else if (measurement.page_fill !== null && measurement.page_fill < PAGE_FILL_WARNING) {
     warnings.push({
       rule: "page_not_full",
       detail: `The page is ${percent(measurement.page_fill)} full. Add a bullet or lengthen one.`,

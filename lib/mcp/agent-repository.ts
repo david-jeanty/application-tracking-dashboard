@@ -516,10 +516,10 @@ export function createAgentRepositoryForClient(
       const [application, template] = await Promise.all([
         supabase
           .from("applications")
-          .select("company_name,original_job_title")
+          .select("company_name,original_job_title,jd_requirements")
           .eq("user_id", userId)
           .eq("id", resume.data.application_id)
-          .single<{ company_name: string; original_job_title: string }>(),
+          .single<{ company_name: string; original_job_title: string; jd_requirements: unknown }>(),
         supabase
           .from("templates")
           .select(BUILD_TEMPLATE_COLUMNS)
@@ -542,6 +542,7 @@ export function createAgentRepositoryForClient(
           built_markdown_sha256: resume.data.built_markdown_sha256,
           company: application.data.company_name,
           title: application.data.original_job_title,
+          requirements: parseStoredRequirements(application.data.jd_requirements).map((requirement) => requirement.text),
           template: template.data,
         },
         error: null,

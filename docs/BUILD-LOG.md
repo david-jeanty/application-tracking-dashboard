@@ -691,6 +691,32 @@ full (decision record 0015).
 | Unit tests | 1,872 pass (layout, checker, calibration, build and tool tests updated to the rule; 10 new) |
 | Lint, typecheck | Pass (only the 2 existing lint warnings) |
 
+#### Change 3: one full page (2026-11-13)
+
+David's call: one page, no large empty space at the top or bottom (more
+than 5% of the page height below the last line fails); a short page gets
+the next best library bullet, a page that runs over loses its weakest
+bullet (decision record 0016).
+
+- The renderer measures `top_gap` and `bottom_gap` against the page height;
+  `evaluateLayout` fails `page_not_full` and `top_gap` above 5%.
+- `lib/agent/resume/page-fill.ts` chooses what to add (best story for the
+  posting not yet on the page, under an experience on the page, best variant
+  that passes the checks) and what to cut (least relevant bullet; never
+  David's edits; an entry keeps its last bullet while others have two).
+- The build loop: at most 3 adjustments, none started after 50 seconds, on
+  the same resume.lol resume; an addition that runs over is undone. Not
+  counted as builds. Reported as `page_adjustments` (with explain notes) and
+  `adjust_stop`.
+- STANDARDS.md has the page fill rule; the playbook tells the run to show
+  added bullets with their notes.
+
+| Check | Result |
+| --- | --- |
+| Unit tests | 1,887 pass (15 new: `agent-resume-page-fill`, gap rules, 4 build-loop tests) |
+| Render tests (real Chrome) | 9 pass (1 new: top and bottom gap measured on a real page) |
+| Lint, typecheck | Pass (only the 2 existing lint warnings) |
+
 #### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's

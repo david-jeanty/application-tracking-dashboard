@@ -321,6 +321,7 @@ export class FakeAgentStore {
           application_id: application.id,
           company: application.company_name,
           title: application.original_job_title,
+          requirements: [],
           status: "draft",
           build_count: 0,
           content: input.content,

@@ -130,18 +130,37 @@ function measurePage(): LayoutMeasurement {
   });
 
   let pageFill: number | null = null;
-  const firstContent = pageElements[0]?.querySelector(".pagedjs_page_content");
-  if (firstContent) {
+  let topGap: number | null = null;
+  let bottomGap: number | null = null;
+  const firstPage = pageElements[0];
+  const firstContent = firstPage?.querySelector(".pagedjs_page_content");
+  if (firstPage && firstContent) {
     const area = firstContent.getBoundingClientRect();
+    const pageHeight = firstPage.getBoundingClientRect().height;
+    let top = area.bottom;
     let bottom = area.top;
     for (const element of Array.from(firstContent.querySelectorAll("*"))) {
       const rect = element.getBoundingClientRect();
-      if (rect.height > 0 && rect.width > 0) bottom = Math.max(bottom, rect.bottom);
+      if (rect.height > 0 && rect.width > 0) {
+        top = Math.min(top, rect.top);
+        bottom = Math.max(bottom, rect.bottom);
+      }
     }
-    pageFill = area.height > 0 ? Math.round(((bottom - area.top) / area.height) * 1000) / 1000 : null;
+    const share = (value: number) => Math.round(value * 1000) / 1000;
+    pageFill = area.height > 0 ? share((bottom - area.top) / area.height) : null;
+    if (pageHeight > 0 && bottom > area.top) {
+      topGap = share(Math.max(0, top - area.top) / pageHeight);
+      bottomGap = share(Math.max(0, area.bottom - bottom) / pageHeight);
+    }
   }
 
-  return { pages: Math.max(pageElements.length, 1), bullets, page_fill: pageFill };
+  return {
+    pages: Math.max(pageElements.length, 1),
+    bullets,
+    page_fill: pageFill,
+    top_gap: topGap,
+    bottom_gap: bottomGap,
+  };
 }
 
 async function renderWithBrowser(browser: Browser, html: string, withPdf: boolean, deadline: number) {

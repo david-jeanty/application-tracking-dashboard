@@ -51,7 +51,36 @@ describe("renderResumeHtml in real Chrome", () => {
     expect(outcome.measurement.page_fill).toBeLessThan(0.5);
 
     const layout = evaluateLayout(outcome.measurement, [SHORT, LONG], { pdfPages: countPdfPages(outcome.pdf!) });
-    expect(layout.failures.map((failure) => failure.rule)).toContain("short_line");
+    // A short one-liner fails: bullets run two lines unless allowed one.
+    expect(layout.failures.map((failure) => failure.rule)).toContain("one_line");
+    const allowed = evaluateLayout(outcome.measurement, [SHORT, LONG], { oneLineAllowed: [true, false] });
+    expect(allowed.failures.map((failure) => failure.rule)).toContain("short_line");
+  });
+
+  it("measures the empty space above and below the content as a share of the page height", async () => {
+    const page = (contentHeight: string) => `<!doctype html><html><head><style>
+      @page { size: letter; margin: 0; }
+      body { margin: 0; }
+      .pagedjs_page { width: 8.5in; height: 11in; overflow: hidden; }
+      .pagedjs_page_content { height: 10in; margin-top: 0.5in; }
+      .block { height: ${contentHeight}; background: #eee; }
+    </style></head><body><div class="pagedjs_pages"><div class="pagedjs_page"><div class="pagedjs_page_content">
+      <div class="block"></div><ul><li>${LONG}</li></ul>
+    </div></div></div></body></html>`;
+
+    const short = await renderResumeHtml(page("8in"), { withPdf: false });
+    expect(short.ok).toBe(true);
+    if (!short.ok) return;
+    expect(short.measurement.top_gap).toBe(0);
+    // About 1.6in of the 10in content area is empty: roughly 15% of an 11in page.
+    expect(short.measurement.bottom_gap).toBeGreaterThan(0.1);
+    expect(evaluateLayout(short.measurement, [LONG]).failures.map((failure) => failure.rule)).toContain("page_not_full");
+
+    const full = await renderResumeHtml(page("9.4in"), { withPdf: false });
+    expect(full.ok).toBe(true);
+    if (!full.ok) return;
+    expect(full.measurement.bottom_gap).toBeLessThan(0.05);
+    expect(evaluateLayout(full.measurement, [LONG]).failures.map((failure) => failure.rule)).not.toContain("page_not_full");
   });
 
   it("prints a PDF whose page count matches the layout", async () => {

@@ -31,7 +31,8 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { deriveLineTargets } from "@/lib/agent/calibration";
-import { checkBullets, type BulletIssue, type LineTargets } from "@/lib/agent/checks/bullets";
+import { checkBullets, lineFillCheck, type BulletIssue, type LineTargets } from "@/lib/agent/checks/bullets";
+import type { LibraryStory } from "@/lib/agent/library/scoring";
 import { phrasesFromRules } from "@/lib/agent/checks/text-rules";
 import type { LedgerStatus, RunStep } from "@/lib/agent/ledger";
 import {
@@ -47,7 +48,14 @@ import {
   fullLineLengths,
   type LayoutIssue,
 } from "@/lib/agent/resume/layout";
-import { allowsOneLine } from "@/lib/agent/resume/line-rules";
+import { allowsOneLine, type BulletOwner } from "@/lib/agent/resume/line-rules";
+import {
+  addBullet,
+  cutBullet,
+  pickNextBullet,
+  pickWeakestBullet,
+  type PageAdjustment,
+} from "@/lib/agent/resume/page-fill";
 import { resolveSkeleton, type ResumeSources } from "@/lib/agent/resume/library-entries";
 import { countPdfPages } from "@/lib/agent/resume/pdf";
 import type { ResumeRenderer } from "@/lib/agent/resume/render";
@@ -61,6 +69,15 @@ import { editorUrlFor, ResumeLolError, type ResumeLolClient } from "@/lib/agent/
 import type { AgentRule, RuleScope, TemplateName, TemplateSectionSummary } from "@/lib/agent/types";
 
 export const MAX_BUILDS = 2;
+
+/**
+ * Page-fill changes one build may make (add or cut a bullet, then re-render
+ * on the same resume.lol resume). They do not count toward MAX_BUILDS.
+ */
+export const MAX_PAGE_ADJUSTMENTS = 3;
+
+/** No new page-fill change starts after this long, so a build ends inside the MCP time limit. */
+export const PAGE_ADJUST_BUDGET_MS = 50_000;
 
 /** Which resume.lol roles each template is for, until David changes them. */
 export const DEFAULT_USE_FOR: Readonly<Record<TemplateName, readonly string[]>> = {
@@ -101,6 +118,8 @@ export type BuildRow = {
   resumelol_resume_id: string | null;
   resumelol_updated_at: string | null;
   built_markdown_sha256: string | null;
+  /** The posting's requirements, for choosing what to add or cut. */
+  requirements: string[];
   template: BuildTemplate;
 };
 
@@ -112,6 +131,12 @@ export type LayoutReport = {
   experience_source?: "library" | "base";
   /** On the fallback path: whether line rules were estimated from character counts. */
   line_check?: "characters" | "none";
+  /** Empty space below the last line, as a share of the page height. */
+  bottom_gap?: number | null;
+  /** Bullets the build added or cut to fill one page. */
+  page_adjustments?: PageAdjustment[];
+  /** Why page filling stopped early, when it did. */
+  adjust_stop?: string;
   reason?: string;
   detail?: string;
   pages?: number;
@@ -149,6 +174,8 @@ export type BuildRepository = {
   saveBuild: (tailoredResumeId: string, applicationId: string, patch: BuildPatch) => Promise<{ error: DbError }>;
   uploadResumeFile: (path: string, bytes: Uint8Array, contentType: string) => Promise<{ error: DbError }>;
   readRules: (scopes: readonly RuleScope[]) => Read<AgentRule[]>;
+  /** The story library, for adding a bullet when the page is short. */
+  listLibrary: () => Read<LibraryStory[]>;
   /** The library's experiences and the fit-read profile: where headings come from. */
   readResumeSources: () => Read<ResumeSources>;
   writeLedger: (applicationId: string, step: RunStep, status: LedgerStatus) => Promise<{ error: DbError }>;
@@ -467,19 +494,17 @@ export async function buildResume(
   if (!resolved.ok) return fail(`Not built. ${resolved.message}`);
   const skeleton = resolved.value.skeleton;
 
-  const rendered = renderTailoredResume(skeleton, content);
-  if (!rendered.ok) return fail(`The resume content does not fit the template. ${rendered.problems.join(" ")}`);
+  const firstRender = renderTailoredResume(skeleton, content);
+  if (!firstRender.ok) return fail(`The resume content does not fit the template. ${firstRender.problems.join(" ")}`);
+  let rendered = firstRender;
 
   // Every page passes check_bullets before anything is sent.
   const rules = await repository.readRules(["bullets", "all"]);
   if (rules.error || !rules.data) return dbFail("Reading saved rules", rules.error);
   const oneLineAllowed = rendered.bullet_owners.map((owner) => allowsOneLine(owner));
   const targets = targetsOf(resume.template);
-  const check = checkBullets(rendered.bullets, {
-    targets,
-    oneLineAllowed,
-    extraBlocked: phrasesFromRules(rules.data.map((rule) => rule.text)),
-  });
+  const extraBlocked = phrasesFromRules(rules.data.map((rule) => rule.text));
+  const check = checkBullets(rendered.bullets, { targets, oneLineAllowed, extraBlocked });
   const checkFailures = [...check.page.failures, ...check.bullets.flatMap((bullet) => bullet.failures)];
   const keepFailures = input.mode === "rebuild" && input.keep_failing_edits === true;
   if (!check.pass && !keepFailures) {
@@ -548,7 +573,9 @@ export async function buildResume(
   });
   if (early.error) return dbFail("Recording the resume.lol resume", early.error);
 
-  // Fetch the printable HTML once, render, check, store.
+  // Fetch the printable HTML, render, check. A page that is short or runs
+  // over is adjusted from the library and rendered again, on the same
+  // resume.lol resume, inside this build (decision record 0016).
   const folder = deps.userId;
   const htmlPath = `${folder}/${resume.id}.html`;
   const pdfPath = `${folder}/${resume.id}.pdf`;
@@ -556,22 +583,142 @@ export async function buildResume(
   let layoutCheck: LayoutCheck = "skipped";
   let storedHtmlPath: string | null = null;
   let storedPdfPath: string | null = null;
+  const adjustments: PageAdjustment[] = [];
+  let adjustStop: string | undefined;
+  // What resume.lol holds now; recorded so a later rebuild can tell David's
+  // own changes in resume.lol from Interndex's.
+  let remoteMarkdown = rendered.markdown;
 
-  let html: string | null = null;
-  try {
-    html = await deps.resumeLol.getResumeHtml(resumeId);
-  } catch (error) {
-    report = { path: "skipped", reason: "html_unavailable", detail: resumeLolMessage(error) };
-  }
+  const fetchHtml = async (): Promise<{ html: string } | { error: string }> => {
+    try {
+      return { html: await deps.resumeLol.getResumeHtml(resumeId) };
+    } catch (error) {
+      return { error: resumeLolMessage(error) };
+    }
+  };
+  const measure = async (html: string, page: { bullets: string[]; bullet_owners: BulletOwner[] }) => {
+    const outcome = await deps.render(html, { withPdf: true });
+    if (!outcome.ok || !outcome.pdf) return { outcome, result: null, pdf: null, pdfPages: null };
+    const pdfPages = countPdfPages(outcome.pdf);
+    const result = evaluateLayout(outcome.measurement, page.bullets, {
+      pdfPages,
+      oneLineAllowed: page.bullet_owners.map((owner) => allowsOneLine(owner)),
+    });
+    return { outcome, result, pdf: outcome.pdf, pdfPages };
+  };
+  const writeRemote = async (markdown: string): Promise<boolean> => {
+    try {
+      const updated = await deps.resumeLol.updateResumeMarkdown({
+        resume_id: resumeId,
+        markdown,
+        expected_updated_at: updatedAt,
+      });
+      updatedAt = updated.updated_at;
+      remoteMarkdown = markdown;
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
-  if (html !== null) {
-    const upload = await repository.uploadResumeFile(htmlPath, new TextEncoder().encode(html), "text/html");
+  const first = await fetchHtml();
+  if ("error" in first) {
+    report = { path: "skipped", reason: "html_unavailable", detail: first.error };
+  } else {
+    type PageState = {
+      content: TailoredContent;
+      rendered: Extract<ReturnType<typeof renderTailoredResume>, { ok: true }>;
+      html: string;
+      measured: Awaited<ReturnType<typeof measure>>;
+    };
+    let state: PageState = { content, rendered, html: first.html, measured: await measure(first.html, rendered) };
+    const keep = new Set(recordedEdits.map((recorded) => recorded.after));
+    const entries = skeleton.sections.flatMap((section) => section.entries);
+    let library: LibraryStory[] | null = null;
+
+    for (let step = 0; step < MAX_PAGE_ADJUSTMENTS && state.measured.result; step += 1) {
+      const failures = state.measured.result.failures;
+      const overflow = failures.some((failure) => failure.rule === "one_page");
+      const short = !overflow && failures.some((failure) => failure.rule === "page_not_full");
+      if (!overflow && !short) break;
+      if (Date.now() - startedAt > PAGE_ADJUST_BUDGET_MS) {
+        adjustStop = "time_budget";
+        break;
+      }
+
+      let nextContent: TailoredContent;
+      let record: PageAdjustment;
+      if (overflow) {
+        const weakest = pickWeakestBullet(state.content, resume.requirements, keep);
+        if (!weakest) {
+          adjustStop = "nothing_to_cut";
+          break;
+        }
+        nextContent = cutBullet(state.content, weakest.entry, weakest.index);
+        record = { action: "cut", entry: weakest.entry, text: weakest.text };
+      } else {
+        if (library === null) {
+          const listed = await repository.listLibrary();
+          library = listed.data ?? [];
+        }
+        const current = state;
+        const pick = pickNextBullet({
+          content: current.content,
+          pageBullets: current.rendered.bullets,
+          entries,
+          library,
+          requirements: resume.requirements,
+          template: resume.template.name,
+          accepts: (entryKey, text) => {
+            const trial = renderTailoredResume(skeleton, addBullet(current.content, entryKey, text));
+            if (!trial.ok) return false;
+            const trialCheck = checkBullets(trial.bullets, { targets: null, extraBlocked });
+            if (!trialCheck.pass) return false;
+            const entry = entries.find((candidate) => candidate.key === entryKey);
+            return (
+              !targets ||
+              !entry ||
+              lineFillCheck(plainBulletText(text).length, targets, { oneLineAllowed: allowsOneLine(entry) }) === null
+            );
+          },
+        });
+        if (!pick) {
+          adjustStop = "no_library_bullet_fits";
+          break;
+        }
+        nextContent = addBullet(current.content, pick.entry, pick.text);
+        record = { action: "added", entry: pick.entry, text: pick.text, explain_note: pick.explain_note };
+      }
+
+      const nextRendered = renderTailoredResume(skeleton, nextContent);
+      if (!nextRendered.ok) break;
+      const previousMarkdown = state.rendered.markdown;
+      if (!(await writeRemote(nextRendered.markdown))) {
+        adjustStop = "resumelol_update_failed";
+        break;
+      }
+      const fetched = await fetchHtml();
+      const measured = "error" in fetched ? null : await measure(fetched.html, nextRendered);
+      const ranOver = short && measured?.result?.failures.some((failure) => failure.rule === "one_page");
+      if ("error" in fetched || !measured?.result || ranOver) {
+        // Could not check the new page, or the addition ran over a page:
+        // put the last checked page back and stop.
+        adjustStop = ranOver ? "added_bullet_ran_over" : "recheck_failed";
+        if (!(await writeRemote(previousMarkdown))) adjustStop = `${adjustStop}_and_revert_failed`;
+        break;
+      }
+      state = { content: nextContent, rendered: nextRendered, html: fetched.html, measured };
+      adjustments.push(record);
+    }
+
+    content = state.content;
+    rendered = state.rendered;
+
+    const upload = await repository.uploadResumeFile(htmlPath, new TextEncoder().encode(state.html), "text/html");
     if (!upload.error) storedHtmlPath = htmlPath;
 
-    const outcome = await deps.render(html, { withPdf: true });
-    if (outcome.ok && outcome.pdf) {
-      const pdfPages = countPdfPages(outcome.pdf);
-      const result = evaluateLayout(outcome.measurement, rendered.bullets, { pdfPages, oneLineAllowed });
+    const { outcome, result, pdf, pdfPages } = state.measured;
+    if (result && pdf && outcome.ok) {
       layoutCheck = result.status;
       report = {
         path: "chromium",
@@ -579,11 +726,14 @@ export async function buildResume(
         pages: result.pages,
         pdf_pages: pdfPages,
         page_fill: outcome.measurement.page_fill,
+        bottom_gap: outcome.measurement.bottom_gap ?? null,
         failures: result.failures,
         warnings: result.warnings,
         duration_ms: outcome.durationMs,
+        ...(adjustments.length ? { page_adjustments: adjustments } : {}),
+        ...(adjustStop ? { adjust_stop: adjustStop } : {}),
       };
-      const pdfUpload = await repository.uploadResumeFile(pdfPath, outcome.pdf, "application/pdf");
+      const pdfUpload = await repository.uploadResumeFile(pdfPath, pdf, "application/pdf");
       if (!pdfUpload.error) storedPdfPath = pdfPath;
     } else {
       report = outcome.ok
@@ -594,7 +744,9 @@ export async function buildResume(
   if (report.path === "skipped") {
     // Chrome did not run, so the line rules are estimated from character
     // counts with the calibrated targets (decision record 0015).
-    const estimated = targets ? evaluateCharacterLines(rendered.bullets, targets, oneLineAllowed) : [];
+    const estimated = targets
+      ? evaluateCharacterLines(rendered.bullets, targets, rendered.bullet_owners.map((owner) => allowsOneLine(owner)))
+      : [];
     report = {
       ...report,
       experience_source: resolved.value.source,
@@ -617,6 +769,8 @@ export async function buildResume(
     status: input.mode === "build" ? "built" : "edited",
     content,
     mirrored_title: rendered.mirrored_title,
+    built_markdown_sha256: sha256(remoteMarkdown),
+    resumelol_updated_at: updatedAt,
     // A rebuild that could not render must not leave the old PDF looking current.
     pdf_path: storedPdfPath,
     html_path: storedHtmlPath,

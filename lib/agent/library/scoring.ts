@@ -160,6 +160,7 @@ function shorten(text: string | null, max: number): string | null {
 export function rankStories(
   stories: readonly LibraryStory[],
   query: StoryQuery,
+  options: { limit?: number } = {},
 ): StoryRanking {
   const requirementTokens = query.requirements.map(
     (requirement) => new Set(tokenize(requirement)),
@@ -211,7 +212,7 @@ export function rankStories(
         a.story.label.localeCompare(b.story.label) ||
         a.story.id.localeCompare(b.story.id),
     )
-    .slice(0, MAX_STORIES)
+    .slice(0, options.limit ?? MAX_STORIES)
     .map(({ story, matches, score }) => ({
       story_id: story.id,
       label: story.label,

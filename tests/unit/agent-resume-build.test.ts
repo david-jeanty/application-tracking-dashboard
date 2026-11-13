@@ -12,6 +12,7 @@ import {
   type TemplateLayout,
 } from "@/lib/agent/resume/build";
 import { tailoredContentSchema, type TailoredContent } from "@/lib/agent/resume/content";
+import type { LibraryStory } from "@/lib/agent/library/scoring";
 import type { LayoutMeasurement } from "@/lib/agent/resume/layout";
 import type { ResumeSources } from "@/lib/agent/resume/library-entries";
 import type { RenderOutcome } from "@/lib/agent/resume/render";
@@ -84,6 +85,7 @@ class Fakes {
   updateError: Error | null = null;
   rules: string[] = [];
   sources: ResumeSources = { experiences: [], profile: null };
+  library: LibraryStory[] = [];
 
   constructor() {
     this.template = {
@@ -100,6 +102,7 @@ class Fakes {
       application_id: APPLICATION_ID,
       company: "Pinterest",
       title: "Strategy & Operations Intern",
+      requirements: [],
       status: "draft",
       build_count: 0,
       content: content(),
@@ -134,6 +137,7 @@ class Fakes {
       return { error: null };
     },
     readResumeSources: async () => ({ data: this.sources, error: null }),
+    listLibrary: async () => ({ data: this.library, error: null }),
     readRules: async () => ({ data: this.rules.map((text) => ({ scope: "bullets" as const, text })), error: null }),
     writeLedger: async (_applicationId, step, status) => {
       this.ledger.push(`${step}:${status}`);
@@ -299,7 +303,7 @@ describe("buildResume", () => {
     fakes.renderOutcome = () => ({
       ok: true,
       measurement: {
-        pages: 2,
+        pages: 1,
         page_fill: 1,
         bullets: [
           { text: BULLET_A, lines: [{ text: "a", fill: 1 }, { text: "b", fill: 0.4 }] },
@@ -312,7 +316,7 @@ describe("buildResume", () => {
     const result = await build(fakes);
     expect(result.ok && result.value.layout_check).toBe("failed");
     // The project bullet is one line, and projects are not on the one-line list.
-    expect(result.ok && result.value.layout_failures?.map((failure) => failure.rule)).toEqual(["one_page", "widow", "one_line"]);
+    expect(result.ok && result.value.layout_failures?.map((failure) => failure.rule)).toEqual(["widow", "one_line"]);
   });
 
   it("refuses a page that fails check_bullets, before calling resume.lol", async () => {
@@ -480,6 +484,110 @@ describe("buildResume: headings come from the library", () => {
     expect(result).toMatchObject({ ok: false });
     if (!result.ok) expect(result.message).toMatch(/must come from the library/);
     expect(fakes.resumeLolCalls).toEqual([]);
+  });
+});
+
+describe("buildResume: one full page", () => {
+  const STORY_LIBRARY: LibraryStory[] = [
+    {
+      id: "s-dashboard",
+      label: "Power BI dashboard",
+      summary: "Power BI Premium dashboard over 5M+ records.",
+      tags: ["data"],
+      org: "Public Agency of Canada",
+      official_title: "Information Management Analyst Intern",
+      variants: [
+        {
+          id: "v-dashboard",
+          text: "Eliminated manual weekly migration summaries by developing a Power BI Premium dashboard over 5M+ records across 50+ regional sites, enabling leadership to track migration KPIs.",
+          style: "house",
+          angles: ["data"],
+          template_fit: ["zero2sudo"],
+          char_count: 180,
+          is_gold: true,
+          explain_note: "The dashboard covers 5M+ records from 50+ sites.",
+          created_at: "2026-11-01T00:00:00.000Z",
+        },
+      ],
+    },
+  ];
+  const page = (texts: string[], pages: number, bottomGap: number): RenderOutcome => ({
+    ok: true,
+    measurement: {
+      pages,
+      page_fill: 1 - bottomGap,
+      top_gap: 0,
+      bottom_gap: bottomGap,
+      bullets: texts.map((text) => ({ text, lines: [{ text: "a", fill: 1 }, { text: "b", fill: 0.95 }] })),
+    },
+    pdf: ONE_PAGE_PDF,
+    durationMs: 700,
+  });
+  /** Renders whatever markdown resume.lol holds, with a page that fills as bullets are added. */
+  const pageFor = (fakes: Fakes, gapFor: (count: number) => { pages: number; gap: number }) => () => {
+    const texts = fakes.remote.markdown.split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2).replace(/&amp;/g, "&"));
+    const { pages, gap } = gapFor(texts.length);
+    return page(texts, pages, gap);
+  };
+
+  it("adds the next best library bullet when the page is short, on the same resume.lol resume", async () => {
+    const fakes = new Fakes();
+    fakes.library = STORY_LIBRARY;
+    fakes.row.requirements = ["Build Power BI dashboards over large datasets"];
+    fakes.renderOutcome = pageFor(fakes, (count) => ({ pages: 1, gap: count >= 3 ? 0.02 : 0.12 }));
+    const result = await build(fakes);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.layout_check).toBe("passed");
+    expect(fakes.resumeLolCalls.filter((call) => call.startsWith("create_resume"))).toHaveLength(1);
+    expect(fakes.resumeLolCalls.filter((call) => call.startsWith("update_resume"))).toHaveLength(1);
+    const final = fakes.saved[fakes.saved.length - 1];
+    expect(final.layout_report?.page_adjustments).toEqual([
+      expect.objectContaining({ action: "added", entry: "information-management-analyst-intern", explain_note: expect.stringContaining("5M+") }),
+    ]);
+    expect(final.content?.entries[0].bullets).toHaveLength(2);
+    // What was saved is what resume.lol holds, so a later rebuild is not refused.
+    expect(final.built_markdown_sha256).toBe(sha256(fakes.remote.markdown));
+    // Adjustments do not use up a build.
+    expect(fakes.row.build_count).toBe(1);
+  });
+
+  it("cuts the weakest bullet when the page runs over", async () => {
+    const fakes = new Fakes();
+    const weak = "Launched a newsletter for 100 student subscribers in its first month.";
+    fakes.row.content = content([BULLET_A, weak], [BULLET_B]);
+    fakes.row.requirements = ["Reduce the ticket backlog by redesigning request triage"];
+    fakes.renderOutcome = pageFor(fakes, (count) => (count >= 3 ? { pages: 2, gap: 0 } : { pages: 1, gap: 0.03 }));
+    const result = await build(fakes);
+    expect(result.ok && result.value.layout_check).toBe("passed");
+    const final = fakes.saved[fakes.saved.length - 1];
+    expect(final.layout_report?.page_adjustments).toEqual([
+      { action: "cut", entry: "information-management-analyst-intern", text: weak },
+    ]);
+  });
+
+  it("undoes an addition that runs over a page, and reports the short page", async () => {
+    const fakes = new Fakes();
+    fakes.library = STORY_LIBRARY;
+    fakes.row.requirements = ["Build Power BI dashboards over large datasets"];
+    fakes.renderOutcome = pageFor(fakes, (count) => (count >= 3 ? { pages: 2, gap: 0 } : { pages: 1, gap: 0.12 }));
+    const result = await build(fakes);
+    expect(result.ok && result.value.layout_failures?.map((failure) => failure.rule)).toEqual(["page_not_full"]);
+    const final = fakes.saved[fakes.saved.length - 1];
+    expect(final.layout_report).toMatchObject({ adjust_stop: "added_bullet_ran_over" });
+    expect(final.layout_report?.page_adjustments).toBeUndefined();
+    // resume.lol was put back to the last page that was checked.
+    expect(fakes.remote.markdown).not.toContain("Eliminated manual weekly");
+    expect(final.built_markdown_sha256).toBe(sha256(fakes.remote.markdown));
+  });
+
+  it("stops when the library has nothing left that fits", async () => {
+    const fakes = new Fakes();
+    fakes.renderOutcome = pageFor(fakes, () => ({ pages: 1, gap: 0.2 }));
+    const result = await build(fakes);
+    expect(result.ok && result.value.layout_check).toBe("failed");
+    expect(fakes.saved[fakes.saved.length - 1].layout_report).toMatchObject({ adjust_stop: "no_library_bullet_fits" });
+    expect(fakes.resumeLolCalls.filter((call) => call.startsWith("update_resume"))).toHaveLength(0);
   });
 });
 
