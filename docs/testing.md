@@ -57,6 +57,21 @@ history automation, immutable history, and — in
 session may and may not do compared with the student's own session. A missing
 Docker runtime means these tests are blocked, not passed.
 
+## Resume rendering, in real Chrome
+
+The recruiting agent prints resume PDFs in headless Chrome
+(`lib/agent/resume/render.ts`). CI's unit job has no browser, so these tests
+are their own suite, run locally like the database tests:
+
+```bash
+npm run test:render
+```
+
+They need a Chrome binary: Playwright's installed browser, or
+`CHROMIUM_EXECUTABLE_PATH` pointing at one (in Claude cloud sessions,
+`CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium`). A missing browser means
+these tests are blocked, not passed.
+
 ## Connected-client authority, with a real token
 
 ```bash

@@ -593,6 +593,41 @@ actually be performed before claiming it works:
 12. Disconnect it.
 13. Confirm it must be re-authorized before it can reach the account again.
 
+## Recruiting agent tools (owner only)
+
+The account in `OWNER_USER_ID` gets a second server: the five tools above,
+unchanged, plus the recruiting agent's tools and a short addition to the
+server instructions. Every other account gets the standard server byte for
+byte. The choice is made per request in `app/api/mcp/route.ts` from the
+verified token (decision record 0002), each agent tool checks the owner again,
+and row-level security limits every row to its owner.
+
+| Tool | What it does |
+| --- | --- |
+| `get_playbook` | Steps for a phase (`run`, `library_session`, `import`), the matching standards, the fit-read profile, each template's status and entry keys, and every saved rule. |
+| `get_run_state`, `get_application_brief` | Where a posting's run stands; the brief to pick it up in a new chat (under 300 words, never the job description). |
+| `create_application_from_jd` | Saves a posting once, deduped on company, title and job id. |
+| `search_stories`, `save_variant`, `record_edit`, `add_rule` | The story library and David's corrections. |
+| `check_bullets` | The bullet checker (decision record 0007). |
+| `save_answer`, `search_answers` | Application answers. |
+| `import_library` | The one-time library import. |
+| `calibrate_template` | Measures a template's base resume on resume.lol (read only) in headless Chrome and saves its line targets and skeleton. |
+| `complete_run` | Checks the page, then saves the run in one transaction, then builds. |
+| `build_resume` | Builds a saved resume once: new resume on resume.lol, PDF printed and checked on the server, stored privately. |
+| `rebuild_with_edits` | David's edits at apply time: updates the same resume.lol resume in place, never over his own edits there. |
+
+Every agent tool answers in compact JSON under a size cap (`lib/agent/caps.ts`)
+and logs its response bytes to `usage_log`. The three resume.lol tools call
+`https://www.resume.lol/api/mcp` directly from the server with
+`RESUMELOL_API_KEY` (`lib/agent/resumelol/client.ts`); the key is never logged
+or returned. The route allows up to 90 seconds for a build. If headless Chrome
+cannot run, the build is saved with `layout_check: "skipped"` (decision record
+0008), and the route logs one line saying which path ran:
+
+```json
+{"at":"agent.resume_build","mode":"build","build":1,"path":"skipped","reason":"timeout","layout_check":"skipped","duration_ms":47210}
+```
+
 ## Not built yet
 
 `delete_job` is deliberately omitted rather than deferred: archiving is the

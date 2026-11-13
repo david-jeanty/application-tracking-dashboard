@@ -16,6 +16,46 @@ The application/history relationship uses the composite key
 `(application_id, user_id)`. A history row therefore cannot refer to an
 application with a different owner.
 
+### Recruiting agent tables (owner only in practice)
+
+Added by `20261113000100_agent_foundation.sql`, `20261113000200_resume_builds.sql`
+and `20261113000300_complete_run.sql`. Only the `OWNER_USER_ID` account is ever
+offered the tools and pages that write these, and row-level security limits
+every row to its own user anyway.
+
+- `agent_profile`: the fit-read facts (school, program, degree, graduation, year).
+- `experiences`, `stories`, `story_variants`: the story library. `char_count` is
+  computed by the database.
+- `templates`: one row per template (`jakes`, `zero2sudo`). `resumelol_template_ref`
+  is the base resume's resume.lol id; `header_config` holds the parsed base
+  resume (skeleton, CSS, page settings) saved by calibration; the three
+  character targets come from measuring that base in Chrome.
+- `tailored_resumes`: one per posting run. `content` is the tailored content;
+  `build_count` is capped at 2 by a check constraint; `layout_check` is
+  `passed`, `failed` or `skipped`, with `layout_report` saying which path ran;
+  `pdf_path` and `html_path` point into the private `resumes` bucket;
+  `built_markdown_sha256` and `resumelol_updated_at` guard rebuilds.
+- `edit_examples`, `rules`, `answer_bank`: David's corrections, saved rules and
+  application answers.
+- `run_ledger`: which run steps are done per application.
+- `usage_log`: bytes returned per tool call, append-only for clients.
+- Additive `applications` columns: `jd_requirements`, `job_id`,
+  `partner_functions`, `tailored_resume_id`, `fit_read`.
+
+Child rows use composite `(parent_id, user_id)` foreign keys like the history
+table, so no agent row can point at another user's row.
+
+**Storage.** A private bucket, `resumes`, holds built PDFs and printable HTML
+at `{user_id}/{tailored_resume_id}.pdf` and `.html`. Its four policies allow a
+user only paths whose first folder is their own id. Files are served through
+60-second signed links (PDF) or a sandboxed owner-only route (HTML). Account
+deletion removes the owner's folder before the account is deleted.
+
+**`public.complete_run(...)`.** One SECURITY INVOKER function that saves the
+end of a run (fit read, tailored resume, new variants, answers, ledger) in one
+transaction, so row-level security applies to everything it writes. See
+decision record 0011.
+
 ## Controlled values
 
 PostgreSQL enums constrain application status, normalized category, work
@@ -78,6 +118,9 @@ references to prevent object-shadowing attacks.
 | profiles | own row | own ID | own row, owner unchanged | own row |
 | applications | own rows | `auth.uid()` owner | own rows, owner unchanged | own rows |
 | status history | own application/history | explicitly denied | explicitly denied | explicitly denied |
+| each agent table | own rows | `auth.uid()` owner | own rows, owner unchanged | own rows |
+| usage_log | own rows | `auth.uid()` owner | not granted | not granted |
+| storage `resumes` | own folder | own folder | own folder | own folder |
 
 History table privileges grant authenticated users only `SELECT`; explicit deny
 policies document all mutation operations as an additional layer. The trigger
@@ -117,5 +160,11 @@ transaction. It verifies:
 - initial and transition events are correct;
 - unrelated edits do not create history;
 - authenticated clients cannot insert, update, or delete history.
+
+The agent suites extend this: `007_agent_foundation` (RLS on every agent
+table, a connected client writing its own rows, isolation, the build cap,
+cascades), `008_resume_builds` (the private bucket's folder policies) and
+`009_complete_run` (all or nothing, runs as the caller, drafts reused, built
+resumes never overwritten).
 
 The transaction rolls back, leaving no test data.

@@ -8,8 +8,9 @@ has to set up by hand.
 
 ## Spec 1: Foundation and resume pipeline
 
-**Status:** steps 1 to 8 built and tested locally (2026-11-13). Steps 9 and 10
-in progress. See section 9 for progress.
+**Status:** steps 1 to 9 built and tested locally (2026-11-13). Step 10 (the
+preview test plan) is next and needs the preview Supabase user id from David.
+See section 9 for progress and section 10 for setup.
 **Branch:** `agent-specs`. One PR for all of Spec 1.
 
 ### 1. What I found
@@ -594,7 +595,66 @@ are the unit his usage limits count.
 `agent-resume-routes`, `agent-resume-ui`, `agent-resume-pages`). Database,
 render, lint, typecheck, build and extension checks pass.
 
-#### Still open for steps 9 and 10
+#### Step 9: docs, built (2026-11-13)
+
+- Decision records 0008 to 0012 (server-printed PDFs with a fallback, two
+  builds and rebuild in place, filling the base resume, `complete_run` as one
+  database function, resume building as an owner-only exception to the
+  README). With 0001 to 0007 this covers every decision the plan listed.
+- `docs/mcp.md`: the owner-only agent server and all sixteen agent tools.
+- `docs/database.md`: the agent tables, the private bucket and its policies,
+  `complete_run`, and the agent pgTAP suites.
+- `docs/testing.md`: the new render suite.
+
+#### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's
   preview user id is needed for Vercel's Preview `OWNER_USER_ID`.
+
+### 10. Spec 1: how to test it, and David's setup steps
+
+**The local quality gate** (what every step above passed):
+
+```bash
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+npm run extension:check
+npm run test:db
+npm run test:render
+```
+
+`test:db` needs Docker (`supabase db start` is enough). `test:render` needs a
+Chrome binary (see `docs/testing.md`). `build` needs the three public
+`NEXT_PUBLIC_*` values, as in CI.
+
+**Setup David does by hand, in order**
+
+1. **Preview Supabase project.** Create a free second project (never
+   production). In it, turn on the OAuth 2.1 server with consent path
+   `/oauth/consent` and dynamic registration, as in `supabase/config.toml`.
+   Share its URL and publishable key. I apply the migrations to it and run
+   the pgTAP suite against it there first.
+2. **Sign up on the preview** with David's email, then share that account's
+   user id (Supabase dashboard, Authentication, Users). It differs from the
+   production id.
+3. **Vercel, Preview environment variables:** `NEXT_PUBLIC_SUPABASE_URL` and
+   `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` for the preview project,
+   `NEXT_PUBLIC_SITE_URL` as the branch alias URL, `OWNER_USER_ID` as the
+   preview user id, `RESUMELOL_API_KEY` (mark it Sensitive), and
+   `SUPABASE_SECRET_KEY` for the preview project (account deletion uses it).
+   Do not set `CHROMIUM_EXECUTABLE_PATH`.
+4. **Vercel Deployment Protection:** off for previews, so Claude's connector
+   can reach the preview MCP URL.
+5. **Claude:** add a custom connector at `{preview alias}/api/mcp`, sign in
+   with the preview account, and use it in a Job Search project with only that
+   connector and web search on. Add `docs/STANDARDS.md` as project knowledge
+   and install the skill from `skill/interndex-pipeline/SKILL.md`.
+6. **In that project, calibrate both templates** (see step 6's setup for the
+   exact sentence and ids).
+7. **Run the import** with David's 9 recent resumes (phase `import`).
+8. **At merge:** the same variables in Vercel Production, with the production
+   `OWNER_USER_ID`, and the migrations pushed to production.
+
+No Chrome extension reload is needed: Spec 1 does not change the extension.
