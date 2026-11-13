@@ -637,6 +637,35 @@ content); it is saved in the session transcript and goes in through
 | Database tests (`npm run test:db`, local Docker) | 198 pass (4 new in `010_agent_profile_academic_standing.test.sql`) |
 | Lint, typecheck | Pass (lint: 0 errors, only the existing warnings) |
 
+#### Change 1: experiences come from the library (2026-11-13)
+
+David's call: employers, titles, dates, locations and schools on a built
+resume come from the story library; the base resume supplies only the
+layout, section order and the @ variables header (decision record 0014).
+
+- `lib/agent/resume/library-entries.ts`: `resolveSkeleton` writes each library
+  experience in its template's heading format and date style, reverse
+  chronological, and the school from the fit-read profile. Every rebuilt
+  heading is read back; one that still shows a base employer, title,
+  location or year is rejected before resume.lol is called. Base sections
+  with entries the library cannot account for are left off.
+- Empty library: the base resume's entries are used and logged
+  (`resume_experiences`, `source: "base"`, also stored as
+  `layout_report.experience_source`).
+- Used by the build, `complete_run`, calibration's entry list and the
+  template entries `get_playbook` shows, so a run writes bullets for the
+  library's entries (keys like `marketing-analyst-intern`, `interndex`).
+- Migration `20261113000500` (additive): `experiences.section`,
+  `agent_profile.study_start`, `agent_profile.school_location`.
+- The import payload needs those three facts: each experience's section,
+  and the school's start month and location. Added in the session data.
+
+| Check | Result |
+| --- | --- |
+| Unit tests | 1,862 pass (20 new: `agent-resume-library-entries`, 3 build tests) |
+| Database tests | 203 pass (5 new in `011_library_resume_sources.test.sql`) |
+| Lint, typecheck | Pass (only the 2 existing lint warnings) |
+
 #### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's

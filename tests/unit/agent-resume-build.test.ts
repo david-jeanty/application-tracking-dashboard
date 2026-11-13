@@ -13,6 +13,7 @@ import {
 } from "@/lib/agent/resume/build";
 import { tailoredContentSchema, type TailoredContent } from "@/lib/agent/resume/content";
 import type { LayoutMeasurement } from "@/lib/agent/resume/layout";
+import type { ResumeSources } from "@/lib/agent/resume/library-entries";
 import type { RenderOutcome } from "@/lib/agent/resume/render";
 import { parseBaseResume } from "@/lib/agent/resume/skeleton";
 import { ResumeLolError, type ResumeLolClient } from "@/lib/agent/resumelol/client";
@@ -81,6 +82,7 @@ class Fakes {
   createError: Error | null = null;
   updateError: Error | null = null;
   rules: string[] = [];
+  sources: ResumeSources = { experiences: [], profile: null };
 
   constructor() {
     this.template = {
@@ -130,6 +132,7 @@ class Fakes {
       this.uploads.push({ path, contentType, bytes: bytes.length });
       return { error: null };
     },
+    readResumeSources: async () => ({ data: this.sources, error: null }),
     readRules: async () => ({ data: this.rules.map((text) => ({ scope: "bullets" as const, text })), error: null }),
     writeLedger: async (_applicationId, step, status) => {
       this.ledger.push(`${step}:${status}`);
@@ -258,8 +261,11 @@ describe("buildResume", () => {
     expect(fakes.saved[0].built_markdown_sha256).toBe(sha256(fakes.remote.markdown));
     expect(fakes.row.build_count).toBe(1);
     expect(fakes.ledger).toEqual(["build:done"]);
+    // The library is empty in this fixture, so the base resume's entries are
+    // used, and that is logged.
     expect(fakes.logs).toEqual([
-      expect.objectContaining({ event: "resume_build", mode: "build", path: "chromium", layout_check: "passed" }),
+      { event: "resume_experiences", source: "base", notes: ["library_empty"] },
+      expect.objectContaining({ event: "resume_build", mode: "build", path: "chromium", layout_check: "passed", experience_source: "base" }),
     ]);
   });
 
@@ -284,7 +290,7 @@ describe("buildResume", () => {
       layout_report: { path: "skipped", reason: "timeout" },
       pdf_path: null,
     });
-    expect(fakes.logs[0]).toMatchObject({ path: "skipped", reason: "timeout" });
+    expect(fakes.logs.find((event) => event.event === "resume_build")).toMatchObject({ path: "skipped", reason: "timeout" });
   });
 
   it("reports a page that fails the layout check, and still keeps the build", async () => {
@@ -373,6 +379,59 @@ describe("buildResume", () => {
     const fakes = new Fakes();
     fakes.template = { ...fakes.template, header_config: {} };
     expect(await build(fakes)).toMatchObject({ ok: false });
+  });
+});
+
+describe("buildResume: headings come from the library", () => {
+  const LIBRARY: ResumeSources = {
+    experiences: [
+      { org: "Immigration and Refugee Board of Canada", official_title: "Information Management Analyst Intern", start: "2026-09-01", end: "2026-12-01", location: "Ottawa, Ontario", sort_order: 1, section: "experience" },
+      { org: "Interndex", official_title: "Founder & Product Lead", start: "2026-08-01", end: null, location: null, sort_order: 4, section: "projects" },
+    ],
+    profile: null,
+  };
+  const libraryContent = (): TailoredContent =>
+    tailoredContentSchema.parse({
+      entries: [
+        { key: "information-management-analyst-intern", bullets: [BULLET_A] },
+        { key: "interndex", bullets: [BULLET_B] },
+      ],
+    });
+
+  it("sends resume.lol the library's employers and dates, never the base's", async () => {
+    const fakes = new Fakes();
+    fakes.sources = LIBRARY;
+    fakes.row.content = libraryContent();
+    const result = await build(fakes);
+    expect(result.ok).toBe(true);
+    expect(fakes.remote.markdown).toContain("*Immigration and Refugee Board of Canada* <span class=\"spacer\"></span> Ottawa, Ontario");
+    expect(fakes.remote.markdown).toContain("### Interndex | Founder &amp; Product Lead <span class=\"spacer\"></span>Aug 2026 - Present");
+    expect(fakes.remote.markdown).not.toContain("Public Agency of Canada");
+    expect(fakes.remote.markdown).not.toContain("Tracker App");
+    // The base still supplies the header and the layout.
+    expect(fakes.remote.markdown.startsWith("@REDACTED=false\n@NAME=Sam Example||Hidden Name")).toBe(true);
+    expect(fakes.saved[fakes.saved.length - 1].layout_report).toMatchObject({ experience_source: "library" });
+  });
+
+  it("refuses content written for a base entry the library does not have, before calling resume.lol", async () => {
+    const fakes = new Fakes();
+    fakes.sources = LIBRARY;
+    // "tracker-app" is the base resume's project; the library's is Interndex.
+    const result = await build(fakes);
+    expect(result).toMatchObject({ ok: false });
+    if (!result.ok) expect(result.message).toContain('Unknown entry key "tracker-app"');
+    expect(fakes.resumeLolCalls).toEqual([]);
+    expect(fakes.row.build_count).toBe(0);
+  });
+
+  it("refuses a heading that would keep a base date, before calling resume.lol", async () => {
+    const fakes = new Fakes();
+    fakes.sources = { ...LIBRARY, experiences: [{ ...LIBRARY.experiences[0], start: "", end: null }] };
+    fakes.row.content = libraryContent();
+    const result = await build(fakes);
+    expect(result).toMatchObject({ ok: false });
+    if (!result.ok) expect(result.message).toMatch(/must come from the library/);
+    expect(fakes.resumeLolCalls).toEqual([]);
   });
 });
 

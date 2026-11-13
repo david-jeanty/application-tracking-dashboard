@@ -44,6 +44,10 @@ export type AgentProfile = {
   year_of_study: number | null;
   /** Year of academic standing (credits). Can differ from year_of_study. */
   academic_standing: number | null;
+  /** First month of the degree (YYYY-MM-DD), for resume education dates. */
+  study_start: string | null;
+  /** Where the school is, as the resume shows it. */
+  school_location: string | null;
   notes: string | null;
 };
 

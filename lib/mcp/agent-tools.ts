@@ -19,6 +19,7 @@ import {
   buildResume,
   calibrateTemplate,
   readTemplateLayout,
+  resolveTemplateSkeleton,
   type BuildDependencies,
   type BuildRepository,
 } from "@/lib/agent/resume/build";
@@ -833,8 +834,10 @@ export function registerAgentTools(
         return fail(`The ${args.template} template is not calibrated yet. Call calibrate_template first.`);
       }
 
-      // Check everything before saving anything.
-      const rendered = renderTailoredResume(layout.skeleton, args.resume);
+      // Check everything before saving anything. Headings come from the library.
+      const resolved = await resolveTemplateSkeleton(repository, layout.skeleton);
+      if (!resolved.ok) return fail(`Nothing was saved. ${resolved.message}`);
+      const rendered = renderTailoredResume(resolved.value.skeleton, args.resume);
       if (!rendered.ok) return fail(`Nothing was saved. ${rendered.problems.join(" ")}`);
       const extraBlocked = phrasesFromRules(rules.data.map((rule) => rule.text));
       const page = checkBullets(rendered.bullets, { targets: targetsOf(template.data), extraBlocked });

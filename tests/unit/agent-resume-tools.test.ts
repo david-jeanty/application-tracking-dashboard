@@ -92,7 +92,10 @@ describe("resume tools on the MCP server", () => {
       "get_resume_html:rl-created",
     ]);
     expect(store.uploads.map((upload) => upload.contentType)).toEqual(["text/html"]);
-    expect(store.logs).toEqual([expect.objectContaining({ event: "resume_build", path: "skipped" })]);
+    expect(store.logs).toEqual([
+      { event: "resume_experiences", source: "base", notes: ["library_empty"] },
+      expect.objectContaining({ event: "resume_build", path: "skipped", experience_source: "base" }),
+    ]);
     // The base resume is protected in the client it was given.
     expect(store.protectedIdSets).toEqual([[BASE_ID]]);
     expect(store.usage.at(-1)).toMatchObject({ applicationId: APPLICATION_ID, tool: "build_resume" });

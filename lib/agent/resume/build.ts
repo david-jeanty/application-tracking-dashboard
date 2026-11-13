@@ -42,6 +42,7 @@ import {
   type TailoredContent,
 } from "@/lib/agent/resume/content";
 import { evaluateLayout, fullLineLengths, type LayoutIssue } from "@/lib/agent/resume/layout";
+import { resolveSkeleton, type ResumeSources } from "@/lib/agent/resume/library-entries";
 import { countPdfPages } from "@/lib/agent/resume/pdf";
 import type { ResumeRenderer } from "@/lib/agent/resume/render";
 import {
@@ -101,6 +102,8 @@ export type LayoutCheck = "passed" | "failed" | "skipped";
 
 export type LayoutReport = {
   path: "chromium" | "skipped";
+  /** Where the headings came from: the library, or the base when the library is empty. */
+  experience_source?: "library" | "base";
   reason?: string;
   detail?: string;
   pages?: number;
@@ -138,6 +141,8 @@ export type BuildRepository = {
   saveBuild: (tailoredResumeId: string, applicationId: string, patch: BuildPatch) => Promise<{ error: DbError }>;
   uploadResumeFile: (path: string, bytes: Uint8Array, contentType: string) => Promise<{ error: DbError }>;
   readRules: (scopes: readonly RuleScope[]) => Read<AgentRule[]>;
+  /** The library's experiences and the fit-read profile: where headings come from. */
+  readResumeSources: () => Read<ResumeSources>;
   writeLedger: (applicationId: string, step: RunStep, status: LedgerStatus) => Promise<{ error: DbError }>;
   insertEditExample: (row: {
     variant_id: string | null;
@@ -200,6 +205,28 @@ function resumeLolMessage(error: unknown): string {
 export function readTemplateLayout(template: BuildTemplate): TemplateLayout | null {
   const parsed = templateLayoutSchema.safeParse(template.header_config);
   return parsed.success ? parsed.data : null;
+}
+
+/**
+ * The skeleton a tailored resume is built on: the base resume's layout with
+ * every heading taken from the library (decision record 0014). Logs when the
+ * library is empty and the base resume's entries are used instead.
+ */
+export async function resolveTemplateSkeleton(
+  repository: Pick<BuildRepository, "readResumeSources">,
+  base: ResumeSkeleton,
+  log?: (event: Record<string, unknown>) => void,
+): Promise<Success<{ skeleton: ResumeSkeleton; source: "library" | "base"; notes: string[] }> | Failure> {
+  const sources = await repository.readResumeSources();
+  if (sources.error || !sources.data) return dbFail("Reading the library", sources.error);
+  const resolved = resolveSkeleton(base, sources.data);
+  if (!resolved.ok) {
+    return fail(`The resume headings must come from the library, and these do not: ${resolved.problems.slice(0, 6).join(" ")}`);
+  }
+  if (resolved.source === "base" || resolved.notes.length) {
+    log?.({ event: "resume_experiences", source: resolved.source, notes: resolved.notes });
+  }
+  return { ok: true, value: { skeleton: resolved.skeleton, source: resolved.source, notes: resolved.notes } };
 }
 
 /** The entry keys a tailored resume can use, for the playbook and calibration. */
@@ -343,6 +370,8 @@ export async function calibrateTemplate(
     targets,
   });
   if (saved.error) return dbFail("Saving the calibration", saved.error);
+  const resolved = await resolveTemplateSkeleton(deps.repository, parsed.skeleton, deps.log);
+  const resolvedSections = resolved.ok ? resolved.value.skeleton : parsed.skeleton;
 
   return {
     ok: true,
@@ -355,7 +384,7 @@ export async function calibrateTemplate(
         two_line_max: targets.twoLineMax,
       },
       lines_measured: lengths.length,
-      sections: summarizeLayout(parsed.skeleton),
+      sections: summarizeLayout(resolvedSections),
     },
   };
 }
@@ -425,7 +454,11 @@ export async function buildResume(
     recordedEdits = applied.value.recorded;
   }
 
-  const rendered = renderTailoredResume(layout.skeleton, content);
+  const resolved = await resolveTemplateSkeleton(repository, layout.skeleton, deps.log);
+  if (!resolved.ok) return fail(`Not built. ${resolved.message}`);
+  const skeleton = resolved.value.skeleton;
+
+  const rendered = renderTailoredResume(skeleton, content);
   if (!rendered.ok) return fail(`The resume content does not fit the template. ${rendered.problems.join(" ")}`);
 
   // Every page passes check_bullets before anything is sent.
@@ -530,6 +563,7 @@ export async function buildResume(
       layoutCheck = result.status;
       report = {
         path: "chromium",
+        experience_source: resolved.value.source,
         pages: result.pages,
         pdf_pages: pdfPages,
         page_fill: outcome.measurement.page_fill,
@@ -545,9 +579,11 @@ export async function buildResume(
         : { path: "skipped", reason: outcome.reason, detail: outcome.detail, duration_ms: outcome.durationMs };
     }
   }
+  if (report.path === "skipped") report = { ...report, experience_source: resolved.value.source };
   deps.log({
     event: "resume_build",
     mode: input.mode,
+    experience_source: resolved.value.source,
     build: buildNumber,
     path: report.path,
     reason: report.reason,

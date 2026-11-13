@@ -19,14 +19,19 @@ application with a different owner.
 ### Recruiting agent tables (owner only in practice)
 
 Added by `20261113000100_agent_foundation.sql`, `20261113000200_resume_builds.sql`,
-`20261113000300_complete_run.sql` and
-`20261113000400_agent_profile_academic_standing.sql`. Only the `OWNER_USER_ID` account is ever
+`20261113000300_complete_run.sql`,
+`20261113000400_agent_profile_academic_standing.sql` and
+`20261113000500_library_resume_sources.sql`. Only the `OWNER_USER_ID` account is ever
 offered the tools and pages that write these, and row-level security limits
 every row to its own user anyway.
 
 - `agent_profile`: the fit-read facts (school, program, degree, graduation,
-  year of study, and academic standing, which can differ from year of study).
-- `experiences`, `stories`, `story_variants`: the story library. `char_count` is
+  year of study, and academic standing, which can differ from year of study),
+  plus the school's first month and location for the resume's education
+  heading.
+- `experiences`, `stories`, `story_variants`: the story library. Built resumes
+  take every employer, title, date and location from `experiences`, and its
+  `section` says where each one goes (experience, projects or leadership). `char_count` is
   computed by the database.
 - `templates`: one row per template (`jakes`, `zero2sudo`). `resumelol_template_ref`
   is the base resume's resume.lol id; `header_config` holds the parsed base
@@ -167,7 +172,8 @@ The agent suites extend this: `007_agent_foundation` (RLS on every agent
 table, a connected client writing its own rows, isolation, the build cap,
 cascades), `008_resume_builds` (the private bucket's folder policies) and
 `009_complete_run` (all or nothing, runs as the caller, drafts reused, built
-resumes never overwritten) and `010_agent_profile_academic_standing` (year of
-study and standing stored apart, range check, isolation).
+resumes never overwritten) `010_agent_profile_academic_standing` (year of
+study and standing stored apart, range check, isolation) and
+`011_library_resume_sources` (section values, education fields, isolation).
 
 The transaction rolls back, leaving no test data.

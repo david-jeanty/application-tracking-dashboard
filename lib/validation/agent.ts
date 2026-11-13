@@ -3,6 +3,7 @@ import { JOB_CATEGORIES, WORK_ARRANGEMENTS } from "@/lib/applications/constants"
 import { COMPANY_DOMAIN_GUIDANCE } from "@/lib/applications/external-record";
 import { MAXIMUM_DOMAIN_LENGTH } from "@/lib/branding/domain";
 import { PLAYBOOK_PHASES } from "@/lib/agent/playbook/phases";
+import { LIBRARY_SECTIONS } from "@/lib/agent/resume/library-entries";
 import { tailoredContentSchema } from "@/lib/agent/resume/content";
 import {
   requirementSchema,
@@ -271,6 +272,10 @@ export const importLibraryInputSchema = z.object({
         end: z.string().regex(MONTH_OR_DATE).nullable().describe("YYYY-MM, or null if current."),
         location: z.string().trim().min(1).max(200).optional(),
         sort_order: z.int().min(0).max(1000).default(0),
+        section: z
+          .enum(LIBRARY_SECTIONS)
+          .optional()
+          .describe("Resume section: experience, projects or leadership."),
       }),
     )
     .max(30),
@@ -311,6 +316,8 @@ export const importLibraryInputSchema = z.object({
         .max(10)
         .optional()
         .describe("Year of academic standing (credits), when it differs from year_of_study."),
+      study_start: z.string().regex(MONTH_OR_DATE).optional().describe("First month of the degree, YYYY-MM."),
+      school_location: z.string().trim().min(1).max(200).optional().describe("Where the school is, as resumes show it."),
     })
     .optional()
     .describe("The fit-read profile. Send it once; later imports may leave it out."),

@@ -145,7 +145,7 @@ export function asciiFold(text: string): string {
   return text.normalize("NFKD").replace(/[̀-ͯ]/g, "");
 }
 
-function stripMarkup(text: string): string {
+export function stripMarkup(text: string): string {
   return decodeEntities(
     text
       .replace(/<[^>]*>/g, " ")
@@ -156,7 +156,7 @@ function stripMarkup(text: string): string {
     .trim();
 }
 
-function slug(text: string): string {
+export function slug(text: string): string {
   const base = asciiFold(decodeEntities(text))
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -166,7 +166,7 @@ function slug(text: string): string {
   return cut.slice(0, cut.lastIndexOf("-") > 20 ? cut.lastIndexOf("-") : 60);
 }
 
-function uniqueKey(base: string, used: Set<string>): string {
+export function uniqueKey(base: string, used: Set<string>): string {
   let key = base;
   for (let n = 2; used.has(key); n += 1) key = `${base}-${n}`;
   used.add(key);
@@ -181,14 +181,14 @@ function trimBlankEdges(lines: string[]): string[] {
   return lines.slice(start, end);
 }
 
-function titleOf(headingLine: string): string {
+export function titleOf(headingLine: string): string {
   const text = stripMarkup(headingLine.replace(/^###\s+/, ""));
   const end = TITLE_END.exec(text);
   const title = (end ? text.slice(0, end.index) : text).replace(/[\s,;:|–-]+$/, "").trim();
   return title || text;
 }
 
-function orgOf(line: string): string | null {
+export function orgOf(line: string): string | null {
   const beforeSpan = line.split(/<span\b/)[0].replace(/^#{1,6}\s+/, "");
   const text = stripMarkup(beforeSpan).replace(/[\s,;:|–-]+$/, "");
   return text || null;

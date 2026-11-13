@@ -6,6 +6,11 @@ import type { LedgerRow } from "@/lib/agent/ledger";
 import type { LibraryStory, LibraryVariant } from "@/lib/agent/library/scoring";
 import { summarizeLayout, templateLayoutSchema, type BuildRow, type BuildTemplate } from "@/lib/agent/resume/build";
 import {
+  resolveSkeleton,
+  type LibraryExperience,
+  type LibrarySection,
+} from "@/lib/agent/resume/library-entries";
+import {
   parseStoredRequirements,
   type AgentProfile,
   type AgentRule,
@@ -33,7 +38,7 @@ import { toMonthDate, type ImportLibraryInput } from "@/lib/validation/agent";
  */
 
 const PROFILE_COLUMNS =
-  "school,program,degree_level,expected_graduation,year_of_study,academic_standing,notes";
+  "school,program,degree_level,expected_graduation,year_of_study,academic_standing,study_start,school_location,notes";
 const TEMPLATE_COLUMNS =
   "id,name,use_for,one_line_chars,two_line_min,two_line_max,calibrated_at";
 const VARIANT_COLUMNS =
@@ -59,9 +64,52 @@ export function createAgentRepositoryForClient(
     return { data, error };
   }
 
+  async function readExperiences() {
+    const { data, error } = await supabase
+      .from("experiences")
+      .select("org,official_title,start_date,end_date,location,sort_order,section")
+      .eq("user_id", userId)
+      .returns<
+        {
+          org: string;
+          official_title: string;
+          start_date: string;
+          end_date: string | null;
+          location: string | null;
+          sort_order: number;
+          section: LibrarySection | null;
+        }[]
+      >();
+    if (error) return { data: null, error };
+    const experiences: LibraryExperience[] = (data ?? []).map((row) => ({
+      org: row.org,
+      official_title: row.official_title,
+      start: row.start_date,
+      end: row.end_date,
+      location: row.location,
+      sort_order: row.sort_order,
+      section: row.section,
+    }));
+    return { data: experiences, error: null };
+  }
+
   return {
+    readResumeSources: async () => {
+      const [experiences, profile] = await Promise.all([
+        readExperiences(),
+        supabase
+          .from("agent_profile")
+          .select(PROFILE_COLUMNS)
+          .eq("user_id", userId)
+          .maybeSingle<AgentProfile>(),
+      ]);
+      const error = experiences.error ?? profile.error;
+      if (error || !experiences.data) return { data: null, error };
+      return { data: { experiences: experiences.data, profile: profile.data ?? null }, error: null };
+    },
+
     readPlaybookContext: async () => {
-      const [rules, profile, templates] = await Promise.all([
+      const [rules, profile, templates, experiences] = await Promise.all([
         supabase
           .from("rules")
           .select("scope,text")
@@ -79,8 +127,9 @@ export function createAgentRepositoryForClient(
           .eq("user_id", userId)
           .order("name", { ascending: true })
           .returns<(AgentTemplate & { header_config: unknown })[]>(),
+        readExperiences(),
       ]);
-      const error = rules.error ?? profile.error ?? templates.error;
+      const error = rules.error ?? profile.error ?? templates.error ?? experiences.error;
       if (error) return { data: null, error };
       return {
         data: {
@@ -88,9 +137,17 @@ export function createAgentRepositoryForClient(
           profile: profile.data ?? null,
           templates: (templates.data ?? []).map(({ header_config, ...template }) => {
             const layout = templateLayoutSchema.safeParse(header_config);
-            return layout.success
-              ? { ...template, sections: summarizeLayout(layout.data.skeleton) }
-              : template;
+            if (!layout.success) return template;
+            // The entries a run writes bullets for are the library's, in this
+            // template's layout (decision record 0014).
+            const resolved = resolveSkeleton(layout.data.skeleton, {
+              experiences: experiences.data ?? [],
+              profile: profile.data ?? null,
+            });
+            return {
+              ...template,
+              sections: summarizeLayout(resolved.ok ? resolved.skeleton : layout.data.skeleton),
+            };
           }),
         },
         error: null,
@@ -594,12 +651,13 @@ async function importLibrary(
 ): Promise<{ data: ImportSummary | null; error: { code?: string } | null }> {
   let profileSaved = false;
   if (input.profile && Object.keys(input.profile).length > 0) {
-    const { expected_graduation, ...rest } = input.profile;
+    const { expected_graduation, study_start, ...rest } = input.profile;
     const { error } = await supabase.from("agent_profile").upsert(
       {
         user_id: userId,
         ...rest,
         ...(expected_graduation ? { expected_graduation: toMonthDate(expected_graduation) } : {}),
+        ...(study_start ? { study_start: toMonthDate(study_start) } : {}),
       },
       { onConflict: "user_id" },
     );
@@ -620,6 +678,7 @@ async function importLibrary(
           end_date: experience.end ? toMonthDate(experience.end) : null,
           location: experience.location ?? null,
           sort_order: experience.sort_order,
+          section: experience.section ?? null,
         })),
         { onConflict: "user_id,org,official_title,start_date" },
       )

@@ -6,4 +6,6 @@
 
 **Alternatives.** Generate the whole markdown from structured fields: every heading and date would pass through the assistant, so a locked fact could change. Store the template's markdown in the repository: it would hold David's contact details and drift from what he edits in resume.lol.
 
+**Update (2026-11-13).** Superseded for headings by decision 0014: employers, titles, dates, locations and schools now come from the story library. The base resume still supplies the layout, header and section order.
+
 **Why.** The locked facts are enforced by code, not by a prompt. The resume looks exactly like the design David built. When he changes a base resume, one calibration picks it up.

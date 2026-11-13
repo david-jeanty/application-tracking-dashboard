@@ -54,6 +54,8 @@ describe("get_playbook", () => {
       expected_graduation: "2028-05-01",
       year_of_study: 4,
       academic_standing: 3,
+      study_start: null,
+      school_location: null,
       notes: null,
     };
     const playbook = json<{

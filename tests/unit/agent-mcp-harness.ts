@@ -16,6 +16,7 @@ import type {
 } from "@/lib/agent/types";
 import { displayOptionalText, toApplicationInsert } from "@/lib/applications/mapper";
 import type { BuildPatch, BuildRow } from "@/lib/agent/resume/build";
+import type { LibraryExperience } from "@/lib/agent/resume/library-entries";
 import type { RenderOutcome } from "@/lib/agent/resume/render";
 import type { ResumeLolClient } from "@/lib/agent/resumelol/client";
 import type {
@@ -58,6 +59,8 @@ export class FakeAgentStore {
   ledger = new Map<string, LedgerRow[]>();
   library: LibraryStory[] = [];
   experiences: { id: string; org: string; official_title: string; start_date: string }[] = [];
+  /** What readResumeSources serves. Empty means the build uses the base resume's entries. */
+  resumeExperiences: LibraryExperience[] = [];
   rules: (AgentRule & { user_id: string })[] = [];
   templates: (AgentTemplate & { resumelol_template_ref?: string | null; header_config?: unknown })[] = [];
   profile: AgentProfile | null = null;
@@ -100,6 +103,7 @@ export class FakeAgentStore {
     const owned = () => this.applications.filter((row) => row.user_id === userId);
 
     return {
+      readResumeSources: () => ok({ experiences: this.resumeExperiences, profile: this.profile }),
       readPlaybookContext: () =>
         ok({
           rules: this.rules.filter((rule) => rule.user_id === userId),
@@ -231,6 +235,8 @@ export class FakeAgentStore {
               : null,
             year_of_study: input.profile.year_of_study ?? null,
             academic_standing: input.profile.academic_standing ?? null,
+            study_start: input.profile.study_start ? toMonthDate(input.profile.study_start) : null,
+            school_location: input.profile.school_location ?? null,
             notes: null,
           };
         }
