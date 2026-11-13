@@ -22,6 +22,7 @@ const AGENT_TOOLS = [
   "calibrate_template",
   "build_resume",
   "rebuild_with_edits",
+  "complete_run",
 ];
 
 const READ_ONLY_TOOLS = [

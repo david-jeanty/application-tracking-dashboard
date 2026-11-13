@@ -8,7 +8,7 @@ has to set up by hand.
 
 ## Spec 1: Foundation and resume pipeline
 
-**Status:** steps 1 to 6 built and tested locally (2026-11-13). Steps 7 to 10
+**Status:** steps 1 to 7 built and tested locally (2026-11-13). Steps 8 to 10
 in progress. See section 9 for progress.
 **Branch:** `agent-specs`. One PR for all of Spec 1.
 
@@ -526,7 +526,42 @@ rebuild guard, edits), `agent-resume-tools` (through a real MCP server),
    resume 8157e84f-ffc6-4bf8-9c9e-17cf2b18314f." Run it again whenever a base
    resume changes.
 
-#### Still open for steps 7 to 10
+#### Step 7: complete_run, built (2026-11-13)
+
+**What was built.** `supabase/migrations/20261113000300_complete_run.sql`
+adds `public.complete_run`, a SECURITY INVOKER function that saves the fit
+read (new nullable column `applications.fit_read`), the tailored resume,
+new variants (source `pipeline`), answers and the `fit_read` and `tailor`
+ledger steps in one transaction, and links the resume to the application.
+An unbuilt draft is reused; a built resume is never overwritten (a forced
+redo makes a new draft). The `complete_run` tool checks everything first
+(content fits the template, the whole page passes `check_bullets` with
+saved rules, house-style variants pass, every number has an explain note),
+calls the function, then builds exactly as `build_resume` does. A failed
+build leaves the run saved and says to retry with `build_resume`. The
+`people` field is refused until Spec 2. Decision record 0011.
+
+**Playbook.** The run steps now say how to calibrate, how to write content
+with the template's entry keys (shown under each calibrated template in
+`get_playbook`), and what to do for each layout result: passed, failed (one
+`rebuild_with_edits` on the named bullets) or skipped (give David the
+resume.lol link to print from). `SKILL.md` regenerated.
+
+**Tests**
+
+| Check | Result |
+| --- | --- |
+| Unit tests | 1,818 pass (7 new in `agent-complete-run`) |
+| Database tests | 194 pass (16 new in `009_complete_run.test.sql`) |
+| Mutation check | Making the function SECURITY DEFINER fails the database suite |
+| Render tests, lint, typecheck, build, extension checks | Pass |
+
+**Departures.** The fit read had no home in the spec's data model, so it is
+one additive column on `applications`. The ledger records `fit_read` and
+`tailor` together when the run is saved, because the fit read is only
+stored at that point.
+
+#### Still open for steps 8 to 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's
   preview user id is needed for Vercel's Preview `OWNER_USER_ID`.

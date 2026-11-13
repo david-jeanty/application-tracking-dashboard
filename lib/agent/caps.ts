@@ -28,6 +28,7 @@ export const TOOL_RESULT_CAPS = {
   calibrate_template: 4_000,
   build_resume: 3_000,
   rebuild_with_edits: 3_000,
+  complete_run: 4_000,
 } as const;
 
 export type CappedTool = keyof typeof TOOL_RESULT_CAPS;

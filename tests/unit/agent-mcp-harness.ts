@@ -79,6 +79,8 @@ export class FakeAgentStore {
   /** Base resumes the fake resume.lol serves, by id. */
   baseResumes = new Map<string, { markdown: string; html: string }>();
   logs: Record<string, unknown>[] = [];
+  /** Every complete_run save, as the repository received it. */
+  completedRuns: unknown[] = [];
   /** What the fake resume.lol holds for resumes the tools created. */
   remoteMarkdown = new Map<string, string>();
   private sequence = 0;
@@ -296,6 +298,44 @@ export class FakeAgentStore {
       },
       logUsage: async (applicationId, tool, bytes) => {
         this.usage.push({ applicationId, tool, bytes });
+      },
+      completeRun: (input) => {
+        const application = owned().find((row) => row.id === input.application_id);
+        if (!application) return Promise.resolve({ data: null, error: { code: "P0002" } });
+        const template = this.templates.find((entry) => entry.name === input.template);
+        if (!template?.calibrated_at) return Promise.resolve({ data: null, error: { code: "P0002" } });
+        if (input.variants.some((variant) => !this.library.some((story) => story.id === variant.story_id))) {
+          return Promise.resolve({ data: null, error: { code: "23503" } });
+        }
+        this.completedRuns.push(input);
+        const id = this.nextId();
+        this.buildRows.set(id, {
+          id,
+          application_id: application.id,
+          company: application.company_name,
+          title: application.original_job_title,
+          status: "draft",
+          build_count: 0,
+          content: input.content,
+          resumelol_resume_id: null,
+          resumelol_updated_at: null,
+          built_markdown_sha256: null,
+          template: {
+            id: template.id,
+            name: template.name,
+            resumelol_template_ref: template.resumelol_template_ref ?? null,
+            header_config: template.header_config ?? {},
+            one_line_chars: template.one_line_chars,
+            two_line_min: template.two_line_min,
+            two_line_max: template.two_line_max,
+          },
+        });
+        for (const step of ["fit_read", "tailor"] as const) {
+          const rows = this.ledger.get(application.id) ?? [];
+          rows.push({ step, status: "done", count: 1 });
+          this.ledger.set(application.id, rows);
+        }
+        return ok({ tailored_resume_id: id, created: true, variants_added: input.variants.length, answers_added: input.answers.length });
       },
       listTemplateRefs: () =>
         ok(this.templates.flatMap((template) => (template.resumelol_template_ref ? [template.resumelol_template_ref] : []))),

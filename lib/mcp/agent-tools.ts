@@ -18,9 +18,11 @@ import { buildPlaybook, type PlaybookContext } from "@/lib/agent/playbook";
 import {
   buildResume,
   calibrateTemplate,
+  readTemplateLayout,
   type BuildDependencies,
   type BuildRepository,
 } from "@/lib/agent/resume/build";
+import { renderTailoredResume, type TailoredContent } from "@/lib/agent/resume/content";
 import type { ResumeRenderer } from "@/lib/agent/resume/render";
 import type { ResumeLolClient } from "@/lib/agent/resumelol/client";
 import type {
@@ -42,6 +44,7 @@ import {
   buildResumeInputSchema,
   calibrateTemplateInputSchema,
   checkBulletsInputSchema,
+  completeRunInputSchema,
   createApplicationFromJdInputSchema,
   getPlaybookInputSchema,
   importLibraryInputSchema,
@@ -52,6 +55,7 @@ import {
   searchAnswersInputSchema,
   searchStoriesInputSchema,
   toMonthDate,
+  type CompleteRunInput,
   type ImportLibraryInput,
 } from "@/lib/validation/agent";
 import {
@@ -173,6 +177,20 @@ export type AgentRepository = {
   }) => Read<{ id: string }>;
   listAnswers: () => Read<SavedAnswer[]>;
   importLibrary: (input: ImportLibraryInput) => Read<ImportSummary>;
+  /**
+   * The one-transaction save at the end of a run (the `complete_run`
+   * database function): fit read, tailored resume, new variants, answers and
+   * ledger, or nothing.
+   */
+  completeRun: (input: {
+    application_id: string;
+    template: TemplateName;
+    fit_read: CompleteRunInput["fit_read"];
+    content: TailoredContent;
+    mirrored_title: string | null;
+    variants: CompleteRunInput["new_variants"];
+    answers: CompleteRunInput["answers"];
+  }) => Read<{ tailored_resume_id: string; created: boolean; variants_added: number; answers_added: number }>;
   /** Every template's base resume id, so the resume.lol client never writes one. */
   listTemplateRefs: () => Read<string[]>;
   /** Never throws: a usage-log failure must not fail the tool call. */
@@ -219,7 +237,9 @@ const IDEMPOTENT_WRITE: ToolAnnotations = { ...WRITE, idempotentHint: true };
 /** Calls resume.lol, outside Interndex. */
 const EXTERNAL_WRITE: ToolAnnotations = { ...WRITE, openWorldHint: true };
 
-function targetsOf(template: AgentTemplate | null): LineTargets | null {
+function targetsOf(
+  template: Pick<AgentTemplate, "one_line_chars" | "two_line_min" | "two_line_max"> | null,
+): LineTargets | null {
   if (
     !template ||
     template.one_line_chars === null ||
@@ -779,6 +799,95 @@ export function registerAgentTools(
       return result.ok
         ? { ok: true, value: result.value, applicationId: result.value.application_id }
         : fail(result.message);
+    },
+  );
+
+  registerAgentTool(
+    server,
+    repositoryFor,
+    "complete_run",
+    {
+      title: "Complete the run",
+      description:
+        "Saves the end of a run in one transaction: the fit read, the tailored resume, new variants with their explain notes, and any answers. Checks the whole page first and saves nothing if it fails. Then builds the resume (as build_resume does). Call once per run.",
+      inputSchema: completeRunInputSchema,
+      annotations: EXTERNAL_WRITE,
+    },
+    async (args, repository, userId) => {
+      if (args.people?.length) return fail("The people step is not available yet. Leave people out.");
+
+      const ledger = await repository.readLedger(args.application_id);
+      if (ledger.error || !ledger.data) return dbFail("Reading the run state", ledger.error);
+      if (!mayRunStep(ledger.data, "tailor", args.force)) {
+        return fail("This run is already saved. Use get_run_state. Pass force: true only if David asks to redo it.");
+      }
+
+      const [template, rules] = await Promise.all([
+        repository.readTemplateForCalibration(args.template),
+        repository.readRules(["bullets", "all"]),
+      ]);
+      if (template.error) return dbFail("Reading the template", template.error);
+      if (rules.error || !rules.data) return dbFail("Reading saved rules", rules.error);
+      const layout = template.data ? readTemplateLayout(template.data) : null;
+      if (!template.data || !layout) {
+        return fail(`The ${args.template} template is not calibrated yet. Call calibrate_template first.`);
+      }
+
+      // Check everything before saving anything.
+      const rendered = renderTailoredResume(layout.skeleton, args.resume);
+      if (!rendered.ok) return fail(`Nothing was saved. ${rendered.problems.join(" ")}`);
+      const extraBlocked = phrasesFromRules(rules.data.map((rule) => rule.text));
+      const page = checkBullets(rendered.bullets, { targets: targetsOf(template.data), extraBlocked });
+      if (!page.pass) {
+        const failures = [...page.page.failures, ...page.bullets.flatMap((bullet) =>
+          bullet.failures.map((failure) => ({ ...failure, detail: `Bullet ${bullet.index}: ${failure.detail}` })),
+        )];
+        return fail(
+          `Nothing was saved: the page fails check_bullets. ${failures.slice(0, 8).map((failure) => failure.detail).join(" ")}`,
+        );
+      }
+      const variantProblems = args.new_variants.flatMap((variant, index) => {
+        if (HAS_NUMBER.test(variant.text) && !variant.explain_note) {
+          return [`new_variants[${index}] has a number but no explain_note.`];
+        }
+        if (variant.style !== "house") return [];
+        const check = checkBullets([variant.text], { targets: null, extraBlocked });
+        return check.bullets.flatMap((bullet) =>
+          bullet.failures.map((failure) => `new_variants[${index}]: ${failure.detail}`),
+        );
+      });
+      if (variantProblems.length) return fail(`Nothing was saved. ${variantProblems.slice(0, 8).join(" ")}`);
+
+      const saved = await repository.completeRun({
+        application_id: args.application_id,
+        template: args.template,
+        fit_read: args.fit_read,
+        content: args.resume,
+        mirrored_title: rendered.mirrored_title,
+        variants: args.new_variants,
+        answers: args.answers,
+      });
+      if (saved.error?.code === "P0002") return fail(NOT_IN_TRACKER);
+      if (saved.error?.code === "23503") {
+        return fail("Nothing was saved: a story_id in new_variants is not in the library.");
+      }
+      if (saved.error || !saved.data) return dbFail("Saving the run", saved.error);
+
+      const value: Record<string, unknown> = {
+        application_id: args.application_id,
+        tailored_resume_id: saved.data.tailored_resume_id,
+        variants_added: saved.data.variants_added,
+        answers_added: saved.data.answers_added,
+      };
+      if (!args.build) return { ok: true, value, applicationId: args.application_id };
+
+      const deps = await buildDependencies(repository, userId);
+      if ("ok" in deps) return deps;
+      const built = await buildResume(deps, { tailored_resume_id: saved.data.tailored_resume_id, mode: "build" });
+      value.build = built.ok
+        ? built.value
+        : { built: false, message: `${built.message} The run is saved; retry with build_resume.` };
+      return { ok: true, value, applicationId: args.application_id };
     },
   );
 }

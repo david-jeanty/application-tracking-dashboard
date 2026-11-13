@@ -3,6 +3,7 @@ import { JOB_CATEGORIES, WORK_ARRANGEMENTS } from "@/lib/applications/constants"
 import { COMPANY_DOMAIN_GUIDANCE } from "@/lib/applications/external-record";
 import { MAXIMUM_DOMAIN_LENGTH } from "@/lib/branding/domain";
 import { PLAYBOOK_PHASES } from "@/lib/agent/playbook/phases";
+import { tailoredContentSchema } from "@/lib/agent/resume/content";
 import {
   requirementSchema,
   RULE_SCOPES,
@@ -188,6 +189,58 @@ export const rebuildWithEditsInputSchema = z.object({
     .default(false)
     .describe("Build even if David's edits fail check_bullets. Only when David says to keep them."),
 });
+
+// ------------------------------------------------------------ complete_run --
+
+export const FIT_VERDICTS = ["strong_fit", "stretch", "long_shot"] as const;
+
+export const completeRunInputSchema = z.object({
+  application_id: applicationId,
+  template: z.enum(TEMPLATE_NAMES),
+  fit_read: z.object({
+    verdict: z.enum(FIT_VERDICTS),
+    summary: z.string().trim().min(1).max(800).describe("Two or three lines: why this verdict."),
+    gaps: z.array(z.string().trim().min(1).max(200)).max(10).default([]),
+    mirror_words: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
+  }),
+  resume: tailoredContentSchema.describe(
+    "The resume, using the template's entry keys from get_playbook. Every entry marked needs_bullets gets bullets or omit: true.",
+  ),
+  new_variants: z
+    .array(
+      z.object({
+        story_id: z.uuid(),
+        text: bulletText,
+        style: z.enum(VARIANT_STYLES).default("house"),
+        angles: z.array(z.string().trim().min(1).max(40)).max(20).default([]),
+        template_fit: z.array(z.enum(TEMPLATE_NAMES)).max(2).default([]),
+        explain_note: z.string().trim().min(1).max(500).optional(),
+      }),
+    )
+    .max(30)
+    .default([])
+    .describe("Bullets written for this run, saved to the library. Any with a number needs an explain_note."),
+  answers: z
+    .array(
+      z.object({
+        question: z.string().trim().min(1).max(1000),
+        answer: z.string().trim().min(1).max(5000),
+        tags: tags.default([]),
+      }),
+    )
+    .max(10)
+    .default([])
+    .describe("Cover letter or application answers drafted in this run."),
+  build: z.boolean().default(true).describe("Build the resume right after saving. Leave on."),
+  force: z.boolean().default(false).describe("Save again over a finished run. Only when David asks."),
+  people: z
+    .array(z.unknown())
+    .max(0, "The people step is not available yet.")
+    .optional()
+    .describe("Reserved for the people step (Spec 2). Leave out."),
+});
+
+export type CompleteRunInput = z.infer<typeof completeRunInputSchema>;
 
 // ----------------------------------------------------------------- answers --
 

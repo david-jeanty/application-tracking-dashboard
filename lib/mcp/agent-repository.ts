@@ -415,6 +415,23 @@ export function createAgentRepositoryForClient(
 
     importLibrary: (input) => importLibrary(supabase, userId, input),
 
+    completeRun: async (input) => {
+      const { data, error } = await supabase.rpc("complete_run", {
+        p_application_id: input.application_id,
+        p_template_name: input.template,
+        p_fit_read: input.fit_read,
+        p_content: input.content,
+        p_mirrored_title: input.mirrored_title,
+        p_variants: input.variants,
+        p_answers: input.answers,
+      });
+      if (error) return { data: null, error };
+      return {
+        data: data as { tailored_resume_id: string; created: boolean; variants_added: number; answers_added: number },
+        error: null,
+      };
+    },
+
     listTemplateRefs: async () => {
       const { data, error } = await supabase
         .from("templates")
