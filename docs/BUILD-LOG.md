@@ -8,8 +8,8 @@ has to set up by hand.
 
 ## Spec 1: Foundation and resume pipeline
 
-**Status:** steps 1 to 5 built and tested locally (2026-11-13). Steps 6 to 10
-not started. See section 9 for progress.
+**Status:** steps 1 to 6 built and tested locally (2026-11-13). Steps 7 to 10
+in progress. See section 9 for progress.
 **Branch:** `agent-specs`. One PR for all of Spec 1.
 
 ### 1. What I found
@@ -305,6 +305,15 @@ Results go in this log. The PR is opened only after these pass.
   David's export includes his library.
 - A small "Agent" section in Settings showing which templates are calibrated and
   when.
+- **Two-line ceiling.** Calibration sets the longest two-line bullet to twice
+  the shortest full line (260 for zero2sudo), which is safe but flags some
+  bullets that do fit (David's zero2sudo base has 273-character two-liners).
+  Twice the median line (about 274) would match the real page more closely.
+  The Chrome layout check is exact either way, so this only affects how often
+  `check_bullets` asks for a cut.
+- **Self-host the Jake's font.** The Jake's base loads Computer Modern from
+  `cdn.jsdelivr.net/gh/...@latest`. If that file moves, every Jake's build is
+  skipped. Pinning a version in the base resume's CSS would remove the risk.
 
 ### 8. What I need from David
 
@@ -312,10 +321,10 @@ Results go in this log. The PR is opened only after these pass.
    the local `.env.local` only, never in the repo. The preview project needs
    its own id. `RESUMELOL_API_KEY` also received and stored the same way;
    David adds both to Vercel himself.
-2. **resume.lol API docs**, and `resume.lol` (plus any API host it uses) allowed
-   in this session's network settings, so I can build and test the client.
-3. **The two template references** in resume.lol (Jake's and zero2sudo) and how
-   they are named or selected through the API.
+2. ~~**resume.lol API docs** and network access~~ Received 2026-11-13. The API
+   is an MCP server; see step 6.
+3. ~~**The two template references**~~ Received 2026-11-13: the base resume
+   ids in step 6's setup.
 4. **Preview database:** does a staging Supabase project exist? If not, create
    one (free), and share its URL and publishable key for the Vercel Preview env.
 5. **Fit-read facts** for `agent_profile`: graduation month and year, degree and
@@ -404,11 +413,120 @@ preview (step 10) covers the same ground for good.
 - `npm run agent:playbook` loads TypeScript directly, which needs Node 22.18 or
   later (CI already uses the latest Node 22).
 
-#### Still open for steps 6 to 10
+#### Step 6: resume.lol and PDFs, built (2026-11-13)
 
-- **resume.lol API docs.** The link in David's message arrived as the text
-  `[link]`, with no URL. Needed for step 6.
-- **resume.lol network access.** Still refused by this session's proxy (HTTP
-  403) as of this update. Needed for step 6.
+**What resume.lol's API turned out to be.** An MCP server at
+`https://www.resume.lol/api/mcp` (Bearer key) with ten tools: the authoring
+guide, `list_resumes`, `get_resume`, `create_resume`, `update_resume` (with an
+`expected_updated_at` guard), `get_resume_html`, and four share-link tools.
+There is no PDF export and no template concept: PDFs come from a browser's
+print dialog, and a "template" is just one of David's resumes. The account
+also holds resumes for other people, so Interndex never lists or browses it.
+
+**The gap and the fix (agreed with David before building).** The spec has
+`build_resume` fetch a PDF and check it on the server. Instead, the server
+prints the PDF itself: it opens resume.lol's printable HTML in headless
+Chrome, measures every bullet line by line, checks the layout, and prints the
+PDF with Chrome. If Chrome fails at runtime, the build still saves the resume
+and HTML, keeps the character-count result, and marks the layout check
+`skipped` with the reason. Decision records 0008, 0009 and 0010.
+
+**What was built**
+
+| File | What it does |
+| --- | --- |
+| `lib/agent/resumelol/client.ts` | The only code that calls resume.lol. Four calls (get, get HTML, create, update markdown). No list, delete or share links. Refuses to write a base resume. Scrubs the key from every error. |
+| `lib/agent/resume/skeleton.ts` | Parses a base resume into a skeleton: the @ variable header (with `@REDACTED=false` forced), headings verbatim, spacers, skills format, entry keys. |
+| `lib/agent/resume/content.ts` | The tailored content schema and the renderer that fills the skeleton. Locked facts (employers, dates, schools, degrees) come only from the base. Names resumes `{Name}_{Company}_{Role}`. |
+| `lib/agent/resume/layout.ts` | Pure layout check: one page, no widows, last lines at least 80% full, never three lines, page shows exactly the bullets sent. Page not full is a warning. |
+| `lib/agent/resume/pdf.ts` | Counts a PDF's pages from the file, as a second check. |
+| `lib/agent/resume/render.ts` | Headless Chrome: render, wait for pagination, measure, print. Never throws; failures come back as a skip reason. Lets through only stylesheets and fonts. |
+| `lib/agent/resume/build.ts` | `calibrateTemplate` and `buildResume` (build and rebuild), with injected services so every rule is unit tested. |
+| `lib/agent/resume/services.ts` | The real resume.lol client and renderer for the route, and the one log line per build. |
+| `lib/agent/storage.ts` | Removes the owner's stored files on account deletion (plan 3.6). A no-op for every other account. |
+| `supabase/migrations/20261113000200_resume_builds.sql` | Private `resumes` bucket with owner-folder policies; five additive columns on `tailored_resumes`. |
+
+New MCP tools (owner only): `calibrate_template`, `build_resume`,
+`rebuild_with_edits`. Annotated as writes that reach outside Interndex.
+
+**How a build runs.** Load the tailored resume and the calibrated template,
+render the content onto the skeleton, run `check_bullets` on the page (with
+saved rules), reserve a build, create the resume on resume.lol (or, on a
+rebuild, update the same one if its content is unchanged there), record its
+id at once, fetch the printable HTML once, store it, render it in Chrome,
+check the layout, store the PDF, save the result, mark the ledger. A
+resume.lol failure releases the reserved build. One log line per build says
+which path ran:
+`{"at":"agent.resume_build","mode":"build","build":1,"path":"chromium","layout_check":"passed",...}`
+or `"path":"skipped","reason":"timeout"`. The same is stored in
+`tailored_resumes.layout_report`.
+
+**Checked against the real service (read-only, nothing written).** The
+client fetched both base resumes and their HTML. Chrome rendered the
+zero2sudo base in 1.7 seconds: one page in the layout and in the PDF, page
+fully used. Calibration from its 12 wrapped lines gives 130 characters per
+line, two-liners from 240 to 260 (the seed values in STANDARDS.md were about
+138 and 250 to 275). The layout check flags 4 of that resume's 13 bullets
+as widows (last lines 73% to 78% full), which the character count alone
+would not have caught reliably. Both bases parse into the expected sections
+and entries.
+
+**Tests**
+
+| Check | Result |
+| --- | --- |
+| Unit tests (`npm run test`) | 1,811 pass (70 new) |
+| Render tests (`npm run test:render`, real Chrome) | 8 pass (new suite) |
+| Database tests (`npm run test:db`, local Docker) | 178 pass (14 new in `008_resume_builds.test.sql`) |
+| Lint, typecheck, production build, extension checks | Pass (lint: only the 2 existing warnings) |
+
+New unit test files: `agent-resume-skeleton` (both base layouts, from
+fixtures that copy their structure with placeholder people),
+`agent-resume-layout`, `agent-resumelol-client` (key never in an error, base
+never written, conflict detection), `agent-resume-build` (cap, fallback,
+rebuild guard, edits), `agent-resume-tools` (through a real MCP server),
+`agent-account-files`.
+
+**Where step 6 departs from the plan, and why**
+
+- **No PDF library (plan 3.5).** There is no resume.lol PDF to parse. Chrome
+  measures the layout directly, and a 15-line counter checks the PDF's page
+  count. The new dependencies are `playwright-core` (already in the repo
+  through `@playwright/test`, same version) and `@sparticuz/chromium`.
+- **Calibration builds nothing.** It measures the base resume read-only
+  instead of making a test resume (agreed with David).
+- **Base resume ids are configuration in the database**
+  (`templates.resumelol_template_ref`), set by `calibrate_template`, not
+  written in code. The ids are in "Setup for David" below.
+- **`check_bullets` counts printed characters.** `**bold**` markers no longer
+  count toward line fill; David's zero2sudo resumes use bold.
+- **The MCP route now declares `runtime = "nodejs"` and `maxDuration = 90`.**
+  It already ran on Node; the time limit only raises the ceiling, so tracker
+  tools behave the same for every user.
+- **Render tests are their own suite.** CI's unit job has no browser, so
+  `npm run test:render` runs in the local quality gate, like `test:db`. In
+  this container it needs `CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium`
+  (Playwright here expects a different bundled build).
+- **Jake's base could not be rendered here.** It loads its font from
+  `cdn.jsdelivr.net`, which this session's network refuses (HTTP 403 even
+  from curl). The fallback handled it as designed (`pagination_failed`, so
+  skipped, never a measurement with the wrong font). The preview will
+  calibrate it for real.
+- **`rebuild_with_edits` holds an edit that breaks a rule** unless David
+  says to keep it (`keep_failing_edits: true`), because STANDARDS.md says to
+  apply his corrections exactly and also that a draft must pass the checks.
+
+#### Setup for David (step 6)
+
+1. Nothing new in Vercel beyond `RESUMELOL_API_KEY`. Do not set
+   `CHROMIUM_EXECUTABLE_PATH` on Vercel.
+2. Once the preview is up, in the Job Search project in Claude, say:
+   "Calibrate the zero2sudo template with base resume
+   85f004fa-d780-4bef-9892-ad882dc61b7f, and the jakes template with base
+   resume 8157e84f-ffc6-4bf8-9c9e-17cf2b18314f." Run it again whenever a base
+   resume changes.
+
+#### Still open for steps 7 to 10
+
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's
   preview user id is needed for Vercel's Preview `OWNER_USER_ID`.

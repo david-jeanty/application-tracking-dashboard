@@ -328,7 +328,8 @@ function checkOne(
   }
 
   if (options.targets) {
-    const issue = lineFillIssue(trimmed.length, options.targets);
+    // **bold** markers do not print, so they do not take up the line.
+    const issue = lineFillIssue(trimmed.replace(/\*\*/g, "").length, options.targets);
     if (issue) failures.push({ rule: "line_fill", detail: issue });
   }
 

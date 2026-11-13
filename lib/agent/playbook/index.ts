@@ -33,6 +33,7 @@ export function buildPlaybook(phase: PlaybookPhase, context: PlaybookContext) {
       name: template.name,
       use_for: template.use_for,
       calibrated: template.calibrated_at !== null,
+      ...(template.sections ? { sections: template.sections } : {}),
     })),
     standards: definition.standards
       .map((part) => STANDARDS_PARTS[part])

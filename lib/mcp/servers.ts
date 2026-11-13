@@ -4,6 +4,7 @@ import {
   AGENT_SERVER_INSTRUCTIONS,
   registerAgentTools,
   type AgentRepositoryFactory,
+  type AgentServices,
 } from "@/lib/mcp/agent-tools";
 import { MCP_SERVER_INSTRUCTIONS } from "@/lib/mcp/instructions";
 import {
@@ -43,6 +44,8 @@ export const MCP_INSTRUCTIONS_BY_KIND: Readonly<Record<McpServerKind, string>> =
 export type McpServerDependencies = {
   jobTrack: JobTrackRepositoryFactory;
   agent: AgentRepositoryFactory;
+  /** resume.lol and headless Chrome, used only by the agent's resume tools. */
+  agentServices: AgentServices;
 };
 
 /** Registers the tools one kind of server offers. Used by the route and tests. */
@@ -52,5 +55,7 @@ export function configureMcpServer(
   dependencies: McpServerDependencies,
 ): void {
   registerJobTrackTools(server, dependencies.jobTrack);
-  if (kind === "agent") registerAgentTools(server, dependencies.agent);
+  if (kind === "agent") {
+    registerAgentTools(server, dependencies.agent, dependencies.agentServices);
+  }
 }

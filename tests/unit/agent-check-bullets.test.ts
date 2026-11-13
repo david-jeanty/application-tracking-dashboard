@@ -223,6 +223,14 @@ describe("line fill", () => {
     expect(unchecked.page.warnings.map((w) => w.rule)).toContain("line_fill_unchecked");
   });
 
+  it("counts the characters that print, not **bold** markers", () => {
+    const plain = `Reduced costs by 10% ${"x".repeat(87)}`;
+    const bold = plain.replace("10%", "**10%**");
+    expect(plain.length).toBe(108);
+    expect(bold.length).toBe(112);
+    expect(checkBullets([bold], { targets: NARROW }).pass).toBe(true);
+  });
+
   it("measures the gold two-liners against the wider seed template", () => {
     const wide: LineTargets = { oneLineChars: 138, twoLineMin: 250, twoLineMax: 275 };
     const traced = GOLD_BULLETS.find((bullet) => bullet.startsWith("Traced"))!;

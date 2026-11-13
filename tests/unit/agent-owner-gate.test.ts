@@ -19,6 +19,9 @@ const AGENT_TOOLS = [
   "save_answer",
   "search_answers",
   "import_library",
+  "calibrate_template",
+  "build_resume",
+  "rebuild_with_edits",
 ];
 
 const READ_ONLY_TOOLS = [

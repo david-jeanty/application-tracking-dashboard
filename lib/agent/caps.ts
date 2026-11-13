@@ -25,6 +25,9 @@ export const TOOL_RESULT_CAPS = {
   save_answer: 400,
   search_answers: 7_000,
   import_library: 1_500,
+  calibrate_template: 4_000,
+  build_resume: 3_000,
+  rebuild_with_edits: 3_000,
 } as const;
 
 export type CappedTool = keyof typeof TOOL_RESULT_CAPS;

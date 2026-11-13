@@ -15,9 +15,13 @@ import type {
   Requirement,
 } from "@/lib/agent/types";
 import { displayOptionalText, toApplicationInsert } from "@/lib/applications/mapper";
+import type { BuildPatch, BuildRow } from "@/lib/agent/resume/build";
+import type { RenderOutcome } from "@/lib/agent/resume/render";
+import type { ResumeLolClient } from "@/lib/agent/resumelol/client";
 import type {
   AgentRepository,
   AgentRepositoryFactory,
+  AgentServices,
   SavedAnswer,
 } from "@/lib/mcp/agent-tools";
 import { configureMcpServer, type McpServerKind } from "@/lib/mcp/servers";
@@ -55,13 +59,28 @@ export class FakeAgentStore {
   library: LibraryStory[] = [];
   experiences: { id: string; org: string; official_title: string; start_date: string }[] = [];
   rules: (AgentRule & { user_id: string })[] = [];
-  templates: AgentTemplate[] = [];
+  templates: (AgentTemplate & { resumelol_template_ref?: string | null; header_config?: unknown })[] = [];
   profile: AgentProfile | null = null;
   answers: SavedAnswer[] = [];
   edits: { before_text: string; after_text: string }[] = [];
   usage: { applicationId: string | null; tool: string; bytes: number }[] = [];
   /** How many repositories were created, so tests can prove none was. */
   repositoriesCreated = 0;
+  /** Tailored resumes, for the build tools. */
+  buildRows = new Map<string, BuildRow>();
+  buildPatches: BuildPatch[] = [];
+  uploads: { path: string; contentType: string }[] = [];
+  calibrations: { name: string; resumelol_template_ref: string }[] = [];
+  /** Every resume.lol call the tools made, as "tool:resume_id". */
+  resumeLolCalls: string[] = [];
+  /** The protected ids each resume.lol client was created with. */
+  protectedIdSets: string[][] = [];
+  renderOutcome: RenderOutcome = { ok: false, reason: "launch_failed", detail: "no browser in unit tests", durationMs: 0 };
+  /** Base resumes the fake resume.lol serves, by id. */
+  baseResumes = new Map<string, { markdown: string; html: string }>();
+  logs: Record<string, unknown>[] = [];
+  /** What the fake resume.lol holds for resumes the tools created. */
+  remoteMarkdown = new Map<string, string>();
   private sequence = 0;
 
   nextId(): string {
@@ -278,8 +297,88 @@ export class FakeAgentStore {
       logUsage: async (applicationId, tool, bytes) => {
         this.usage.push({ applicationId, tool, bytes });
       },
+      listTemplateRefs: () =>
+        ok(this.templates.flatMap((template) => (template.resumelol_template_ref ? [template.resumelol_template_ref] : []))),
+      readBuildRow: (id) => ok(this.buildRows.get(id) ?? null),
+      reserveBuild: (id, expected) => {
+        const row = this.buildRows.get(id);
+        if (!row || row.build_count !== expected) return ok({ reserved: false });
+        row.build_count = expected + 1;
+        return ok({ reserved: true });
+      },
+      releaseBuild: async (id, reserved) => {
+        const row = this.buildRows.get(id);
+        if (row && row.build_count === reserved) row.build_count = reserved - 1;
+        return { error: null };
+      },
+      saveBuild: async (id, _applicationId, patch) => {
+        this.buildPatches.push(patch);
+        const row = this.buildRows.get(id);
+        if (row) {
+          if (patch.resumelol_resume_id) row.resumelol_resume_id = patch.resumelol_resume_id;
+          if (patch.built_markdown_sha256) row.built_markdown_sha256 = patch.built_markdown_sha256;
+          if (patch.status) row.status = patch.status;
+        }
+        return { error: null };
+      },
+      uploadResumeFile: async (path, _bytes, contentType) => {
+        this.uploads.push({ path, contentType });
+        return { error: null };
+      },
+      readTemplateForCalibration: (name) => {
+        const template = this.templates.find((entry) => entry.name === name);
+        return ok(
+          template
+            ? {
+                id: template.id,
+                name: template.name,
+                resumelol_template_ref: template.resumelol_template_ref ?? null,
+                header_config: template.header_config ?? {},
+                one_line_chars: template.one_line_chars,
+                two_line_min: template.two_line_min,
+                two_line_max: template.two_line_max,
+              }
+            : null,
+        );
+      },
+      saveCalibration: async (name, values) => {
+        this.calibrations.push({ name, resumelol_template_ref: values.resumelol_template_ref });
+        return { error: null };
+      },
     };
   }
+
+  /** Fake resume.lol and Chrome. Nothing here reaches the network. */
+  services: AgentServices = {
+    resumeLol: (protectedIds) => {
+      this.protectedIdSets.push([...protectedIds]);
+      const client: ResumeLolClient = {
+        getResume: async (id) => {
+          this.resumeLolCalls.push(`get_resume:${id}`);
+          const base = this.baseResumes.get(id);
+          const markdown = base?.markdown ?? this.remoteMarkdown.get(id) ?? "";
+          return { id, name: id, markdown, css: "", meta_css: "", updated_at: "t1" };
+        },
+        getResumeHtml: async (id) => {
+          this.resumeLolCalls.push(`get_resume_html:${id}`);
+          return this.baseResumes.get(id)?.html ?? "<html></html>";
+        },
+        createResume: async (input) => {
+          this.resumeLolCalls.push(`create_resume:${input.name}`);
+          this.remoteMarkdown.set("rl-created", input.markdown);
+          return { id: "rl-created", updated_at: "t1" };
+        },
+        updateResumeMarkdown: async (input) => {
+          this.resumeLolCalls.push(`update_resume:${input.resume_id}`);
+          this.remoteMarkdown.set(input.resume_id, input.markdown);
+          return { updated_at: "t2" };
+        },
+      };
+      return client;
+    },
+    render: async () => this.renderOutcome,
+    log: (event) => this.logs.push(event),
+  };
 }
 
 /** The tracker tools are not under test here; any call to them is a bug. */
@@ -302,7 +401,11 @@ export async function connect(kind: McpServerKind, store: FakeAgentStore) {
   const server = new McpServer(
     { name: "interndex", version: "0.1.0" },
   );
-  configureMcpServer(server, kind, { jobTrack: unusedJobTrack, agent: store.factory });
+  configureMcpServer(server, kind, {
+    jobTrack: unusedJobTrack,
+    agent: store.factory,
+    agentServices: store.services,
+  });
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);

@@ -1,0 +1,9 @@
+# 0008: Print PDFs on the server with headless Chrome, and fall back when it fails
+
+**Context.** Spec 1 has `build_resume` fetch a PDF from resume.lol and check it on the server. resume.lol cannot do that: its API (an MCP server) saves resumes and returns one self-contained printable HTML file, and its PDFs come from the browser print dialog. The checks the spec asks for (one page, no widows, last lines at least 80% full) need the real layout, which only a browser produces.
+
+**Decision.** The Interndex server opens resume.lol's HTML in headless Chrome (`playwright-core`, with the `@sparticuz/chromium` build on Vercel), waits for its pagination script, measures every bullet line by line, and prints the PDF with Chrome. That is the same engine David's print dialog uses. The PDF's page count is checked a second time from the file itself. If Chrome cannot run (memory, time, a font host down), the build still saves the resume and its HTML, keeps the character-count check result, and returns `layout_check: "skipped"` with the reason. Which path ran is logged and stored on the resume. Calibration measures David's base resume the same way, read-only, so it needs no test build.
+
+**Alternatives.** Character counts only, with David printing the PDF himself: no new dependency, but the layout check becomes an estimate (measured: two bullets with the same length can end at 76% and 83%), and the run would no longer end in a stored PDF. Parsing a PDF for line positions: resume.lol has no PDF to parse. A hosted PDF service: a new account and a new cost.
+
+**Why.** It meets the spec as written with no AI cost: rendering is ordinary code. The cost is a 67 MB package, several seconds per build, and a function that needs more memory, which is why the fallback exists. A failed render never fails the run.

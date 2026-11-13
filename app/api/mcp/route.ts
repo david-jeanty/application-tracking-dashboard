@@ -1,6 +1,7 @@
 import type { AuthInfo } from "@modelcontextprotocol/server";
 import { createMcpHandler, withMcpAuth } from "mcp-handler";
 import { verifySupabaseAccessToken } from "@/lib/mcp/identity";
+import { agentServices } from "@/lib/agent/resume/services";
 import { createSupabaseAgentRepository } from "@/lib/mcp/agent-repository";
 import { createSupabaseJobTrackRepository } from "@/lib/mcp/repository";
 import {
@@ -13,9 +14,16 @@ import { getResourceOrigin } from "@/lib/supabase/bearer";
 
 export const RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";
 
+// Node, not Edge: the owner's resume tools run headless Chrome. A build is
+// resume.lol calls plus a render capped at 45 seconds, so 90 seconds leaves
+// room. Tracker tool calls are unaffected; they finish in well under a second.
+export const runtime = "nodejs";
+export const maxDuration = 90;
+
 const dependencies = {
   jobTrack: createSupabaseJobTrackRepository,
   agent: createSupabaseAgentRepository,
+  agentServices,
 };
 
 // The tools themselves live in `lib/mcp/tools.ts` and `lib/mcp/agent-tools.ts`

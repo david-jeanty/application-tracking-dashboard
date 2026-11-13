@@ -15,6 +15,14 @@ import {
 import { rankStories, tokenize, type LibraryStory } from "@/lib/agent/library/scoring";
 import { isAgentOwner } from "@/lib/agent/owner";
 import { buildPlaybook, type PlaybookContext } from "@/lib/agent/playbook";
+import {
+  buildResume,
+  calibrateTemplate,
+  type BuildDependencies,
+  type BuildRepository,
+} from "@/lib/agent/resume/build";
+import type { ResumeRenderer } from "@/lib/agent/resume/render";
+import type { ResumeLolClient } from "@/lib/agent/resumelol/client";
 import type {
   AgentRule,
   AgentTemplate,
@@ -31,10 +39,13 @@ import { readUserId } from "@/lib/mcp/user";
 import {
   addRuleInputSchema,
   applicationOnlyInputSchema,
+  buildResumeInputSchema,
+  calibrateTemplateInputSchema,
   checkBulletsInputSchema,
   createApplicationFromJdInputSchema,
   getPlaybookInputSchema,
   importLibraryInputSchema,
+  rebuildWithEditsInputSchema,
   recordEditInputSchema,
   saveAnswerInputSchema,
   saveVariantInputSchema,
@@ -162,8 +173,21 @@ export type AgentRepository = {
   }) => Read<{ id: string }>;
   listAnswers: () => Read<SavedAnswer[]>;
   importLibrary: (input: ImportLibraryInput) => Read<ImportSummary>;
+  /** Every template's base resume id, so the resume.lol client never writes one. */
+  listTemplateRefs: () => Read<string[]>;
   /** Never throws: a usage-log failure must not fail the tool call. */
   logUsage: (applicationId: string | null, tool: string, bytes: number) => Promise<void>;
+} & BuildRepository;
+
+/**
+ * The outside services the resume tools use: resume.lol and headless Chrome.
+ * The route passes the real ones (`lib/agent/resume/services.ts`); tests pass
+ * fakes, so no test reaches the network or needs a browser.
+ */
+export type AgentServices = {
+  resumeLol: (protectedIds: readonly string[]) => ResumeLolClient;
+  render: ResumeRenderer;
+  log: (event: Record<string, unknown>) => void;
 };
 
 export type AgentRepositoryFactory = (identity: {
@@ -192,6 +216,8 @@ function toolError(message: string) {
 const READ_ONLY: ToolAnnotations = { readOnlyHint: true, openWorldHint: false };
 const WRITE: ToolAnnotations = { readOnlyHint: false, destructiveHint: false, openWorldHint: false };
 const IDEMPOTENT_WRITE: ToolAnnotations = { ...WRITE, idempotentHint: true };
+/** Calls resume.lol, outside Interndex. */
+const EXTERNAL_WRITE: ToolAnnotations = { ...WRITE, openWorldHint: true };
 
 function targetsOf(template: AgentTemplate | null): LineTargets | null {
   if (
@@ -226,7 +252,7 @@ function registerAgentTool<Schema extends z.ZodObject>(
     inputSchema: Schema;
     annotations: ToolAnnotations;
   },
-  run: (args: z.infer<Schema>, repository: AgentRepository) => Promise<Outcome>,
+  run: (args: z.infer<Schema>, repository: AgentRepository, userId: string) => Promise<Outcome>,
 ): void {
   // Widened to a concrete schema type so the SDK can type its callback; the
   // tool body still receives `args` typed from the specific schema.
@@ -241,7 +267,7 @@ function registerAgentTool<Schema extends z.ZodObject>(
       if (!isAgentOwner(userId)) return toolError(NOT_AVAILABLE);
 
       const repository = repositoryFor({ token: authInfo.token, userId });
-      const outcome = await run(args, repository);
+      const outcome = await run(args, repository, userId);
       if (!outcome.ok) return toolError(outcome.message);
 
       const serialized = serializeCapped(name, outcome.value);
@@ -265,7 +291,23 @@ function registerAgentTool<Schema extends z.ZodObject>(
 export function registerAgentTools(
   server: McpServer,
   repositoryFor: AgentRepositoryFactory,
+  services: AgentServices,
 ): void {
+  async function buildDependencies(
+    repository: AgentRepository,
+    userId: string,
+  ): Promise<BuildDependencies | Outcome> {
+    const refs = await repository.listTemplateRefs();
+    if (refs.error || !refs.data) return dbFail("Reading the templates", refs.error);
+    return {
+      userId,
+      repository,
+      resumeLol: services.resumeLol(refs.data),
+      render: services.render,
+      log: services.log,
+    };
+  }
+
   registerAgentTool(
     server,
     repositoryFor,
@@ -671,6 +713,72 @@ export function registerAgentTools(
       const { data, error } = await repository.importLibrary(args);
       if (error || !data) return dbFail("Importing the library", error);
       return { ok: true, value: data };
+    },
+  );
+
+  registerAgentTool(
+    server,
+    repositoryFor,
+    "calibrate_template",
+    {
+      title: "Calibrate a template",
+      description:
+        "Measures the template's base resume on resume.lol (read only, never changed) in a real browser and saves its line targets and the entry keys tailored content uses. Run once per template, and again after David changes the base resume.",
+      inputSchema: calibrateTemplateInputSchema,
+      annotations: { ...IDEMPOTENT_WRITE, openWorldHint: true },
+    },
+    async (args, repository, userId) => {
+      const deps = await buildDependencies(repository, userId);
+      if ("ok" in deps) return deps;
+      const result = await calibrateTemplate(deps, args);
+      return result.ok ? { ok: true, value: result.value } : fail(result.message);
+    },
+  );
+
+  registerAgentTool(
+    server,
+    repositoryFor,
+    "build_resume",
+    {
+      title: "Build resume",
+      description:
+        "Builds a saved tailored resume once: checks every bullet, creates a new resume on resume.lol, prints the PDF on the server, checks it is one page with no widows, and stores it privately. At most 2 builds per resume, counting rebuilds. If the server cannot print, the resume and its HTML are still saved and layout_check is skipped.",
+      inputSchema: buildResumeInputSchema,
+      annotations: EXTERNAL_WRITE,
+    },
+    async ({ tailored_resume_id }, repository, userId) => {
+      const deps = await buildDependencies(repository, userId);
+      if ("ok" in deps) return deps;
+      const result = await buildResume(deps, { tailored_resume_id, mode: "build" });
+      return result.ok
+        ? { ok: true, value: result.value, applicationId: result.value.application_id }
+        : fail(result.message);
+    },
+  );
+
+  registerAgentTool(
+    server,
+    repositoryFor,
+    "rebuild_with_edits",
+    {
+      title: "Rebuild with David's edits",
+      description:
+        "Applies David's exact edits from the apply step, updates the same resume.lol resume in place (never if he changed its content there), reprints and rechecks the PDF, and saves each edit as an example. Counts toward the 2-build cap.",
+      inputSchema: rebuildWithEditsInputSchema,
+      annotations: EXTERNAL_WRITE,
+    },
+    async ({ tailored_resume_id, edits, keep_failing_edits }, repository, userId) => {
+      const deps = await buildDependencies(repository, userId);
+      if ("ok" in deps) return deps;
+      const result = await buildResume(deps, {
+        tailored_resume_id,
+        mode: "rebuild",
+        edits,
+        keep_failing_edits,
+      });
+      return result.ok
+        ? { ok: true, value: result.value, applicationId: result.value.application_id }
+        : fail(result.message);
     },
   );
 }

@@ -45,6 +45,17 @@ export type AgentProfile = {
   notes: string | null;
 };
 
+/** One entry of a calibrated template, as tailored content refers to it. */
+export type TemplateEntrySummary = {
+  key: string;
+  title: string;
+  org: string | null;
+  /** True when the base had bullets here: give bullets or omit it. */
+  needs_bullets: boolean;
+};
+
+export type TemplateSectionSummary = { key: string; entries: TemplateEntrySummary[] };
+
 export type AgentTemplate = {
   id: string;
   name: TemplateName;
@@ -53,6 +64,8 @@ export type AgentTemplate = {
   two_line_min: number | null;
   two_line_max: number | null;
   calibrated_at: string | null;
+  /** The sections and entry keys, once calibrated. */
+  sections?: TemplateSectionSummary[];
 };
 
 export type AgentRule = { scope: RuleScope; text: string };

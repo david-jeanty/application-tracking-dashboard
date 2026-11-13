@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sameCompanyAndTitle, type DedupeCandidate } from "@/lib/agent/dedupe";
 import type { LedgerRow } from "@/lib/agent/ledger";
 import type { LibraryStory, LibraryVariant } from "@/lib/agent/library/scoring";
+import { summarizeLayout, templateLayoutSchema, type BuildRow, type BuildTemplate } from "@/lib/agent/resume/build";
 import {
   parseStoredRequirements,
   type AgentProfile,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/agent/types";
 import { displayOptionalText, toApplicationInsert } from "@/lib/applications/mapper";
 import type { AgentRepositoryFactory, BriefRows, ImportSummary } from "@/lib/mcp/agent-tools";
+import { RESUME_FILES_BUCKET } from "@/lib/agent/storage";
 import { timeDbCall } from "@/lib/mcp/telemetry";
 import { createBearerClient } from "@/lib/supabase/bearer";
 import { toMonthDate, type ImportLibraryInput } from "@/lib/validation/agent";
@@ -36,6 +38,9 @@ const TEMPLATE_COLUMNS =
   "id,name,use_for,one_line_chars,two_line_min,two_line_max,calibrated_at";
 const VARIANT_COLUMNS =
   "id,story_id,text,style,angles,template_fit,char_count,is_gold,explain_note,created_at";
+
+const BUILD_TEMPLATE_COLUMNS =
+  "id,name,resumelol_template_ref,header_config,one_line_chars,two_line_min,two_line_max";
 
 /** The most applications read to look for a duplicate posting. */
 const DEDUPE_SCAN_LIMIT = 2000;
@@ -70,10 +75,10 @@ export function createAgentRepositoryForClient(
           .maybeSingle<AgentProfile>(),
         supabase
           .from("templates")
-          .select(TEMPLATE_COLUMNS)
+          .select(`${TEMPLATE_COLUMNS},header_config`)
           .eq("user_id", userId)
           .order("name", { ascending: true })
-          .returns<AgentTemplate[]>(),
+          .returns<(AgentTemplate & { header_config: unknown })[]>(),
       ]);
       const error = rules.error ?? profile.error ?? templates.error;
       if (error) return { data: null, error };
@@ -81,7 +86,12 @@ export function createAgentRepositoryForClient(
         data: {
           rules: rules.data ?? [],
           profile: profile.data ?? null,
-          templates: templates.data ?? [],
+          templates: (templates.data ?? []).map(({ header_config, ...template }) => {
+            const layout = templateLayoutSchema.safeParse(header_config);
+            return layout.success
+              ? { ...template, sections: summarizeLayout(layout.data.skeleton) }
+              : template;
+          }),
         },
         error: null,
       };
@@ -404,6 +414,141 @@ export function createAgentRepositoryForClient(
     },
 
     importLibrary: (input) => importLibrary(supabase, userId, input),
+
+    listTemplateRefs: async () => {
+      const { data, error } = await supabase
+        .from("templates")
+        .select("resumelol_template_ref")
+        .eq("user_id", userId)
+        .returns<{ resumelol_template_ref: string | null }[]>();
+      if (error) return { data: null, error };
+      return {
+        data: (data ?? []).flatMap((row) => (row.resumelol_template_ref ? [row.resumelol_template_ref] : [])),
+        error: null,
+      };
+    },
+
+    readBuildRow: async (tailoredResumeId) => {
+      const resume = await supabase
+        .from("tailored_resumes")
+        .select(
+          "id,application_id,template_id,status,build_count,content,resumelol_resume_id,resumelol_updated_at,built_markdown_sha256",
+        )
+        .eq("user_id", userId)
+        .eq("id", tailoredResumeId)
+        .maybeSingle<Omit<BuildRow, "company" | "title" | "template"> & { template_id: string }>();
+      if (resume.error || !resume.data) return { data: null, error: resume.error };
+
+      const [application, template] = await Promise.all([
+        supabase
+          .from("applications")
+          .select("company_name,original_job_title")
+          .eq("user_id", userId)
+          .eq("id", resume.data.application_id)
+          .single<{ company_name: string; original_job_title: string }>(),
+        supabase
+          .from("templates")
+          .select(BUILD_TEMPLATE_COLUMNS)
+          .eq("user_id", userId)
+          .eq("id", resume.data.template_id)
+          .single<BuildTemplate>(),
+      ]);
+      const error = application.error ?? template.error;
+      if (error || !application.data || !template.data) return { data: null, error };
+
+      return {
+        data: {
+          id: resume.data.id,
+          application_id: resume.data.application_id,
+          status: resume.data.status,
+          build_count: resume.data.build_count,
+          content: resume.data.content,
+          resumelol_resume_id: resume.data.resumelol_resume_id,
+          resumelol_updated_at: resume.data.resumelol_updated_at,
+          built_markdown_sha256: resume.data.built_markdown_sha256,
+          company: application.data.company_name,
+          title: application.data.original_job_title,
+          template: template.data,
+        },
+        error: null,
+      };
+    },
+
+    reserveBuild: async (tailoredResumeId, expected) => {
+      // Only moves from the count the caller read, so two builds racing
+      // cannot both take the last one.
+      const { data, error } = await supabase
+        .from("tailored_resumes")
+        .update({ build_count: expected + 1 })
+        .eq("user_id", userId)
+        .eq("id", tailoredResumeId)
+        .eq("build_count", expected)
+        .select("id")
+        .returns<{ id: string }[]>();
+      if (error) return { data: null, error };
+      return { data: { reserved: (data ?? []).length === 1 }, error: null };
+    },
+
+    releaseBuild: async (tailoredResumeId, reservedCount) => {
+      const { error } = await supabase
+        .from("tailored_resumes")
+        .update({ build_count: reservedCount - 1 })
+        .eq("user_id", userId)
+        .eq("id", tailoredResumeId)
+        .eq("build_count", reservedCount);
+      return { error };
+    },
+
+    saveBuild: async (tailoredResumeId, applicationId, patch) => {
+      const { error } = await supabase
+        .from("tailored_resumes")
+        .update(patch)
+        .eq("user_id", userId)
+        .eq("id", tailoredResumeId);
+      if (error || !patch.status) return { error };
+      // A finished build becomes the application's resume.
+      const linked = await supabase
+        .from("applications")
+        .update({ tailored_resume_id: tailoredResumeId })
+        .eq("user_id", userId)
+        .eq("id", applicationId);
+      return { error: linked.error };
+    },
+
+    uploadResumeFile: async (path, bytes, contentType) => {
+      const { error } = await supabase.storage
+        .from(RESUME_FILES_BUCKET)
+        .upload(path, bytes, { contentType, upsert: true });
+      return { error: error ? { code: `storage_${error.name}` } : null };
+    },
+
+    readTemplateForCalibration: async (name) => {
+      const { data, error } = await supabase
+        .from("templates")
+        .select(BUILD_TEMPLATE_COLUMNS)
+        .eq("user_id", userId)
+        .eq("name", name)
+        .maybeSingle<BuildTemplate>();
+      return { data, error };
+    },
+
+    saveCalibration: async (name, values) => {
+      const { error } = await supabase.from("templates").upsert(
+        {
+          user_id: userId,
+          name,
+          resumelol_template_ref: values.resumelol_template_ref,
+          ...(values.use_for ? { use_for: [...values.use_for] } : {}),
+          header_config: values.header_config,
+          one_line_chars: values.targets.oneLineChars,
+          two_line_min: values.targets.twoLineMin,
+          two_line_max: values.targets.twoLineMax,
+          calibrated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,name" },
+      );
+      return { error };
+    },
 
     logUsage: async (applicationId, tool, bytes) => {
       try {

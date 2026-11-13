@@ -148,6 +148,47 @@ export const checkBulletsInputSchema = z.object({
   application_id: optionalApplicationId,
 });
 
+// ------------------------------------------------------------- resume.lol --
+
+export const calibrateTemplateInputSchema = z.object({
+  template: z.enum(TEMPLATE_NAMES),
+  base_resume_id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .optional()
+    .describe("The resume.lol id of the template's base resume. Needed the first time; saved after that."),
+});
+
+export const buildResumeInputSchema = z.object({
+  tailored_resume_id: z.uuid().describe("The tailored resume saved by complete_run."),
+});
+
+export const rebuildWithEditsInputSchema = z.object({
+  tailored_resume_id: z.uuid(),
+  edits: z
+    .array(
+      z.object({
+        before_text: z
+          .string()
+          .trim()
+          .min(1)
+          .max(600)
+          .describe("A whole bullet, or a phrase that appears once on the resume, exactly as written."),
+        after_text: z.string().trim().min(1).max(600).describe("David's replacement, exactly as he gave it."),
+        note: z.string().trim().max(500).optional(),
+        variant_id: z.uuid().optional().describe("The library variant the bullet came from, if known."),
+      }),
+    )
+    .min(1)
+    .max(20),
+  keep_failing_edits: z
+    .boolean()
+    .default(false)
+    .describe("Build even if David's edits fail check_bullets. Only when David says to keep them."),
+});
+
 // ----------------------------------------------------------------- answers --
 
 export const saveAnswerInputSchema = z.object({
