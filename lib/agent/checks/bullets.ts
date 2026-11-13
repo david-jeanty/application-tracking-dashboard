@@ -75,6 +75,11 @@ export type BulletCheckResult = {
 export type BulletCheckOptions = {
   /** Null when the template is not calibrated yet: line fill is skipped. */
   targets: LineTargets | null;
+  /**
+   * Per bullet: may it be one line? Only bullets under the experiences in
+   * `lib/agent/config/one-line-experiences.ts` may. Missing means no.
+   */
+  oneLineAllowed?: readonly boolean[];
   /** Extra phrases from saved rules (see `phrasesFromRules`). */
   extraBlocked?: readonly BlockedPhrase[];
 };
@@ -279,6 +284,7 @@ function metricKey(number: ParsedNumber): string | null {
 function checkOne(
   text: string,
   options: BulletCheckOptions,
+  oneLineAllowed?: boolean,
 ): Omit<BulletReport, "index"> {
   const failures: BulletIssue[] = [];
   const warnings: BulletIssue[] = [];
@@ -328,9 +334,13 @@ function checkOne(
   }
 
   if (options.targets) {
-    // **bold** markers do not print, so they do not take up the line.
-    const issue = lineFillIssue(trimmed.replace(/\*\*/g, "").length, options.targets);
-    if (issue) failures.push({ rule: "line_fill", detail: issue });
+    // **bold** markers do not print, so they do not take up the line. Chrome's
+    // layout check decides the real line count, so a character estimate is
+    // only a warning here (decision record 0015).
+    const issue = lineFillIssue(trimmed.replace(/\*\*/g, "").length, options.targets, {
+      oneLineAllowed: oneLineAllowed ?? false,
+    });
+    if (issue) warnings.push({ rule: "line_fill", detail: `Character estimate: ${issue}` });
   }
 
   if (!RESULT_VERBS.has(opener)) {
@@ -394,26 +404,58 @@ function checkOne(
   return { failures, warnings };
 }
 
+export type LineFillRule = "one_line" | "short_line" | "widow" | "three_lines";
+
 /**
- * Line fill: a full single line, or two lines whose last line is at least 80%
- * full. Returns what is wrong and by how many characters, or null.
+ * Line fill by character count, David's rule: exactly two lines whose last
+ * line is at least 80% full. A bullet whose experience allows one line may
+ * instead be one line at least 80% full. Returns what is wrong and by how
+ * many characters, or null.
  */
+export function lineFillCheck(
+  length: number,
+  targets: LineTargets,
+  options: { oneLineAllowed?: boolean } = {},
+): { rule: LineFillRule; detail: string } | null {
+  const { oneLineChars, twoLineMin, twoLineMax } = targets;
+  const oneLineMin = Math.ceil(oneLineChars * 0.8);
+  const twoLines = `${twoLineMin}-${twoLineMax}`;
+
+  if (length <= oneLineChars) {
+    if (!options.oneLineAllowed) {
+      return {
+        rule: "one_line",
+        detail: `One line (${length} chars). Bullets here run to two lines: add ${twoLineMin - length} or more to reach ${twoLines}.`,
+      };
+    }
+    if (length >= oneLineMin) return null;
+    return {
+      rule: "short_line",
+      detail: `Short single line (${length} chars). Add ${oneLineMin - length} or more to reach ${oneLineMin}-${oneLineChars}.`,
+    };
+  }
+  if (length < twoLineMin) {
+    return {
+      rule: "widow",
+      detail: options.oneLineAllowed
+        ? `Widow (${length} chars). Cut ${length - oneLineChars} to fit one line, or add ${twoLineMin - length} to reach ${twoLines}.`
+        : `Widow (${length} chars). Add ${twoLineMin - length} or more to reach ${twoLines}.`,
+    };
+  }
+  if (length <= twoLineMax) return null;
+  return {
+    rule: "three_lines",
+    detail: `Runs to three lines (${length} chars). Cut ${length - twoLineMax} to fit ${twoLines}.`,
+  };
+}
+
+/** `lineFillCheck`, as the message only. */
 export function lineFillIssue(
   length: number,
   targets: LineTargets,
+  options: { oneLineAllowed?: boolean } = {},
 ): string | null {
-  const { oneLineChars, twoLineMin, twoLineMax } = targets;
-  const oneLineMin = Math.ceil(oneLineChars * 0.8);
-
-  if (length <= oneLineChars) {
-    if (length >= oneLineMin) return null;
-    return `Short single line (${length} chars). Add ${oneLineMin - length} or more to reach ${oneLineMin}-${oneLineChars}.`;
-  }
-  if (length < twoLineMin) {
-    return `Widow (${length} chars). Cut ${length - oneLineChars} to fit one line, or add ${twoLineMin - length} to reach ${twoLineMin}-${twoLineMax}.`;
-  }
-  if (length <= twoLineMax) return null;
-  return `Runs to three lines (${length} chars). Cut ${length - twoLineMax} to fit ${twoLineMin}-${twoLineMax}.`;
+  return lineFillCheck(length, targets, options)?.detail ?? null;
 }
 
 /** Checks a page of bullets. Order matters only for the reported indexes. */
@@ -425,7 +467,7 @@ export function checkBullets(
   const page: BulletCheckResult["page"] = { failures: [], warnings: [] };
 
   bullets.forEach((text, index) => {
-    const { failures, warnings } = checkOne(text, options);
+    const { failures, warnings } = checkOne(text, options, options.oneLineAllowed?.[index]);
     if (failures.length || warnings.length) {
       reports.push({ index, failures, warnings });
     }

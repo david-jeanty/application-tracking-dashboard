@@ -15,7 +15,7 @@
  * - The **median** is the best estimate of a line's real capacity, which is
  *   what "at least 80% full" is measured against.
  *
- * With full lines of 108 to 111 characters this gives 108 / 196 / 216, close to
+ * With full lines of 108 to 111 characters this gives 108 / 196 / 220, close to
  * the seed values in STANDARDS.md (about 108 to 110 per line, two-liners from
  * 199 to 220), which is the check that the method is sound.
  */
@@ -53,6 +53,9 @@ export function deriveLineTargets(fullLineLengths: readonly number[]): LineTarge
   return {
     oneLineChars,
     twoLineMin: oneLineChars + Math.ceil(capacity * LAST_LINE_FILL),
-    twoLineMax: oneLineChars * 2,
+    // Twice the typical line, not twice the shortest: the shortest-line
+    // ceiling flagged two-liners that fit (decision record 0015). This only
+    // matters on the fallback path; Chrome measures the real lines.
+    twoLineMax: Math.max(oneLineChars * 2, Math.floor(capacity * 2)),
   };
 }

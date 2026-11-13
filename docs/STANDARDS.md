@@ -96,7 +96,7 @@ Employers, employment dates, degrees, schools, certifications, and outcomes that
 - Reverse-chronological order within each section, always.
 - Typical bullet counts: 2 to 3 per role, 2 for Interndex. The page must be fully used.
 - **Templates:** zero2sudo for technical roles (PM, TPM, data, AI), Jake's for consulting and business roles.
-- **Line fill [checked]:** every bullet is a full single line or a two-liner whose last line is at least 80% full. No widows. Character targets are calibrated per template and stored (see SPEC-1). Seed values from past measurements, to be confirmed by calibration: one template fits about 108 to 110 characters per line with two-liners at 199 to 220; the wider one fits about 138 per line with two-liners at 250 to 275.
+- **Line fill [checked]:** every bullet is exactly two lines, with the last line at least 80% full. One-line bullets are allowed only under the experiences on the one-line list (`lib/agent/config/one-line-experiences.ts`: the incoming IBM role and BTA), and must fill at least 80% of their line. No widows, never three lines. The Chrome layout check decides line count; character targets, calibrated per template and stored (see SPEC-1), are a guide and the check only when Chrome cannot render. Seed values from past measurements, to be confirmed by calibration: one template fits about 108 to 110 characters per line with two-liners at 199 to 220; the wider one fits about 138 per line with two-liners at 250 to 275.
 
 ### Gold set (house style, use these as examples)
 

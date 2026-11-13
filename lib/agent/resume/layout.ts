@@ -20,6 +20,7 @@
  */
 
 import { LAST_LINE_FILL } from "@/lib/agent/calibration";
+import { lineFillCheck, type LineTargets } from "@/lib/agent/checks/bullets";
 
 export type MeasuredLine = {
   /** The line's text as rendered. */
@@ -42,6 +43,7 @@ export type LayoutRule =
   | "widow"
   | "short_line"
   | "three_lines"
+  | "one_line"
   | "content_mismatch"
   | "page_not_full";
 
@@ -74,7 +76,11 @@ export function sameRenderedText(rendered: string, sent: string): boolean {
 export function evaluateLayout(
   measurement: LayoutMeasurement,
   expectedBullets: readonly string[],
-  options: { pdfPages?: number | null } = {},
+  options: {
+    pdfPages?: number | null;
+    /** Per bullet: may it be one line? See `line-rules.ts`. Missing means no. */
+    oneLineAllowed?: readonly boolean[];
+  } = {},
 ): LayoutResult {
   const failures: LayoutIssue[] = [];
   const warnings: LayoutIssue[] = [];
@@ -104,14 +110,23 @@ export function evaluateLayout(
     });
   }
 
+  // David's rule: exactly two lines, the last at least 80% full. One line
+  // (at least 80% full) only where the experience allows it.
   measurement.bullets.forEach(({ lines }, index) => {
     const last = lines[lines.length - 1];
     if (!last) return;
+    const oneLineOk = options.oneLineAllowed?.[index] === true;
     if (lines.length >= 3) {
       failures.push({
         rule: "three_lines",
         index,
         detail: `Bullet ${index} runs to ${lines.length} lines. Cut it to two.`,
+      });
+    } else if (lines.length === 1 && !oneLineOk) {
+      failures.push({
+        rule: "one_line",
+        index,
+        detail: `Bullet ${index} is one line. Bullets here run to two lines: add words until it wraps and the second line is at least 80% full.`,
       });
     } else if (last.fill < LAST_LINE_FILL) {
       failures.push(
@@ -124,7 +139,9 @@ export function evaluateLayout(
           : {
               rule: "widow",
               index,
-              detail: `Bullet ${index} ends on a line ${percent(last.fill)} full. Add words to fill it, or cut to one line.`,
+              detail: oneLineOk
+                ? `Bullet ${index} ends on a line ${percent(last.fill)} full. Add words to fill it, or cut to one line.`
+                : `Bullet ${index} ends on a line ${percent(last.fill)} full. Add words to fill it.`,
             },
       );
     }
@@ -138,6 +155,21 @@ export function evaluateLayout(
   }
 
   return { status: failures.length ? "failed" : "passed", pages, failures, warnings };
+}
+
+/**
+ * The line rules by character count, for the fallback path only: when
+ * Chrome could not render, this is the best estimate of the layout check.
+ */
+export function evaluateCharacterLines(
+  bullets: readonly string[],
+  targets: LineTargets,
+  oneLineAllowed: readonly boolean[] = [],
+): LayoutIssue[] {
+  return bullets.flatMap((text, index) => {
+    const issue = lineFillCheck(text.length, targets, { oneLineAllowed: oneLineAllowed[index] === true });
+    return issue ? [{ rule: issue.rule, index, detail: `Bullet ${index} (character estimate): ${issue.detail}` }] : [];
+  });
 }
 
 /**

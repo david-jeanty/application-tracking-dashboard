@@ -360,11 +360,29 @@ describe("check_bullets", () => {
       two_line_max: 220,
       calibrated_at: "2026-11-13T00:00:00.000Z",
     });
-    const calibrated = json<{ pass: boolean; bullets: { failures: { rule: string }[] }[] }>(
+    const calibrated = json<{ pass: boolean; bullets: { warnings: { rule: string }[] }[] }>(
       await call("check_bullets", { template: "zero2sudo", bullets: [widow] }),
     );
-    expect(calibrated.pass).toBe(false);
-    expect(calibrated.bullets[0].failures.map((failure) => failure.rule)).toContain("line_fill");
+    // Chrome decides line counts, so a character estimate is a warning.
+    expect(calibrated.pass).toBe(true);
+    expect(calibrated.bullets[0].warnings.map((warning) => warning.rule)).toContain("line_fill");
+  });
+
+  it("takes the one-line bullets from one_line_ok", async () => {
+    store.templates.push({
+      id: "t1",
+      name: "zero2sudo",
+      use_for: ["tpm"],
+      one_line_chars: 110,
+      two_line_min: 199,
+      two_line_max: 220,
+      calibrated_at: "2026-11-13T00:00:00.000Z",
+    });
+    const oneLine = `Reduced the open ticket backlog by 35% by assessing ticketing platforms ${"x".repeat(20)}`;
+    const checked = json<{ bullets: { index: number }[] }>(
+      await call("check_bullets", { template: "zero2sudo", bullets: [oneLine], one_line_ok: [0] }),
+    );
+    expect(checked.bullets).toEqual([]);
   });
 
   it("blocks phrases from saved rules", async () => {

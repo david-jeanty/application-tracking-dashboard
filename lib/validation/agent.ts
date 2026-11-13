@@ -147,6 +147,11 @@ export const checkBulletsInputSchema = z.object({
     .min(1)
     .max(40)
     .describe("Every bullet on the page, in page order."),
+  one_line_ok: z
+    .array(z.int().min(0).max(39))
+    .max(40)
+    .optional()
+    .describe("Indexes of bullets under an entry marked one_line_ok in the playbook. Every other bullet must run two lines."),
   application_id: optionalApplicationId,
 });
 

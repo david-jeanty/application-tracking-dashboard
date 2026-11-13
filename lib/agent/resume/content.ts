@@ -19,6 +19,7 @@
  */
 
 import { z } from "zod";
+import type { BulletOwner } from "@/lib/agent/resume/line-rules";
 import {
   asciiFold,
   decodeEntities,
@@ -71,6 +72,8 @@ export type RenderResult =
       markdown: string;
       /** Every bullet as plain text, in page order. */
       bullets: string[];
+      /** The entry each bullet sits under, in the same order. */
+      bullet_owners: BulletOwner[];
       /** The first mirrored title, for `tailored_resumes.mirrored_title`. */
       mirrored_title: string | null;
     }
@@ -150,6 +153,7 @@ export function renderTailoredResume(
   }
 
   const bullets: string[] = [];
+  const bulletOwners: BulletOwner[] = [];
   let mirroredTitle: string | null = null;
   const blocks: string[] = [];
 
@@ -179,6 +183,7 @@ export function renderTailoredResume(
       }
       const entryBullets = tailored?.bullets ?? [];
       bullets.push(...entryBullets.map(plainBulletText));
+      bulletOwners.push(...entryBullets.map(() => ({ key: entry.key, title: entry.title, org: entry.org })));
       const entryParts = [heading];
       if (entryBullets.length) entryParts.push(entryBullets.map((text) => `- ${escapeText(text)}`).join("\n"));
       if (entry.tail) entryParts.push(entry.tail);
@@ -194,6 +199,7 @@ export function renderTailoredResume(
     ok: true,
     markdown: `${skeleton.header}\n\n${blocks.join(joiner)}\n`,
     bullets,
+    bullet_owners: bulletOwners,
     mirrored_title: mirroredTitle,
   };
 }

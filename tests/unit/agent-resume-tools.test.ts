@@ -107,7 +107,7 @@ describe("resume tools on the MCP server", () => {
       measurement: {
         pages: 1,
         page_fill: 0.97,
-        bullets: [BULLET_A, BULLET_B].map((text) => ({ text, lines: [{ text, fill: 0.95 }] })),
+        bullets: [BULLET_A, BULLET_B].map((text) => ({ text, lines: [{ text: "a", fill: 1 }, { text: "b", fill: 0.95 }] })),
       },
       pdf: new TextEncoder().encode("%PDF-1.4 << /Type /Page >> %%EOF"),
       durationMs: 1200,

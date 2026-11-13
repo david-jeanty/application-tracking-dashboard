@@ -8,6 +8,8 @@ import {
   type LibraryExperience,
   type ResumeSources,
 } from "@/lib/agent/resume/library-entries";
+import { summarizeLayout } from "@/lib/agent/resume/build";
+import { allowsOneLine } from "@/lib/agent/resume/line-rules";
 import { parseBaseResume, type ResumeSkeleton } from "@/lib/agent/resume/skeleton";
 import type { AgentProfile } from "@/lib/agent/types";
 import { JAKES_BASE, ZERO2SUDO_BASE } from "./fixtures/resume-bases";
@@ -217,5 +219,22 @@ describe("resolveSkeleton: an empty library", () => {
     const base = skeletonOf(JAKES_BASE);
     const result = resolveSkeleton(base, { experiences: [], profile: PROFILE });
     expect(result).toEqual({ ok: true, skeleton: base, source: "base", notes: ["library_empty"] });
+  });
+});
+
+describe("the one-line list in the playbook's entry list", () => {
+  it("marks only the incoming IBM role and BTA as allowed one-line bullets", () => {
+    const { skeleton } = resolved(JAKES_BASE);
+    const marked = summarizeLayout(skeleton)
+      .flatMap((section) => section.entries)
+      .filter((entry) => entry.one_line_ok)
+      .map((entry) => entry.title);
+    expect(marked).toEqual(["Incoming Business Transformation Consulting Intern", "Vice President, Internal Affairs"]);
+  });
+
+  it("does not extend the IBM allowance to the pro bono role", () => {
+    expect(allowsOneLine({ title: "Pro-Bono Consultant", org: "IBM" })).toBe(false);
+    expect(allowsOneLine({ title: "Incoming Business Transformation Consulting Intern", org: "IBM" })).toBe(true);
+    expect(allowsOneLine({ title: "Anything", org: "Business Technology Association, uOttawa" })).toBe(true);
   });
 });

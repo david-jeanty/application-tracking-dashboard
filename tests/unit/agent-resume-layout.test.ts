@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  evaluateCharacterLines,
   evaluateLayout,
   fullLineLengths,
   sameRenderedText,
@@ -19,7 +20,7 @@ function measurement(overrides: Partial<LayoutMeasurement> = {}): LayoutMeasurem
   return {
     pages: 1,
     page_fill: 0.97,
-    bullets: [bullet(A, [1, 0.9]), bullet(B, [0.92])],
+    bullets: [bullet(A, [1, 0.9]), bullet(B, [1, 0.92])],
     ...overrides,
   };
 }
@@ -43,6 +44,7 @@ describe("evaluateLayout", () => {
         bullets: [bullet(A, [1, 0.5]), bullet(B, [0.6]), bullet("C.", [1, 1, 0.3])],
       }),
       [A, B, "C."],
+      { oneLineAllowed: [false, true, false] },
     );
     expect(result.failures.map((failure) => [failure.rule, failure.index])).toEqual([
       ["widow", 0],
@@ -53,9 +55,34 @@ describe("evaluateLayout", () => {
   });
 
   it("treats exactly 80% as full", () => {
-    expect(evaluateLayout(measurement({ bullets: [bullet(A, [1, 0.8]), bullet(B, [0.8])] }), [A, B]).status).toBe(
-      "passed",
-    );
+    expect(
+      evaluateLayout(measurement({ bullets: [bullet(A, [1, 0.8]), bullet(B, [0.8])] }), [A, B], {
+        oneLineAllowed: [false, true],
+      }).status,
+    ).toBe("passed");
+  });
+
+  it("fails a one-line bullet unless its experience may have one-liners", () => {
+    const page = measurement({ bullets: [bullet(A, [1, 0.9]), bullet(B, [0.95])] });
+    expect(evaluateLayout(page, [A, B]).failures).toEqual([
+      expect.objectContaining({ rule: "one_line", index: 1 }),
+    ]);
+    expect(evaluateLayout(page, [A, B], { oneLineAllowed: [false, true] }).status).toBe("passed");
+    // An allowed one-liner still has to fill 80% of its line.
+    const short = measurement({ bullets: [bullet(A, [1, 0.9]), bullet(B, [0.7])] });
+    expect(evaluateLayout(short, [A, B], { oneLineAllowed: [false, true] }).failures[0].rule).toBe("short_line");
+  });
+
+  it("estimates the same rules from character counts when Chrome could not run", () => {
+    const targets = { oneLineChars: 130, twoLineMin: 236, twoLineMax: 265 };
+    const two = "x".repeat(250);
+    const one = "y".repeat(120);
+    expect(evaluateCharacterLines([two, one], targets, [false, true])).toEqual([]);
+    expect(evaluateCharacterLines([one, "z".repeat(180), "w".repeat(270)], targets).map((issue) => [issue.rule, issue.index])).toEqual([
+      ["one_line", 0],
+      ["widow", 1],
+      ["three_lines", 2],
+    ]);
   });
 
   it("fails when the page does not show the bullets that were sent", () => {

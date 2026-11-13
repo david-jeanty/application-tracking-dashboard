@@ -190,23 +190,32 @@ describe("countSentences", () => {
 });
 
 describe("line fill", () => {
-  it("accepts a full single line and a full two-liner", () => {
-    expect(lineFillIssue(88, NARROW)).toBeNull();
-    expect(lineFillIssue(110, NARROW)).toBeNull();
+  const ONE_LINE_OK = { oneLineAllowed: true };
+
+  it("accepts a full two-liner, and a full single line only where one line is allowed", () => {
     expect(lineFillIssue(199, NARROW)).toBeNull();
     expect(lineFillIssue(220, NARROW)).toBeNull();
+    expect(lineFillIssue(88, NARROW, ONE_LINE_OK)).toBeNull();
+    expect(lineFillIssue(110, NARROW, ONE_LINE_OK)).toBeNull();
+  });
+
+  it("flags any single line where bullets must run two lines", () => {
+    expect(lineFillIssue(110, NARROW)).toBe(
+      "One line (110 chars). Bullets here run to two lines: add 89 or more to reach 199-220.",
+    );
   });
 
   it("rejects a short single line with the characters to add", () => {
-    expect(lineFillIssue(60, NARROW)).toBe(
+    expect(lineFillIssue(60, NARROW, ONE_LINE_OK)).toBe(
       "Short single line (60 chars). Add 28 or more to reach 88-110.",
     );
   });
 
-  it("rejects a widow with both ways to fix it", () => {
-    expect(lineFillIssue(150, NARROW)).toBe(
+  it("rejects a widow, offering one line only where one line is allowed", () => {
+    expect(lineFillIssue(150, NARROW, ONE_LINE_OK)).toBe(
       "Widow (150 chars). Cut 40 to fit one line, or add 49 to reach 199-220.",
     );
+    expect(lineFillIssue(150, NARROW)).toBe("Widow (150 chars). Add 49 or more to reach 199-220.");
   });
 
   it("rejects a bullet that runs to three lines", () => {
@@ -215,12 +224,25 @@ describe("line fill", () => {
     );
   });
 
-  it("checks line fill only when the template has targets", () => {
+  it("reports line fill as a character-estimate warning: Chrome decides line counts", () => {
     const widow = `Reduced costs by 10% ${"x".repeat(130)}`;
-    expect(checkBullets([widow], { targets: NARROW }).pass).toBe(false);
+    const checked = checkBullets([widow], { targets: NARROW });
+    expect(checked.pass).toBe(true);
+    expect(checked.bullets[0].warnings).toContainEqual(
+      expect.objectContaining({ rule: "line_fill", detail: expect.stringMatching(/^Character estimate: Widow/) }),
+    );
     const unchecked = checkBullets([widow], { targets: null });
-    expect(unchecked.pass).toBe(true);
     expect(unchecked.page.warnings.map((w) => w.rule)).toContain("line_fill_unchecked");
+  });
+
+  it("allows one line only for the bullets marked one_line_ok", () => {
+    const oneLine = `Reduced costs by 10% ${"x".repeat(80)}`;
+    const lineFill = (allowed: boolean[]) =>
+      checkBullets([oneLine, oneLine.replace("Reduced", "Cut")], { targets: NARROW, oneLineAllowed: allowed })
+        .bullets.filter((bullet) => bullet.warnings.some((w) => w.rule === "line_fill"))
+        .map((bullet) => bullet.index);
+    expect(lineFill([false, false])).toEqual([0, 1]);
+    expect(lineFill([true, false])).toEqual([1]);
   });
 
   it("counts the characters that print, not **bold** markers", () => {
@@ -228,7 +250,8 @@ describe("line fill", () => {
     const bold = plain.replace("10%", "**10%**");
     expect(plain.length).toBe(108);
     expect(bold.length).toBe(112);
-    expect(checkBullets([bold], { targets: NARROW }).pass).toBe(true);
+    const report = checkBullets([bold], { targets: NARROW, oneLineAllowed: [true] });
+    expect(report.bullets).toEqual([]);
   });
 
   it("measures the gold two-liners against the wider seed template", () => {

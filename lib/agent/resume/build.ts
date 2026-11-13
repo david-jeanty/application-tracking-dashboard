@@ -41,7 +41,13 @@ import {
   tailoredContentSchema,
   type TailoredContent,
 } from "@/lib/agent/resume/content";
-import { evaluateLayout, fullLineLengths, type LayoutIssue } from "@/lib/agent/resume/layout";
+import {
+  evaluateCharacterLines,
+  evaluateLayout,
+  fullLineLengths,
+  type LayoutIssue,
+} from "@/lib/agent/resume/layout";
+import { allowsOneLine } from "@/lib/agent/resume/line-rules";
 import { resolveSkeleton, type ResumeSources } from "@/lib/agent/resume/library-entries";
 import { countPdfPages } from "@/lib/agent/resume/pdf";
 import type { ResumeRenderer } from "@/lib/agent/resume/render";
@@ -104,6 +110,8 @@ export type LayoutReport = {
   path: "chromium" | "skipped";
   /** Where the headings came from: the library, or the base when the library is empty. */
   experience_source?: "library" | "base";
+  /** On the fallback path: whether line rules were estimated from character counts. */
+  line_check?: "characters" | "none";
   reason?: string;
   detail?: string;
   pages?: number;
@@ -238,6 +246,7 @@ export function summarizeLayout(skeleton: ResumeSkeleton): TemplateSectionSummar
       title: entry.title,
       org: entry.org,
       needs_bullets: entry.base_bullet_count > 0,
+      ...(allowsOneLine(entry) ? { one_line_ok: true } : {}),
     })),
   }));
 }
@@ -464,8 +473,11 @@ export async function buildResume(
   // Every page passes check_bullets before anything is sent.
   const rules = await repository.readRules(["bullets", "all"]);
   if (rules.error || !rules.data) return dbFail("Reading saved rules", rules.error);
+  const oneLineAllowed = rendered.bullet_owners.map((owner) => allowsOneLine(owner));
+  const targets = targetsOf(resume.template);
   const check = checkBullets(rendered.bullets, {
-    targets: targetsOf(resume.template),
+    targets,
+    oneLineAllowed,
     extraBlocked: phrasesFromRules(rules.data.map((rule) => rule.text)),
   });
   const checkFailures = [...check.page.failures, ...check.bullets.flatMap((bullet) => bullet.failures)];
@@ -559,7 +571,7 @@ export async function buildResume(
     const outcome = await deps.render(html, { withPdf: true });
     if (outcome.ok && outcome.pdf) {
       const pdfPages = countPdfPages(outcome.pdf);
-      const result = evaluateLayout(outcome.measurement, rendered.bullets, { pdfPages });
+      const result = evaluateLayout(outcome.measurement, rendered.bullets, { pdfPages, oneLineAllowed });
       layoutCheck = result.status;
       report = {
         path: "chromium",
@@ -579,7 +591,17 @@ export async function buildResume(
         : { path: "skipped", reason: outcome.reason, detail: outcome.detail, duration_ms: outcome.durationMs };
     }
   }
-  if (report.path === "skipped") report = { ...report, experience_source: resolved.value.source };
+  if (report.path === "skipped") {
+    // Chrome did not run, so the line rules are estimated from character
+    // counts with the calibrated targets (decision record 0015).
+    const estimated = targets ? evaluateCharacterLines(rendered.bullets, targets, oneLineAllowed) : [];
+    report = {
+      ...report,
+      experience_source: resolved.value.source,
+      line_check: targets ? "characters" : "none",
+      ...(estimated.length ? { failures: estimated } : {}),
+    };
+  }
   deps.log({
     event: "resume_build",
     mode: input.mode,

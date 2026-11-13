@@ -55,7 +55,8 @@ function goodMeasurement(texts: string[]): LayoutMeasurement {
   return {
     pages: 1,
     page_fill: 0.98,
-    bullets: texts.map((text) => ({ text, lines: [{ text, fill: 0.95 }] })),
+    // David's rule: two lines, the last at least 80% full.
+    bullets: texts.map((text) => ({ text, lines: [{ text: "a", fill: 1 }, { text: "b", fill: 0.95 }] })),
   };
 }
 
@@ -200,7 +201,7 @@ describe("calibrateTemplate", () => {
     const result = await calibrateTemplate(fakes.deps(), { template: "zero2sudo", base_resume_id: BASE_ID });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.targets).toEqual({ one_line_chars: 130, two_line_min: 236, two_line_max: 260 });
+    expect(result.value.targets).toEqual({ one_line_chars: 130, two_line_min: 236, two_line_max: 265 });
     expect(result.value.lines_measured).toBe(6);
     expect(result.value.sections.flatMap((section) => section.entries.map((entry) => entry.key))).toContain("tracker-app");
     expect(fakes.resumeLolCalls).toEqual([`get_resume:${BASE_ID}`, `get_resume_html:${BASE_ID}`]);
@@ -310,7 +311,8 @@ describe("buildResume", () => {
     });
     const result = await build(fakes);
     expect(result.ok && result.value.layout_check).toBe("failed");
-    expect(result.ok && result.value.layout_failures?.map((failure) => failure.rule)).toEqual(["one_page", "widow"]);
+    // The project bullet is one line, and projects are not on the one-line list.
+    expect(result.ok && result.value.layout_failures?.map((failure) => failure.rule)).toEqual(["one_page", "widow", "one_line"]);
   });
 
   it("refuses a page that fails check_bullets, before calling resume.lol", async () => {
@@ -323,11 +325,57 @@ describe("buildResume", () => {
     expect(fakes.row.build_count).toBe(0);
   });
 
-  it("applies the template's calibrated line targets to the page", async () => {
+  it("lets Chrome decide line counts: short bullets do not block the build", async () => {
     const fakes = new Fakes();
-    fakes.template = { ...fakes.template, one_line_chars: 130, two_line_min: 236, two_line_max: 260 };
+    fakes.template = { ...fakes.template, one_line_chars: 130, two_line_min: 236, two_line_max: 265 };
     const result = await build(fakes);
-    expect(!result.ok && result.message).toContain("Short single line");
+    expect(result.ok && result.value.layout_check).toBe("passed");
+  });
+
+  it("estimates the line rules from character counts only when Chrome could not run", async () => {
+    const fakes = new Fakes();
+    fakes.template = { ...fakes.template, one_line_chars: 130, two_line_min: 236, two_line_max: 265 };
+    fakes.renderOutcome = () => ({ ok: false, reason: "timeout", detail: "slow", durationMs: 45_000 });
+    const result = await build(fakes);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.layout_check).toBe("skipped");
+    expect(result.value.layout_failures?.map((failure) => [failure.rule, failure.index])).toEqual([
+      ["one_line", 0],
+      ["one_line", 1],
+    ]);
+    expect(fakes.saved[fakes.saved.length - 1].layout_report).toMatchObject({ path: "skipped", line_check: "characters" });
+  });
+
+  it("allows one-line bullets only under the experiences on the one-line list", async () => {
+    const fakes = new Fakes();
+    fakes.sources = {
+      experiences: [
+        { org: "Business Technology Association, uOttawa", official_title: "Vice President, Internal Affairs", start: "2024-04-01", end: "2025-04-01", location: "Ottawa, Ontario", sort_order: 6, section: "experience" },
+        { org: "Interndex", official_title: "Founder & Product Lead", start: "2026-08-01", end: null, location: null, sort_order: 4, section: "projects" },
+      ],
+      profile: null,
+    };
+    fakes.row.content = tailoredContentSchema.parse({
+      entries: [
+        { key: "vice-president-internal-affairs", bullets: [BULLET_A] },
+        { key: "interndex", bullets: [BULLET_B] },
+      ],
+    });
+    fakes.renderOutcome = () => ({
+      ok: true,
+      measurement: {
+        pages: 1,
+        page_fill: 0.98,
+        bullets: [BULLET_A, BULLET_B].map((text) => ({ text, lines: [{ text, fill: 0.9 }] })),
+      },
+      pdf: ONE_PAGE_PDF,
+      durationMs: 800,
+    });
+    const result = await build(fakes);
+    expect(result.ok && result.value.layout_failures?.map((failure) => [failure.rule, failure.index])).toEqual([
+      ["one_line", 1],
+    ]);
   });
 
   it("applies saved rules to the check", async () => {

@@ -58,6 +58,8 @@ export type TemplateEntrySummary = {
   org: string | null;
   /** True when the base had bullets here: give bullets or omit it. */
   needs_bullets: boolean;
+  /** Present when bullets here may be one line (see the one-line list). */
+  one_line_ok?: true;
 };
 
 export type TemplateSectionSummary = { key: string; entries: TemplateEntrySummary[] };

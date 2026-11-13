@@ -140,15 +140,23 @@ describe("deriveLineTargets", () => {
     expect(deriveLineTargets([110, 108, 111, 109, 110])).toEqual({
       oneLineChars: 108,
       twoLineMin: 196,
-      twoLineMax: 216,
+      twoLineMax: 220,
     });
+  });
+
+  it("sets the two-line ceiling from the typical line, so two-liners that fit pass", () => {
+    // A base whose shortest full line is 130 but whose lines are mostly 137:
+    // twice the shortest (260) would flag 273-character two-liners that fit.
+    const targets = deriveLineTargets([130, 136, 137, 137, 138, 139]);
+    expect(targets.twoLineMax).toBe(274);
+    expect(lineFillIssue(273, targets)).toBeNull();
   });
 
   it("lands near the wide seed values in STANDARDS.md", () => {
     expect(deriveLineTargets([138, 139, 140, 140, 141, 139])).toEqual({
       oneLineChars: 138,
       twoLineMin: 250,
-      twoLineMax: 276,
+      twoLineMax: 279,
     });
   });
 

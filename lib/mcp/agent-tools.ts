@@ -15,6 +15,7 @@ import {
 import { rankStories, tokenize, type LibraryStory } from "@/lib/agent/library/scoring";
 import { isAgentOwner } from "@/lib/agent/owner";
 import { buildPlaybook, type PlaybookContext } from "@/lib/agent/playbook";
+import { allowsOneLine } from "@/lib/agent/resume/line-rules";
 import {
   buildResume,
   calibrateTemplate,
@@ -607,7 +608,7 @@ export function registerAgentTools(
       inputSchema: checkBulletsInputSchema,
       annotations: READ_ONLY,
     },
-    async ({ template, bullets }, repository) => {
+    async ({ template, bullets, one_line_ok }, repository) => {
       const [templateRow, rules] = await Promise.all([
         repository.readTemplate(template),
         repository.readRules(["bullets", "all"]),
@@ -618,6 +619,7 @@ export function registerAgentTools(
         ok: true,
         value: checkBullets(bullets, {
           targets: targetsOf(templateRow.data),
+          oneLineAllowed: bullets.map((_, index) => one_line_ok?.includes(index) ?? false),
           extraBlocked: phrasesFromRules(rules.data.map((rule) => rule.text)),
         }),
       };
@@ -840,7 +842,11 @@ export function registerAgentTools(
       const rendered = renderTailoredResume(resolved.value.skeleton, args.resume);
       if (!rendered.ok) return fail(`Nothing was saved. ${rendered.problems.join(" ")}`);
       const extraBlocked = phrasesFromRules(rules.data.map((rule) => rule.text));
-      const page = checkBullets(rendered.bullets, { targets: targetsOf(template.data), extraBlocked });
+      const page = checkBullets(rendered.bullets, {
+        targets: targetsOf(template.data),
+        oneLineAllowed: rendered.bullet_owners.map((owner) => allowsOneLine(owner)),
+        extraBlocked,
+      });
       if (!page.pass) {
         const failures = [...page.page.failures, ...page.bullets.flatMap((bullet) =>
           bullet.failures.map((failure) => ({ ...failure, detail: `Bullet ${bullet.index}: ${failure.detail}` })),

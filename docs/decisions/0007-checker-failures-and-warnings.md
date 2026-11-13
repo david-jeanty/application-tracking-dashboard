@@ -7,3 +7,5 @@
 **Alternatives.** Block on everything (good bullets blocked by heuristics, endless rewrites). Warn on everything (a draft breaking a hard rule could reach David).
 
 **Why.** David should never see a draft that breaks a rule, and should never be stuck in back and forth over a heuristic. Every gold bullet in STANDARDS.md passes and every negative example is caught; the tests read both from the standards file.
+
+**Update (2026-11-13).** Character line fill is now a warning (decision 0015): the Chrome layout check decides line count, and the character targets decide only when Chrome cannot render.

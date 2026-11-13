@@ -666,6 +666,31 @@ layout, section order and the @ variables header (decision record 0014).
 | Database tests | 203 pass (5 new in `011_library_resume_sources.test.sql`) |
 | Lint, typecheck | Pass (only the 2 existing lint warnings) |
 
+#### Change 2: two-line bullets (2026-11-13)
+
+David's call: every bullet exactly two lines, the last at least 80% full;
+one-line bullets only under the incoming IBM role and BTA, at least 80%
+full (decision record 0015).
+
+- **The one-line list David edits:** `lib/agent/config/one-line-experiences.ts`.
+  Each entry is an organization from the library, with a title when only one
+  role there is allowed.
+- Chrome decides line count: `evaluateLayout` fails `one_line`, `widow`,
+  `three_lines` and `short_line`. `check_bullets` reports character line
+  fill as a warning and takes `one_line_ok` (bullet indexes); the playbook
+  marks allowed entries `one_line_ok`.
+- Fallback path only: `evaluateCharacterLines` estimates the same rules from
+  the calibrated targets (`layout_report.line_check: "characters"`).
+- Loosened ceiling: calibration's two-line maximum is twice the median full
+  line (zero2sudo: about 265 instead of 260), never below twice the shortest.
+- STANDARDS.md's line fill rule is updated to match, and the skill and
+  served standards are regenerated.
+
+| Check | Result |
+| --- | --- |
+| Unit tests | 1,872 pass (layout, checker, calibration, build and tool tests updated to the rule; 10 new) |
+| Lint, typecheck | Pass (only the 2 existing lint warnings) |
+
 #### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's
