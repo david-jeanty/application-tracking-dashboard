@@ -11,7 +11,9 @@
  */
 
 export const TOOL_RESULT_CAPS = {
-  get_playbook: 24_000,
+  // About 18 KB is the run steps and standards. The rest is room for saved
+  // rules, which must all be served and grow over time.
+  get_playbook: 40_000,
   get_run_state: 1_500,
   get_application_brief: 2_600,
   create_application_from_jd: 1_000,

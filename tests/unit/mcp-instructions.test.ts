@@ -150,13 +150,28 @@ describe("the MCP route configures the shared instructions", () => {
   it("passes the shared instructions constant alongside the existing serverInfo", async () => {
     await import("@/app/api/mcp/route");
 
-    expect(createMcpHandler).toHaveBeenCalledTimes(1);
-    const [, options] = createMcpHandler.mock.calls[0] as [unknown, Record<string, unknown>];
+    // Two handlers: the standard server every student gets, then the
+    // owner-only agent server (lib/mcp/servers.ts).
+    expect(createMcpHandler).toHaveBeenCalledTimes(2);
+    const [, standardOptions] = createMcpHandler.mock.calls[0] as [
+      unknown,
+      Record<string, unknown>,
+    ];
+    const [, agentOptions] = createMcpHandler.mock.calls[1] as [
+      unknown,
+      Record<string, unknown>,
+    ];
 
-    expect(options).toMatchObject({
+    // Every other student's server is unchanged, byte for byte.
+    expect(standardOptions).toEqual({
       serverInfo: { name: "interndex", version: "0.1.0" },
       instructions: MCP_SERVER_INSTRUCTIONS,
     });
+
+    // The agent server keeps the shared guidance and adds to it.
+    expect(agentOptions.serverInfo).toEqual({ name: "interndex", version: "0.1.0" });
+    expect(String(agentOptions.instructions).startsWith(MCP_SERVER_INSTRUCTIONS)).toBe(true);
+    expect(agentOptions.instructions).not.toBe(MCP_SERVER_INSTRUCTIONS);
   });
 
   it("still requires auth on every request, unaffected by the instructions change", async () => {

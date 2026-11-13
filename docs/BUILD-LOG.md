@@ -8,7 +8,8 @@ has to set up by hand.
 
 ## Spec 1: Foundation and resume pipeline
 
-**Status:** plan written, no code yet (2026-11-13).
+**Status:** steps 1 to 5 built and tested locally (2026-11-13). Steps 6 to 10
+not started. See section 9 for progress.
 **Branch:** `agent-specs`. One PR for all of Spec 1.
 
 ### 1. What I found
@@ -324,3 +325,90 @@ Results go in this log. The PR is opened only after these pass.
 7. **For the test plan:** David's 9 recent resumes and the 3 or 4 past postings
    with his approved resumes, shared in the Claude session at import time, not
    committed to the repo.
+
+### 9. Progress
+
+#### Steps 1 to 5: built (2026-11-13)
+
+**Step 1, owner gate.** `lib/agent/owner.ts` reads `OWNER_USER_ID` and fails
+closed (unset, empty or not a UUID means nobody is the owner).
+`lib/mcp/servers.ts` picks the server per request, and `app/api/mcp/route.ts`
+keeps one handler per kind. Other users get the five tracker tools and the
+existing instructions, byte for byte. Decision record 0002.
+
+**Step 2, schema.** `supabase/migrations/20261113000100_agent_foundation.sql`:
+eleven new tables (the ten in the plan plus `agent_profile`), four nullable
+columns on `applications`, owner RLS on every table, composite ownership keys,
+the 2-build cap as a check constraint, a database-computed `char_count`, and an
+append-only usage log. No existing column, policy or grant changed.
+
+**Step 3, pure logic.** `lib/agent/checks/bullets.ts` (check_bullets),
+`lib/agent/checks/text-rules.ts` (shared with Spec 2's message checker),
+`lib/agent/library/scoring.ts` (search_stories ranking),
+`lib/agent/calibration.ts` (line targets from measured lines),
+`lib/agent/ledger.ts`, `lib/agent/caps.ts`, `lib/agent/brief.ts`,
+`lib/agent/dedupe.ts`. Decision record 0007.
+
+**Step 4, playbook.** `lib/agent/playbook/phases.ts` is the one source for the
+steps of `run`, `library_session` and `import`. `npm run agent:playbook`
+regenerates `lib/agent/playbook/standards.generated.ts` (from
+`docs/STANDARDS.md`) and `skill/interndex-pipeline/SKILL.md`. Decision record
+0006.
+
+**Step 5, tools.** `lib/mcp/agent-tools.ts` registers twelve owner-only tools:
+`get_playbook`, `get_run_state`, `get_application_brief`,
+`create_application_from_jd`, `search_stories`, `save_variant`, `record_edit`,
+`add_rule`, `check_bullets`, `save_answer`, `search_answers`,
+`import_library`. `lib/mcp/agent-repository.ts` is their Supabase data access,
+running as the caller so RLS applies. Every result is compact JSON under a
+size cap and logged to `usage_log`.
+
+**Tests**
+
+| Check | Result |
+| --- | --- |
+| Unit tests (`npm run test`) | 1,741 pass (1,580 existing, 161 new) |
+| Database tests (`npm run test:db`, local Docker) | 164 pass (133 existing, 31 new in `007_agent_foundation.test.sql`) |
+| Mutation check | Dropping the build-cap constraint makes the database suite fail, as it should |
+| Repository against real PostgREST, Postgres and RLS | 10 of 10 pass (one-off run, tokens shaped like Claude's, see below) |
+| Lint, typecheck, production build, extension checks | Pass (lint: 0 errors, only the existing warnings) |
+
+New unit test files: `agent-check-bullets` (every gold bullet passes, every
+negative example is caught, every blocklist entry is blocked; fixtures are
+read from `docs/STANDARDS.md` itself), `agent-scoring-calibration`,
+`agent-owner-gate`, `agent-tools`, `agent-playbook` (generated files current,
+writing rules on all agent text and docs, ledger, dedupe).
+
+The repository check ran PostgREST from Docker Hub against the local
+database, because the full local Supabase stack cannot start here (some
+images are blocked by this session's network). It is not committed as a test
+because it needs that hand-started PostgREST; the hosted verifier on the
+preview (step 10) covers the same ground for good.
+
+**Where the build departs from the plan, and why**
+
+- `get_playbook`'s cap is 40 KB, not 24 KB. The run steps and standards are
+  about 18 KB, and every saved rule must be served, so rules need room to grow.
+- `get_application_brief` trims requirements to fit both the 300-word limit and
+  its byte cap, so it is always built to fit rather than refused.
+- Duplicate detection compares normalized company and title in code. PostgREST
+  treats `*` as a wildcard in like patterns and cannot escape it.
+- `import_library` is one upsert per level, not one transaction. Every level is
+  keyed on a natural key, so a failed import is finished by running it again.
+  (`complete_run` in step 7 is the call that needs a real transaction.)
+- `tests/unit/mcp-instructions.test.ts` changed: it expected one MCP handler and
+  now checks two, with the standard one's instructions unchanged byte for byte.
+- The existing server instructions every student receives contain em dashes.
+  They are left as they are, because changing them would change every user's
+  server. The agent's own addition has none, and a test checks that.
+- `npm run agent:playbook` loads TypeScript directly, which needs Node 22.18 or
+  later (CI already uses the latest Node 22).
+
+#### Still open for steps 6 to 10
+
+- **resume.lol API docs.** The link in David's message arrived as the text
+  `[link]`, with no URL. Needed for step 6.
+- **resume.lol network access.** Still refused by this session's proxy (HTTP
+  403) as of this update. Needed for step 6.
+- **Preview Supabase project.** Needed before step 10. Once it exists, David's
+  preview user id is needed for Vercel's Preview `OWNER_USER_ID`.

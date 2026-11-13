@@ -9,7 +9,7 @@
  * Pure: it takes rows already read and returns the response object.
  */
 
-import { truncate } from "@/lib/agent/caps";
+import { byteLength, TOOL_RESULT_CAPS, truncate } from "@/lib/agent/caps";
 import type { RunState } from "@/lib/agent/ledger";
 import type { Requirement } from "@/lib/agent/types";
 
@@ -81,7 +81,13 @@ export function buildApplicationBrief(source: BriefSource) {
     saved_answers: source.answersCount,
   };
 
-  while (countWords(brief) > BRIEF_WORD_LIMIT && brief.requirements.length > 0) {
+  // Trim until it is under both the word limit and the tool's byte cap, so the
+  // brief is always built to fit rather than refused at the cap.
+  const overBudget = () =>
+    countWords(brief) > BRIEF_WORD_LIMIT ||
+    byteLength(JSON.stringify(brief)) > TOOL_RESULT_CAPS.get_application_brief;
+
+  while (overBudget() && brief.requirements.length > 0) {
     brief.requirements = brief.requirements.slice(0, -1);
     brief.requirements_omitted += 1;
   }
