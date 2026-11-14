@@ -334,13 +334,15 @@ function checkOne(
   }
 
   if (options.targets) {
-    // **bold** markers do not print, so they do not take up the line. Chrome's
-    // layout check decides the real line count, so a character estimate is
-    // only a warning here (decision record 0015).
+    // **bold** markers do not print, so they do not take up the line. Once a
+    // template is calibrated its targets come from David's real page, and a
+    // bullet outside them fails: every line fix happens before the first
+    // build, so a run uses one build and leaves the second for David
+    // (decision record 0017). Chrome still has the final word at the build.
     const issue = lineFillIssue(trimmed.replace(/\*\*/g, "").length, options.targets, {
       oneLineAllowed: oneLineAllowed ?? false,
     });
-    if (issue) warnings.push({ rule: "line_fill", detail: `Character estimate: ${issue}` });
+    if (issue) failures.push({ rule: "line_fill", detail: `Character estimate: ${issue}` });
   }
 
   if (!RESULT_VERBS.has(opener)) {

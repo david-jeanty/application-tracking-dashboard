@@ -137,13 +137,21 @@ function measurePage(): LayoutMeasurement {
   if (firstPage && firstContent) {
     const area = firstContent.getBoundingClientRect();
     const pageHeight = firstPage.getBoundingClientRect().height;
+    // Measured from the lines of text, not from elements: a template can hold
+    // an empty block that stretches to the bottom of the page (zero2sudo
+    // does), which made every page look full.
     let top = area.bottom;
     let bottom = area.top;
-    for (const element of Array.from(firstContent.querySelectorAll("*"))) {
-      const rect = element.getBoundingClientRect();
-      if (rect.height > 0 && rect.width > 0) {
-        top = Math.min(top, rect.top);
-        bottom = Math.max(bottom, rect.bottom);
+    const textWalker = document.createTreeWalker(firstContent, NodeFilter.SHOW_TEXT);
+    const textRange = document.createRange();
+    for (let node = textWalker.nextNode(); node; node = textWalker.nextNode()) {
+      if (!(node.nodeValue ?? "").trim()) continue;
+      textRange.selectNodeContents(node);
+      for (const rect of Array.from(textRange.getClientRects())) {
+        if (rect.height > 0 && rect.width > 0) {
+          top = Math.min(top, rect.top);
+          bottom = Math.max(bottom, rect.bottom);
+        }
       }
     }
     const share = (value: number) => Math.round(value * 1000) / 1000;

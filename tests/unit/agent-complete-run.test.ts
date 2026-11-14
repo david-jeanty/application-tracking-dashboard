@@ -24,7 +24,7 @@ function payload(overrides: Record<string, unknown> = {}) {
   return {
     application_id: applicationId,
     template: "zero2sudo",
-    fit_read: { verdict: "strong_fit", summary: "Matches program management and SQL.", gaps: ["Jira"] },
+    fit_read: { verdict: "strong_fit", summary: "Matches program management and SQL.", gaps: ["Jira"], gap_requirements: [] },
     resume: {
       entries: [
         { key: "information-management-analyst-intern", bullets: [BULLET_A] },
@@ -113,6 +113,58 @@ describe("complete_run", () => {
     expect(response.content[0].text).toContain("Bullet 0");
     expect(store.completedRuns).toHaveLength(0);
     expect(store.resumeLolCalls).toHaveLength(0);
+  });
+
+  it("saves nothing when an entry is left bare although the library has a story for it", async () => {
+    store.library.push({
+      id: "50000000-0000-4000-8000-000000000002",
+      label: "Federal practice placement",
+      summary: null,
+      tags: [],
+      org: "Big Consultancy, Federal Practice",
+      official_title: "Incoming Consulting Intern",
+      variants: [
+        { id: "v-ibm", text: "Selected for the federal practice.", style: "story_voice", angles: [], template_fit: [], char_count: 34, is_gold: false, explain_note: null, created_at: "2026-11-14T00:00:00Z" },
+      ],
+    });
+    const response = await client.call(
+      "complete_run",
+      payload({
+        resume: {
+          entries: [
+            { key: "incoming-consulting-intern", bullets: [] },
+            { key: "information-management-analyst-intern", bullets: [BULLET_A] },
+            { key: "tracker-app", bullets: [BULLET_B] },
+          ],
+        },
+      }),
+    );
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain("these entries have no bullets");
+    expect(response.content[0].text).toContain("incoming-consulting-intern");
+    expect(store.completedRuns).toHaveLength(0);
+  });
+
+  it("refuses a verdict stronger than the must-have gaps allow (decision record 0019)", async () => {
+    const response = await client.call(
+      "complete_run",
+      payload({
+        fit_read: { verdict: "strong_fit", summary: "Strong.", gaps: ["Program management"], gap_requirements: [0] },
+      }),
+    );
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain("1 of 1 must-have requirements are gaps");
+    expect(response.content[0].text).toContain("at most Long shot");
+    expect(store.completedRuns).toHaveLength(0);
+  });
+
+  it("refuses gap numbers that are not requirements of the posting", async () => {
+    const response = await client.call(
+      "complete_run",
+      payload({ fit_read: { verdict: "long_shot", summary: "x", gaps: [], gap_requirements: [5] } }),
+    );
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain("not requirements of this posting");
   });
 
   it("saves nothing when the content does not fit the template", async () => {

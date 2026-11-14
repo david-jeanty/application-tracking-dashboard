@@ -329,25 +329,27 @@ describe("buildResume", () => {
     expect(fakes.row.build_count).toBe(0);
   });
 
-  it("lets Chrome decide line counts: short bullets do not block the build", async () => {
+  it("refuses bullets that miss the calibrated line targets, before calling resume.lol (one build per run)", async () => {
     const fakes = new Fakes();
     fakes.template = { ...fakes.template, one_line_chars: 130, two_line_min: 236, two_line_max: 265 };
     const result = await build(fakes);
-    expect(result.ok && result.value.layout_check).toBe("passed");
+    expect(result).toMatchObject({ ok: false });
+    if (!result.ok) expect(result.message).toMatch(/Character estimate: One line/);
+    expect(fakes.resumeLolCalls).toEqual([]);
+    expect(fakes.row.build_count).toBe(0);
   });
 
-  it("estimates the line rules from character counts only when Chrome could not run", async () => {
+  it("builds bullets that fit the targets, and keeps the character estimate when Chrome could not run", async () => {
     const fakes = new Fakes();
     fakes.template = { ...fakes.template, one_line_chars: 130, two_line_min: 236, two_line_max: 265 };
+    const two = (opener: string) => `${opener} the open ticket backlog by 35% by redesigning service request triage ${"and categorization ".repeat(9)}`.trim() + ".";
+    fakes.row.content = content([two("Reduced")], [two("Cut")]);
     fakes.renderOutcome = () => ({ ok: false, reason: "timeout", detail: "slow", durationMs: 45_000 });
     const result = await build(fakes);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.layout_check).toBe("skipped");
-    expect(result.value.layout_failures?.map((failure) => [failure.rule, failure.index])).toEqual([
-      ["one_line", 0],
-      ["one_line", 1],
-    ]);
+    expect(result.value.layout_failures).toBeUndefined();
     expect(fakes.saved[fakes.saved.length - 1].layout_report).toMatchObject({ path: "skipped", line_check: "characters" });
   });
 

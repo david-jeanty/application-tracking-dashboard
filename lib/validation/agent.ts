@@ -3,6 +3,7 @@ import { JOB_CATEGORIES, WORK_ARRANGEMENTS } from "@/lib/applications/constants"
 import { COMPANY_DOMAIN_GUIDANCE } from "@/lib/applications/external-record";
 import { MAXIMUM_DOMAIN_LENGTH } from "@/lib/branding/domain";
 import { PLAYBOOK_PHASES } from "@/lib/agent/playbook/phases";
+import { FIT_VERDICTS } from "@/lib/agent/fit";
 import { LIBRARY_SECTIONS } from "@/lib/agent/resume/library-entries";
 import { tailoredContentSchema } from "@/lib/agent/resume/content";
 import {
@@ -198,15 +199,19 @@ export const rebuildWithEditsInputSchema = z.object({
 
 // ------------------------------------------------------------ complete_run --
 
-export const FIT_VERDICTS = ["strong_fit", "stretch", "long_shot"] as const;
+export { FIT_VERDICTS } from "@/lib/agent/fit";
 
 export const completeRunInputSchema = z.object({
   application_id: applicationId,
   template: z.enum(TEMPLATE_NAMES),
   fit_read: z.object({
-    verdict: z.enum(FIT_VERDICTS),
+    verdict: z.enum(FIT_VERDICTS).describe("Set by the rule in the playbook: must-have gaps none, up to half, more than half."),
     summary: z.string().trim().min(1).max(800).describe("Two or three lines: why this verdict."),
     gaps: z.array(z.string().trim().min(1).max(200)).max(10).default([]),
+    gap_requirements: z
+      .array(z.int().min(0).max(39))
+      .max(40)
+      .describe("Indexes of the requirements, as sent to create_application_from_jd, that are true gaps. [] when none."),
     mirror_words: z.array(z.string().trim().min(1).max(60)).max(20).default([]),
   }),
   resume: tailoredContentSchema.describe(

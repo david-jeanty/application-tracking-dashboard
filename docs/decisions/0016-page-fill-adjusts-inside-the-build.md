@@ -12,3 +12,5 @@
 **Alternatives.** Report the gap and let the assistant fix it with `rebuild_with_edits` (spends David's second build, and edits cannot add a bullet). Stretch spacing in CSS to fill the page (changes David's design and hides a thin resume).
 
 **Why.** Page fill is a measurement only Chrome can make, so the fix belongs next to the measurement. Choosing from the library keeps every added claim one David has already approved, with its explain note.
+
+**Update (2026-11-14).** The gaps are measured from the first and last lines of text, not from elements: zero2sudo holds an empty block that stretches to the bottom, which made every page look full (decision 0018). Page fill can add from any story whose experience is on the page.

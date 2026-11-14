@@ -9,3 +9,5 @@ The Chrome layout check decides line count (`one_line`, `widow`, `three_lines`, 
 **Alternatives.** Keep characters as the gate (blocks bullets Chrome would accept, and David's own two-liners). Store the one-line list in the database (no screen to edit it yet, and a code list is reviewed with every change).
 
 **Why.** The rule is checked on the real page, where it matters. The character count stays a quick guide during tailoring and a safe estimate when Chrome is unavailable.
+
+**Update (2026-11-14).** Once a template is calibrated, character line fill fails again before the build (decision 0017), so a run uses one build. Chrome still has the final word.

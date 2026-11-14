@@ -13,9 +13,11 @@ import {
   type RunStep,
 } from "@/lib/agent/ledger";
 import { rankStories, tokenize, type LibraryStory } from "@/lib/agent/library/scoring";
+import { assessFit, VERDICT_LABELS, verdictAllowed } from "@/lib/agent/fit";
 import { isAgentOwner } from "@/lib/agent/owner";
 import { buildPlaybook, type PlaybookContext } from "@/lib/agent/playbook";
 import { allowsOneLine } from "@/lib/agent/resume/line-rules";
+import { entriesMissingBullets } from "@/lib/agent/resume/page-fill";
 import {
   buildResume,
   calibrateTemplate,
@@ -500,7 +502,7 @@ export function registerAgentTools(
     {
       title: "Search story library",
       description:
-        "Finds the library's best stories for the requirements: at most 5 stories, each with its facts (summary) and best 2 variants with explain notes, plus the requirements no story matched. Deterministic.",
+        "Finds the library's best stories for the requirements in one call: up to 8 ranked stories, each with its facts (summary) and best 2 variants with explain notes, then the best story of every other experience on the resume (1 variant), plus the requirements no story matched. Deterministic.",
       inputSchema: searchStoriesInputSchema,
       annotations: READ_ONLY,
     },
@@ -841,6 +843,39 @@ export function registerAgentTools(
       if (!resolved.ok) return fail(`Nothing was saved. ${resolved.message}`);
       const rendered = renderTailoredResume(resolved.value.skeleton, args.resume);
       if (!rendered.ok) return fail(`Nothing was saved. ${rendered.problems.join(" ")}`);
+      // The verdict follows from the must-have gaps (decision record 0019).
+      const brief = await repository.readBriefRows(args.application_id);
+      if (brief.error) return dbFail("Reading the application", brief.error);
+      if (!brief.data) return fail(NOT_IN_TRACKER);
+      const requirements = brief.data.requirements;
+      const outOfRange = args.fit_read.gap_requirements.filter((index) => index >= requirements.length);
+      if (outOfRange.length) {
+        return fail(`Nothing was saved: gap_requirements ${outOfRange.join(", ")} are not requirements of this posting (it has ${requirements.length}).`);
+      }
+      const fit = assessFit(requirements, args.fit_read.gap_requirements);
+      if (!verdictAllowed(args.fit_read.verdict, fit)) {
+        return fail(
+          `Nothing was saved: the fit read says ${VERDICT_LABELS[args.fit_read.verdict]}, but ${fit.core_gaps.length} of ${fit.core} must-have requirements are gaps (${fit.core_gaps
+            .map((index) => `"${requirements[index].text.slice(0, 50)}"`)
+            .join(", ")}). The verdict can be at most ${VERDICT_LABELS[fit.allowed]}.`,
+        );
+      }
+
+      // Every entry gets at least one bullet when the library has a story for it.
+      const library = await repository.listLibrary();
+      if (library.error || !library.data) return dbFail("Reading the library", library.error);
+      const bare = entriesMissingBullets(
+        args.resume,
+        resolved.value.skeleton.sections.flatMap((section) => section.entries),
+        library.data,
+      );
+      if (bare.length) {
+        return fail(
+          `Nothing was saved: these entries have no bullets, but the library has stories for them: ${bare
+            .map((entry) => `${entry.key}${allowsOneLine(entry) ? " (one line is fine here)" : ""}`)
+            .join(", ")}. Give each at least one bullet, or omit: true.`,
+        );
+      }
       const extraBlocked = phrasesFromRules(rules.data.map((rule) => rule.text));
       const page = checkBullets(rendered.bullets, {
         targets: targetsOf(template.data),

@@ -109,7 +109,7 @@ function storyOnPage(story: LibraryStory, pageBullets: readonly string[]): boole
 }
 
 /** The resume entry a story belongs under, if that entry is on the page. */
-function entryForStory(story: LibraryStory, entries: readonly ResumeEntry[]): ResumeEntry | null {
+export function entryForStory(story: LibraryStory, entries: readonly ResumeEntry[]): ResumeEntry | null {
   return (
     entries.find((entry) =>
       entry.org === null
@@ -139,7 +139,9 @@ export function pickNextBullet(input: {
   const ranking = rankStories(
     input.library,
     { requirements: input.requirements, angles: [], template: input.template },
-    { limit: Number.MAX_SAFE_INTEGER },
+    // Every story is a candidate: a page with room takes the best match first,
+    // then any story whose experience is on the page (decision record 0018).
+    { limit: Number.MAX_SAFE_INTEGER, includeUnscored: true, coverEveryExperience: false },
   );
   const byId = new Map(input.library.map((story) => [story.id, story]));
 
@@ -162,4 +164,22 @@ export function addBullet(content: TailoredContent, entry: string, text: string)
   const next: TailoredContent = structuredClone(content);
   next.entries.find((candidate) => candidate.key === entry)?.bullets.push(text);
   return next;
+}
+
+/**
+ * Entries shown with no bullets although the library has a story for them.
+ * Every entry gets at least one bullet (one line where its experience
+ * allows it); leaving one bare is only possible with omit: true.
+ */
+export function entriesMissingBullets(
+  content: TailoredContent,
+  entries: readonly ResumeEntry[],
+  library: readonly LibraryStory[],
+): ResumeEntry[] {
+  const listed = new Map(content.entries.map((entry) => [entry.key, entry]));
+  return entries.filter((entry) => {
+    const tailored = listed.get(entry.key);
+    if (!tailored || tailored.omit || tailored.bullets.length > 0) return false;
+    return library.some((story) => story.variants.length > 0 && entryForStory(story, [entry]) !== null);
+  });
 }

@@ -782,6 +782,31 @@ each):
 Both entry lists are the library's experiences, with the incoming IBM role
 and BTA marked `one_line_ok`.
 
+#### First real run: Legrand, Product Management Intern (2026-11-14)
+
+The run worked end to end (fit read, tailoring, build, PDF). David's review
+and what was found and changed:
+
+| Finding | Cause | Fix |
+| --- | --- | --- |
+| Both builds used by the run | Line fill was only a warning (0015), so widows reached Chrome and the run rebuilt | Calibrated line fill fails before the build; the run never rebuilds (0017) |
+| IBM (incoming) and BTA without bullets | Their stories were in the import, but `search_stories` returned 5 stories ranked by the posting, and none matched | Search covers every experience; `complete_run` refuses a bare entry; Jake's-length one-liners added for both (0018) |
+| About 10% of the page empty | The gap was measured from elements, and zero2sudo has an empty block reaching the bottom: measured 0%, really 9.3% | Measured from text lines; page fill may use any story on the page (0016, 0018) |
+| Strong fit despite core gaps | Responsibilities marked nice_to_have; verdict left to judgment | Responsibilities are must_have; verdict rule enforced in `complete_run` (0019) |
+| Fidus campaign work not found; two searches needed | Matching needed half of a long requirement's words: 0 of 12 matched | Related words and a one-third threshold: 7 of 12 match, the rest are real gaps (0018) |
+
+Data added on the preview: three Jake's-length one-liners (IBM, BTA events,
+BTA inquiries; zero2sudo already had ones that fit), and three rules: basic
+tools named by the posting go on the skills line; spell out abbreviations a
+recruiter will not know; `Never use "ADO"`, which also blocks it in
+`check_bullets`.
+
+| Check | Result |
+| --- | --- |
+| Unit tests | 1,903 pass |
+| Render tests (real Chrome) | 10 pass (1 new: an empty full-height block does not make the page look full) |
+| Repro on the real Legrand page | Gap measured 9.3% (was 0%); search finds the Fidus campaign stories and every experience |
+
 #### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's

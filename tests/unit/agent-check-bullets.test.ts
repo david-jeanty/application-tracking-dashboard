@@ -224,11 +224,11 @@ describe("line fill", () => {
     );
   });
 
-  it("reports line fill as a character-estimate warning: Chrome decides line counts", () => {
+  it("fails line fill once the template is calibrated, so fixes happen before the first build", () => {
     const widow = `Reduced costs by 10% ${"x".repeat(130)}`;
     const checked = checkBullets([widow], { targets: NARROW });
-    expect(checked.pass).toBe(true);
-    expect(checked.bullets[0].warnings).toContainEqual(
+    expect(checked.pass).toBe(false);
+    expect(checked.bullets[0].failures).toContainEqual(
       expect.objectContaining({ rule: "line_fill", detail: expect.stringMatching(/^Character estimate: Widow/) }),
     );
     const unchecked = checkBullets([widow], { targets: null });
@@ -239,7 +239,7 @@ describe("line fill", () => {
     const oneLine = `Reduced costs by 10% ${"x".repeat(80)}`;
     const lineFill = (allowed: boolean[]) =>
       checkBullets([oneLine, oneLine.replace("Reduced", "Cut")], { targets: NARROW, oneLineAllowed: allowed })
-        .bullets.filter((bullet) => bullet.warnings.some((w) => w.rule === "line_fill"))
+        .bullets.filter((bullet) => bullet.failures.some((f) => f.rule === "line_fill"))
         .map((bullet) => bullet.index);
     expect(lineFill([false, false])).toEqual([0, 1]);
     expect(lineFill([true, false])).toEqual([1]);

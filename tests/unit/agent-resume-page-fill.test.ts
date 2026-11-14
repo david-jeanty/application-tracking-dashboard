@@ -4,6 +4,7 @@ import { tailoredContentSchema } from "@/lib/agent/resume/content";
 import {
   addBullet,
   cutBullet,
+  entriesMissingBullets,
   pickNextBullet,
   pickWeakestBullet,
   relevance,
@@ -130,5 +131,40 @@ describe("addBullet", () => {
     const next = addBullet(page, "marketing-analyst-intern", FIDUS.bullets[0]);
     expect(next.entries[1].bullets).toEqual([FIDUS.bullets[0]]);
     expect(page.entries[1].bullets).toEqual([]);
+  });
+});
+
+describe("entriesMissingBullets", () => {
+  it("names an entry shown with no bullets when the library has a story for it", () => {
+    const page = content([IRB.bullets[0]], []);
+    expect(entriesMissingBullets(page, ENTRIES, LIBRARY).map((entry) => entry.key)).toEqual(["marketing-analyst-intern"]);
+  });
+
+  it("accepts an entry left out on purpose, or one the library has nothing for", () => {
+    const omitted = tailoredContentSchema.parse({
+      entries: [
+        { key: "information-management-analyst-intern", bullets: [IRB.bullets[0]] },
+        { key: "marketing-analyst-intern", bullets: [], omit: true },
+      ],
+    });
+    expect(entriesMissingBullets(omitted, ENTRIES, LIBRARY)).toEqual([]);
+    const noStories = LIBRARY.filter((story) => story.org !== "Fidus Systems");
+    expect(entriesMissingBullets(content([IRB.bullets[0]], []), ENTRIES, noStories)).toEqual([]);
+  });
+});
+
+describe("pickNextBullet with stories the posting never names", () => {
+  it("still fills the page from them when nothing better is left", () => {
+    const page = content([IRB.bullets[0], IRB.bullets[2]], [FIDUS.bullets[0]]);
+    const pick = pickNextBullet({
+      content: page,
+      pageBullets: page.entries.flatMap((entry) => entry.bullets),
+      entries: ENTRIES,
+      library: LIBRARY,
+      requirements: ["Attend monthly SO&P meetings on inventory levels"],
+      template: "zero2sudo",
+      accepts: () => true,
+    });
+    expect(pick?.entry).toBe("marketing-analyst-intern");
   });
 });

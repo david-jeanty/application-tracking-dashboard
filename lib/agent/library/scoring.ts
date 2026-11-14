@@ -67,7 +67,8 @@ export type StoryRanking = {
   unmatched: number[];
 };
 
-export const MAX_STORIES = 5;
+/** Stories ranked for the posting; every other experience then gets its best story too. */
+export const MAX_STORIES = 8;
 export const MAX_VARIANTS_PER_STORY = 2;
 /** Longest story summary (its facts) a search result carries. */
 export const MAX_SUMMARY_CHARS = 700;
@@ -110,13 +111,67 @@ function lower(values: readonly string[]): Set<string> {
   return new Set(values.map((value) => value.trim().toLowerCase()));
 }
 
-/** A requirement matches when at least half of its words appear. */
+/**
+ * Words a posting uses for work David's stories describe in other words
+ * (decision record 0018). Keys and values are stems, as `tokenize` makes
+ * them. Only true neighbours belong here: a synonym that turns a real gap
+ * (forecasting, pricing, inventory) into a match would mislead the fit read.
+ */
+const RELATED: Readonly<Record<string, readonly string[]>> = {
+  collateral: ["content", "case", "studi", "video", "youtube", "title", "description"],
+  catalog: ["content", "case", "studi", "video", "title", "description"],
+  bulletin: ["content", "case", "studi", "video", "title", "description"],
+  brochure: ["content", "case", "studi", "video", "title", "description"],
+  promotional: ["content", "campaign", "outreach", "audience", "visibility"],
+  campaign: ["outreach", "audience", "linkedin", "reddit", "visibility", "email", "hubspot"],
+  marcomm: ["marketing", "content"],
+  marketing: ["seo", "visibility", "audience", "content"],
+  launch: ["launch", "launched"],
+  metric: ["kpi", "dashboard", "track", "metric"],
+  kpi: ["kpi", "dashboard", "metric"],
+  process: ["triage", "workflow", "redesign", "backlog", "standard"],
+  workflow: ["workflow", "triage", "automat"],
+  improvement: ["reduc", "cut", "improv", "eliminat", "redesign"],
+  roadmap: ["priorit", "requirement", "rescop"],
+  customer: ["user", "interview", "feedback", "client"],
+  user: ["user", "interview", "feedback"],
+  stakeholder: ["stakeholder", "requirement", "director", "client"],
+  engineer: ["engineer", "engineering"],
+  engineering: ["engineer", "engineering"],
+  requirement: ["requirement", "scope", "rescop"],
+  detail: ["audit", "tracker", "timeline", "data", "quality"],
+  organizational: ["tracker", "timeline", "deliverable", "event", "logistic"],
+  communication: ["present", "document", "email", "call", "outreach"],
+  analytic: ["dashboard", "data", "sql", "power", "kpi"],
+  data: ["data", "record", "sql", "dashboard"],
+  ai: ["ai", "claude", "llm", "mcp"],
+};
+
+/** A requirement word is present when it, or a related word, is in the story. */
+function hits(token: string, documentTokens: ReadonlySet<string>): boolean {
+  return documentTokens.has(token) || (RELATED[token] ?? []).some((related) => documentTokens.has(related));
+}
+
+/**
+ * A requirement matches when at least a third of its words are present (and
+ * at least two, so one shared word is not a match). Postings write long
+ * requirements; requiring half their words matched almost nothing.
+ */
 function requirementMatches(
   requirementTokens: ReadonlySet<string>,
   documentTokens: ReadonlySet<string>,
 ): boolean {
   if (requirementTokens.size === 0) return false;
-  return overlap(requirementTokens, documentTokens) * 2 >= requirementTokens.size;
+  let present = 0;
+  for (const token of requirementTokens) if (hits(token, documentTokens)) present += 1;
+  const needed = requirementTokens.size <= 2 ? requirementTokens.size : Math.max(2, Math.ceil(requirementTokens.size / 3));
+  return present >= needed;
+}
+
+function expanded(tokens: ReadonlySet<string>): Set<string> {
+  const out = new Set(tokens);
+  for (const token of tokens) for (const related of RELATED[token] ?? []) out.add(related);
+  return out;
 }
 
 function rankVariants(
@@ -160,12 +215,18 @@ function shorten(text: string | null, max: number): string | null {
 export function rankStories(
   stories: readonly LibraryStory[],
   query: StoryQuery,
-  options: { limit?: number } = {},
+  options: {
+    limit?: number;
+    /** Also rank stories that share nothing with the posting (page fill uses this). */
+    includeUnscored?: boolean;
+    /** Add the best story of every experience the ranking left out. Default true. */
+    coverEveryExperience?: boolean;
+  } = {},
 ): StoryRanking {
   const requirementTokens = query.requirements.map(
     (requirement) => new Set(tokenize(requirement)),
   );
-  const queryTokens = new Set(requirementTokens.flatMap((set) => [...set]));
+  const queryTokens = expanded(new Set(requirementTokens.flatMap((set) => [...set])));
   const queryAngles = lower(query.angles);
   const matchedAnywhere = new Set<number>();
 
@@ -204,25 +265,56 @@ export function rankStories(
     return { story, matches, score };
   });
 
-  const ranked = scored
-    .filter((entry) => entry.score > 0 && entry.story.variants.length > 0)
+  const ordered = scored
+    .filter((entry) => entry.story.variants.length > 0 && (options.includeUnscored || entry.score > 0))
     .sort(
       (a, b) =>
         b.score - a.score ||
         a.story.label.localeCompare(b.story.label) ||
         a.story.id.localeCompare(b.story.id),
-    )
-    .slice(0, options.limit ?? MAX_STORIES)
-    .map(({ story, matches, score }) => ({
-      story_id: story.id,
-      label: story.label,
-      summary: shorten(story.summary, MAX_SUMMARY_CHARS),
-      org: story.org,
-      title: story.official_title,
-      score,
-      matches,
-      variants: rankVariants(story.variants, query, queryTokens, queryAngles),
-    }));
+    );
+  const top = ordered.slice(0, options.limit ?? MAX_STORIES);
+
+  // Every experience on the resume needs bullets, so each one the ranking
+  // left out gets its best story too, scored or not (decision record 0018).
+  // Without this a posting that never names an experience (the incoming IBM
+  // role, BTA) gave the run nothing to write for it.
+  const experienceOf = (story: LibraryStory) => `${story.org}\u0000${story.official_title}`;
+  const covered = new Set(top.map((entry) => experienceOf(entry.story)));
+  const coverage: typeof ordered = [];
+  if (options.coverEveryExperience ?? true) {
+    const bestUnscored = [...scored]
+      .filter((entry) => entry.story.variants.length > 0)
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          b.story.variants.filter((variant) => variant.style === "house").length -
+            a.story.variants.filter((variant) => variant.style === "house").length ||
+          a.story.label.localeCompare(b.story.label) ||
+          a.story.id.localeCompare(b.story.id),
+      );
+    for (const entry of bestUnscored) {
+      const key = experienceOf(entry.story);
+      if (covered.has(key)) continue;
+      covered.add(key);
+      coverage.push(entry);
+    }
+  }
+
+  const ranked = [
+    ...top.map((entry) => ({ entry, variants: MAX_VARIANTS_PER_STORY })),
+    // Stories added only so an experience has material carry one wording.
+    ...coverage.map((entry) => ({ entry, variants: 1 })),
+  ].map(({ entry: { story, matches, score }, variants }) => ({
+    story_id: story.id,
+    label: story.label,
+    summary: shorten(story.summary, MAX_SUMMARY_CHARS),
+    org: story.org,
+    title: story.official_title,
+    score,
+    matches,
+    variants: rankVariants(story.variants, query, queryTokens, queryAngles).slice(0, variants),
+  }));
 
   const unmatched = query.requirements
     .map((_, index) => index)

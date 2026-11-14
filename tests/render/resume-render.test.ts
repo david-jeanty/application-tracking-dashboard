@@ -57,15 +57,35 @@ describe("renderResumeHtml in real Chrome", () => {
     expect(allowed.failures.map((failure) => failure.rule)).toContain("short_line");
   });
 
+  it("measures the gap from the last line of text, not from an empty block that fills the page", async () => {
+    // zero2sudo holds an empty block that stretches to the bottom of the
+    // content area; measured by elements, every page looked 100% full.
+    const html = `<!doctype html><html><head><style>
+      @page { size: letter; margin: 0; }
+      body { margin: 0; }
+      .pagedjs_page { width: 8.5in; height: 11in; overflow: hidden; }
+      .pagedjs_page_content { height: 10in; margin-top: 0.5in; position: relative; }
+      .filler { position: absolute; inset: 0; }
+      .block { height: 8in; }
+    </style></head><body><div class="pagedjs_pages"><div class="pagedjs_page"><div class="pagedjs_page_content">
+      <div class="filler"></div><p class="block">Experience</p><ul><li>${LONG}</li></ul>
+    </div></div></div></body></html>`;
+    const outcome = await renderResumeHtml(html, { withPdf: false });
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.measurement.bottom_gap).toBeGreaterThan(0.1);
+    expect(evaluateLayout(outcome.measurement, [LONG]).failures.map((failure) => failure.rule)).toContain("page_not_full");
+  });
+
   it("measures the empty space above and below the content as a share of the page height", async () => {
     const page = (contentHeight: string) => `<!doctype html><html><head><style>
       @page { size: letter; margin: 0; }
       body { margin: 0; }
       .pagedjs_page { width: 8.5in; height: 11in; overflow: hidden; }
       .pagedjs_page_content { height: 10in; margin-top: 0.5in; }
-      .block { height: ${contentHeight}; background: #eee; }
+      .block { height: ${contentHeight}; margin: 0; background: #eee; }
     </style></head><body><div class="pagedjs_pages"><div class="pagedjs_page"><div class="pagedjs_page_content">
-      <div class="block"></div><ul><li>${LONG}</li></ul>
+      <p class="block">Experience</p><ul><li>${LONG}</li></ul>
     </div></div></div></body></html>`;
 
     const short = await renderResumeHtml(page("8in"), { withPdf: false });

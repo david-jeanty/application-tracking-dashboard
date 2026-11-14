@@ -360,12 +360,12 @@ describe("check_bullets", () => {
       two_line_max: 220,
       calibrated_at: "2026-11-13T00:00:00.000Z",
     });
-    const calibrated = json<{ pass: boolean; bullets: { warnings: { rule: string }[] }[] }>(
+    const calibrated = json<{ pass: boolean; bullets: { failures: { rule: string }[] }[] }>(
       await call("check_bullets", { template: "zero2sudo", bullets: [widow] }),
     );
-    // Chrome decides line counts, so a character estimate is a warning.
-    expect(calibrated.pass).toBe(true);
-    expect(calibrated.bullets[0].warnings.map((warning) => warning.rule)).toContain("line_fill");
+    // Calibrated targets fail line fill, so the run fixes it before building.
+    expect(calibrated.pass).toBe(false);
+    expect(calibrated.bullets[0].failures.map((failure) => failure.rule)).toContain("line_fill");
   });
 
   it("takes the one-line bullets from one_line_ok", async () => {

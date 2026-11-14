@@ -89,10 +89,46 @@ describe("rankStories", () => {
       angles: [],
       template: "jakes",
     });
-    expect(ranking.stories.length).toBeLessThanOrEqual(MAX_STORIES);
-    for (const story of ranking.stories) {
-      expect(story.variants.length).toBeLessThanOrEqual(MAX_VARIANTS_PER_STORY);
+    const ranked = ranking.stories.slice(0, MAX_STORIES);
+    const coverage = ranking.stories.slice(MAX_STORIES);
+    for (const story of ranked) expect(story.variants.length).toBeLessThanOrEqual(MAX_VARIANTS_PER_STORY);
+    // Past the ranked stories, only one story per experience not yet shown, one wording each.
+    const shown = new Set(ranked.map((story) => `${story.org}|${story.title}`));
+    for (const story of coverage) {
+      expect(shown.has(`${story.org}|${story.title}`)).toBe(false);
+      shown.add(`${story.org}|${story.title}`);
+      expect(story.variants).toHaveLength(1);
     }
+  });
+
+  it("gives every experience at least its best story, even one the posting never names", () => {
+    const ranking = rankStories(LIBRARY, {
+      requirements: ["Ticket backlog reduction and request triage"],
+      angles: [],
+      template: "zero2sudo",
+    });
+    const orgs = new Set(ranking.stories.map((story) => story.org));
+    for (const story of LIBRARY) expect(orgs.has(story.org)).toBe(true);
+  });
+
+  it("matches long posting requirements through the words David's stories use", () => {
+    const ranking = rankStories(LIBRARY, {
+      requirements: ["Develop catalogs, sell sheets, product bulletins and promotional campaigns with sales and marcomm teams"],
+      angles: [],
+      template: "zero2sudo",
+    });
+    const matched = ranking.stories.filter((story) => story.matches.includes(0)).map((story) => story.org);
+    expect(matched).toContain("Fidus Systems");
+    expect(ranking.unmatched).toEqual([]);
+  });
+
+  it("leaves a true gap unmatched", () => {
+    const ranking = rankStories(LIBRARY, {
+      requirements: ["Attend monthly SO&P meetings and act on inventory levels and production capacity"],
+      angles: [],
+      template: "zero2sudo",
+    });
+    expect(ranking.unmatched).toEqual([0]);
   });
 
   it("prefers house style, the requested angle and the template among variants", () => {
