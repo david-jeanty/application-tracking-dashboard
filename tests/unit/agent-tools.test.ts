@@ -282,6 +282,47 @@ describe("the story library", () => {
     expect(result.content[0].text).toMatch(/experiences\[1\] repeats an earlier experience/);
   });
 
+  it("offers first the wordings that fit the template and pass the saved rules", async () => {
+    store.templates.push({
+      id: "t1",
+      name: "zero2sudo",
+      use_for: ["tpm"],
+      one_line_chars: 130,
+      two_line_min: 240,
+      two_line_max: 274,
+      calibrated_at: "2026-11-14T00:00:00.000Z",
+    });
+    json(await call("add_rule", { scope: "bullets", text: 'Never use "ADO"' }));
+    const variant = (id: string, text: string) => ({
+      id, text, style: "story_voice" as const, angles: [], template_fit: [], char_count: text.length,
+      is_gold: false, explain_note: null, created_at: "2026-11-14T00:00:00.000Z",
+    });
+    const fits = "Selected for IBM Consulting's Federal Practice, supporting business transformation work for federal clients.";
+    const tooLong = `${fits.slice(0, -1)} and Canadian federal government agencies.`;
+    store.library = [
+      {
+        id: "s-ibm", label: "Federal Practice placement", summary: null, tags: [], org: "IBM",
+        official_title: "Incoming Business Transformation Consulting Intern",
+        variants: [variant("v-long", tooLong), variant("v-fits", fits)],
+      },
+      {
+        id: "s-ado", label: "Ticketing", summary: null, tags: [], org: "IRB", official_title: "Analyst",
+        variants: [
+          variant("v-ado", "Recommended ADO to replace FootPrints, cutting the open ticket backlog by 35% after the triage redesign."),
+          variant("v-spelled", "Recommended Azure DevOps to replace FootPrints, cutting the open ticket backlog by 35% after the triage redesign."),
+        ],
+      },
+    ];
+    const ranking = json<{ stories: { story_id: string; variants: { id: string }[] }[] }>(
+      await call("search_stories", { requirements: ["Ticket backlog triage"], angles: [], template: "zero2sudo" }),
+    );
+    const first = (storyId: string) => ranking.stories.find((story) => story.story_id === storyId)?.variants[0]?.id;
+    // A one-liner that fits zero2sudo's 130 characters, under an experience allowed one line.
+    expect(first("s-ibm")).toBe("v-fits");
+    // "ADO" is blocked by a saved rule, so the spelled-out wording comes first.
+    expect(first("s-ado")).toBe("v-spelled");
+  });
+
   it("ranks stories for the requirements, at most 5", async () => {
     await importIrb();
     const ranking = json<{ stories: { label: string; variants: { text: string }[] }[]; unmatched: number[] }>(

@@ -174,16 +174,25 @@ function expanded(tokens: ReadonlySet<string>): Set<string> {
   return out;
 }
 
+/**
+ * How usable a wording is as it stands: positive when it fits the template's
+ * calibrated line length, negative when a saved rule blocks it. Supplied by
+ * the caller, which knows the template and the rules.
+ */
+export type VariantUsability = (variant: LibraryVariant, story: LibraryStory) => number;
+
 function rankVariants(
-  variants: readonly LibraryVariant[],
+  story: LibraryStory,
   query: StoryQuery,
   queryTokens: ReadonlySet<string>,
   queryAngles: ReadonlySet<string>,
+  usability?: VariantUsability,
 ): RankedVariant[] {
   const template = query.template.trim().toLowerCase();
-  return variants
+  return story.variants
     .map((variant) => {
       const score =
+        (usability ? usability(variant, story) : 0) +
         (variant.style === "house" ? 3 : 0) +
         2 * overlap(lower(variant.angles), queryAngles) +
         (lower(variant.template_fit).has(template) ? 2 : 0) +
@@ -221,6 +230,8 @@ export function rankStories(
     includeUnscored?: boolean;
     /** Add the best story of every experience the ranking left out. Default true. */
     coverEveryExperience?: boolean;
+    /** Prefers wordings that fit the page and pass the saved rules. */
+    usability?: VariantUsability;
   } = {},
 ): StoryRanking {
   const requirementTokens = query.requirements.map(
@@ -313,7 +324,7 @@ export function rankStories(
     title: story.official_title,
     score,
     matches,
-    variants: rankVariants(story.variants, query, queryTokens, queryAngles).slice(0, variants),
+    variants: rankVariants(story, query, queryTokens, queryAngles, options.usability).slice(0, variants),
   }));
 
   const unmatched = query.requirements

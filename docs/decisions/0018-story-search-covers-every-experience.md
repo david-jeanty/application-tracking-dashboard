@@ -5,6 +5,7 @@
 **Decision.**
 - A requirement matches when a third of its words (at least two) appear in the story, counting a short list of related words David's stories use for the same work (`RELATED` in `lib/agent/library/scoring.ts`: campaigns and outreach and audiences, collateral and content and case studies, metrics and KPIs and dashboards). Real gaps such as forecasting, pricing, inventory and SO&P have no related words, so they stay gaps.
 - `search_stories` returns up to 8 ranked stories (2 wordings each), then the best story of every experience not yet shown (1 wording), in one call. Its size cap rose to 24 KB; David's library measures about 16 KB for a 12-requirement posting.
+- Among a story's wordings, search offers first the ones that can go on the page as they are: the right length for the template's calibrated lines (one line where the experience allows it), and not blocked by a saved rule such as `Never use "ADO"`.
 - `complete_run` refuses an entry left without bullets when the library has a story for it; one-line bullets are fine where the experience allows them.
 - Page fill measures the gap from the first and last lines of text, and can add from any story whose experience is on the page, not only stories that share words with the posting.
 

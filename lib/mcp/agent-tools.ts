@@ -2,7 +2,7 @@ import type { McpServer, ToolAnnotations } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 import { buildApplicationBrief, type BriefSource } from "@/lib/agent/brief";
 import { serializeCapped, truncate, type CappedTool } from "@/lib/agent/caps";
-import { checkBullets, type LineTargets } from "@/lib/agent/checks/bullets";
+import { checkBullets, lineFillCheck, type LineTargets } from "@/lib/agent/checks/bullets";
 import { phrasesFromRules } from "@/lib/agent/checks/text-rules";
 import { pickDuplicate } from "@/lib/agent/dedupe";
 import {
@@ -12,7 +12,7 @@ import {
   type LedgerStatus,
   type RunStep,
 } from "@/lib/agent/ledger";
-import { rankStories, tokenize, type LibraryStory } from "@/lib/agent/library/scoring";
+import { rankStories, tokenize, type LibraryStory, type VariantUsability } from "@/lib/agent/library/scoring";
 import { assessFit, VERDICT_LABELS, verdictAllowed } from "@/lib/agent/fit";
 import { isAgentOwner } from "@/lib/agent/owner";
 import { buildPlaybook, type PlaybookContext } from "@/lib/agent/playbook";
@@ -507,9 +507,29 @@ export function registerAgentTools(
       annotations: READ_ONLY,
     },
     async ({ requirements, angles, template }, repository) => {
-      const { data, error } = await repository.listLibrary();
-      if (error || !data) return dbFail("Reading the library", error);
-      return { ok: true, value: rankStories(data, { requirements, angles, template }) };
+      const [library, templateRow, rules] = await Promise.all([
+        repository.listLibrary(),
+        repository.readTemplate(template),
+        repository.readRules(["bullets", "all"]),
+      ]);
+      if (library.error || !library.data) return dbFail("Reading the library", library.error);
+      if (templateRow.error) return dbFail("Reading the template", templateRow.error);
+      if (rules.error || !rules.data) return dbFail("Reading saved rules", rules.error);
+      // Offer first the wordings that can go on the page as they are: the
+      // right length for this template, and not blocked by a saved rule.
+      const targets = targetsOf(templateRow.data);
+      const blocked = phrasesFromRules(rules.data.map((rule) => rule.text));
+      const usability: VariantUsability = (variant, story) => {
+        const plain = variant.text.replace(/\*\*/g, "");
+        const isBlocked = blocked.some((phrase) => phrase.pattern.test(plain));
+        const owner = story.org === story.official_title ? { title: story.org, org: null } : { title: story.official_title, org: story.org };
+        const fits =
+          targets !== null &&
+          (lineFillCheck(plain.length, targets, { oneLineAllowed: allowsOneLine(owner) }) === null ||
+            lineFillCheck(plain.length, targets, { oneLineAllowed: allowsOneLine({ title: story.org, org: null }) }) === null);
+        return (fits ? 4 : 0) - (isBlocked ? 8 : 0);
+      };
+      return { ok: true, value: rankStories(library.data, { requirements, angles, template }, { usability }) };
     },
   );
 
