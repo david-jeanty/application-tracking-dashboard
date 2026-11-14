@@ -759,6 +759,29 @@ past postings, the skipped-posting fit read, a timed run, the build cap on a
 real build, and the phone app. The build cap is covered on the preview
 database by the pgTAP suite.
 
+#### Step 10: Chrome on the preview (2026-11-14)
+
+`calibrate_template` failed with `launch_failed` on the preview for both
+templates. The tool only reported the reason, so it now also returns (and
+logs) Chrome's first error line. That showed the cause: `Cannot find module
+'/var/task/node_modules/playwright-core/browsers.json'`. playwright-core
+reads that file by a computed path that build tracing does not follow, so it
+was never copied into the function. `next.config.ts` now copies all of
+playwright-core (13 MB) into `/api/mcp` next to the compressed Chrome, and
+`tests/unit/agent-function-files.test.ts` keeps both includes. Not the cause:
+memory, timeout, Node 24 or the Preview env vars.
+
+Calibrated on the preview against David's base resumes (12 measured lines
+each):
+
+| Template | One line | Two-liners |
+| --- | --- | --- |
+| zero2sudo | 130 | 240 to 274 |
+| jakes | 107 | 200 to 232 |
+
+Both entry lists are the library's experiences, with the incoming IBM role
+and BTA marked `one_line_ok`.
+
 #### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's
