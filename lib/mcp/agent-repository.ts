@@ -49,6 +49,8 @@ const BUILD_TEMPLATE_COLUMNS =
 
 /** The most applications read to look for a duplicate posting. */
 const DEDUPE_SCAN_LIMIT = 2000;
+/** How far before a run's first call its opening get_playbook read can be. */
+const RUN_START_WINDOW_MS = 15 * 60 * 1000;
 
 export function createAgentRepositoryForClient(
   supabase: SupabaseClient,
@@ -634,11 +636,27 @@ export function createAgentRepositoryForClient(
         .order("created_at", { ascending: true })
         .returns<{ created_at: string }[]>();
       if (own.error) return { data: null, error: own.error };
-      const first = own.data?.[0]?.created_at;
+      const firstOwn = own.data?.[0]?.created_at;
       const last = own.data?.at(-1)?.created_at;
-      if (!first || !last) {
+      if (!firstOwn || !last) {
         return { data: { tool_calls: 0, request_bytes: 0, response_bytes: 0, est_tokens: 0, by_tool: {} }, error: null };
       }
+      // A run starts with get_playbook, before its application exists. The
+      // latest playbook read shortly before the first own call belongs to it.
+      const windowStart = new Date(Date.parse(firstOwn) - RUN_START_WINDOW_MS).toISOString();
+      const opening = await supabase
+        .from("usage_log")
+        .select("created_at")
+        .eq("user_id", userId)
+        .eq("tool", "get_playbook")
+        .is("application_id", null)
+        .gte("created_at", windowStart)
+        .lte("created_at", firstOwn)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .returns<{ created_at: string }[]>();
+      if (opening.error) return { data: null, error: opening.error };
+      const first = opening.data?.[0]?.created_at ?? firstOwn;
       // The run's own calls, and calls that named no application made while
       // it ran (search_stories and check_bullets often do not pass one).
       const rows = await supabase

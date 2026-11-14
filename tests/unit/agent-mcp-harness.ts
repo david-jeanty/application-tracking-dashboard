@@ -309,9 +309,15 @@ export class FakeAgentStore {
       },
       readRunUsage: async (applicationId) => {
         const indexes = this.usage.flatMap((row, index) => (row.applicationId === applicationId ? [index] : []));
+        // The run opens with the latest get_playbook read before its first own call.
+        const opening = indexes.length
+          ? this.usage.findLastIndex(
+              (row, index) => index < indexes[0] && row.tool === "get_playbook" && row.applicationId === null,
+            )
+          : -1;
         const rows = indexes.length
           ? this.usage
-              .slice(indexes[0], indexes[indexes.length - 1] + 1)
+              .slice(opening >= 0 ? opening : indexes[0], indexes[indexes.length - 1] + 1)
               .filter((row) => row.applicationId === applicationId || row.applicationId === null)
           : [];
         const by_tool: Record<string, number> = {};

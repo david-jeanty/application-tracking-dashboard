@@ -218,6 +218,18 @@ describe("get_run_state and get_application_brief", () => {
     expect(state.usage.est_tokens).toBe(Math.ceil((state.usage.request_bytes + state.usage.response_bytes) / 4));
   });
 
+  it("counts the playbook read that starts the run, before the application exists", async () => {
+    json(await call("get_playbook", { phase: "run" }));
+    json(await call("get_playbook", { phase: "run" }));
+    const { application_id } = json<{ application_id: string }>(await call("create_application_from_jd", TINDER));
+    const state = json<{ usage: { by_tool: Record<string, number>; response_bytes: number } }>(
+      await call("get_run_state", { application_id }),
+    );
+    // Only the latest playbook read belongs to this run.
+    expect(state.usage.by_tool).toEqual({ get_playbook: 1, create_application_from_jd: 1 });
+    expect(state.usage.response_bytes).toBeGreaterThan(5_000);
+  });
+
   it("keeps the brief under 300 words, must-haves first", async () => {
     const requirements = Array.from({ length: 40 }, (_, index) => ({
       text: `Requirement number ${index} about stakeholder communication and cross-functional delivery at scale`,
