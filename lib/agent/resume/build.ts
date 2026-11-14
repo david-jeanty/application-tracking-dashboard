@@ -378,10 +378,15 @@ export async function calibrateTemplate(
     template: input.template,
     path: rendered.ok ? "chromium" : "skipped",
     reason: rendered.ok ? undefined : rendered.reason,
+    // Chrome's own first error line (paths, flags; never content or keys),
+    // so a failure on the server can be diagnosed from the logs.
+    detail: rendered.ok ? undefined : rendered.detail,
     duration_ms: rendered.durationMs,
   });
   if (!rendered.ok) {
-    return fail(`Calibration measures the real page and Chrome could not render it (${rendered.reason}). Try again.`);
+    return fail(
+      `Calibration measures the real page and Chrome could not render it (${rendered.reason}: ${rendered.detail}). Try again.`,
+    );
   }
 
   const lengths = fullLineLengths(rendered.measurement);
@@ -761,6 +766,7 @@ export async function buildResume(
     build: buildNumber,
     path: report.path,
     reason: report.reason,
+    detail: report.path === "skipped" ? report.detail : undefined,
     layout_check: layoutCheck,
     duration_ms: Date.now() - startedAt,
   });
