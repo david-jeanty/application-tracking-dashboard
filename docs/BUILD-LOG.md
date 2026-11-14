@@ -733,6 +733,32 @@ bullet (decision record 0016).
   2, which only holds on an empty database; it now counts its own two test
   users, so the suite gives the same answer on the preview. Local: 203 pass.
 
+#### Step 10: hosted checks and the import (2026-11-14)
+
+David connected the preview as a second custom connector ("interndex
+automate") with his preview account, after turning Deployment Protection
+off, setting the preview Supabase Site URL and `NEXT_PUBLIC_SITE_URL` (Preview,
+agent-specs) to the preview address.
+
+| Check | Result |
+| --- | --- |
+| Owner's server | 21 tools: the 5 tracker tools plus all 16 agent tools |
+| Non-owner's server (disposable preview user, deleted after) | Exactly the 5 tracker tools; instructions byte-identical to today's; `get_playbook`, `import_library`, `search_stories`, `complete_run` by name: "Tool not found"; tracker still works |
+| RLS on David's real rows | The disposable user sees 0 rows in every agent table; David sees his; a rule written in his name is refused by the policy |
+| OAuth metadata | The preview advertises its own `/api/mcp` and the preview Supabase as its authorization server |
+| `import_library`, first run | 7 experiences, 22 stories, 94 variants added, profile saved; every field compared with the payload in the database: identical |
+| `import_library`, second run (whole payload, one call) | 0 added, 94 existing; row counts unchanged (idempotent, test plan item 6) |
+| `add_rule` | 5 rules saved: the Interndex rule was over the 500-character cap, so it is saved as two (launch, repositioning) with the same wording |
+| `get_playbook` | Serves all 5 rules and the full profile (test plan item 5) |
+| Saved rule as a blocklist | `check_bullets` now fails "pull requests" as filler |
+| Size caps (`usage_log`) | Largest results: `get_playbook` 21 KB of 40, `search_stories` 8.2 KB of 12 |
+
+**Not yet run (needs Claude in the Job Search project):** template
+calibration (needs the two base resume ids in resume.lol), full runs on the
+past postings, the skipped-posting fit read, a timed run, the build cap on a
+real build, and the phone app. The build cap is covered on the preview
+database by the pgTAP suite.
+
 #### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's
