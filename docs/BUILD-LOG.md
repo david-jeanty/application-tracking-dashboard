@@ -858,7 +858,7 @@ two `check_bullets` 1,601, `complete_run` 933, `create_application_from_jd`
 | Run steps | Degree risk, club-role framing, bold, bullet counts, interests, exact rewordings and the usage line are all served |
 | Saved rules | 9, the BTA framing rule included |
 | Profile interests | Saved from the latest resume: "Guitar, rock climbing, baking, learning pickleball, Ottawa Senators hockey"; David can change it with `import_library` |
-| Ramp usage from `get_run_state` | 6 run calls plus the opening playbook read counted; calls made later for other work left out |
+| Ramp usage from `get_run_state` | The run's 6 calls (opening playbook read included) plus one later `get_run_state` read; calls made later for other work left out |
 
 #### Still open for step 10
 
