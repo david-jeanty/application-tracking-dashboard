@@ -63,7 +63,14 @@ values
   );
 
 select is(
-  (select count(*)::integer from public.profiles),
+  (
+    select count(*)::integer
+    from public.profiles
+    where user_id in (
+      '10000000-0000-0000-0000-000000000001',
+      '20000000-0000-0000-0000-000000000002'
+    )
+  ),
   2,
   'auth user creation creates exactly one profile per user'
 );

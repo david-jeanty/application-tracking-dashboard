@@ -717,6 +717,22 @@ bullet (decision record 0016).
 | Render tests (real Chrome) | 9 pass (1 new: top and bottom gap measured on a real page) |
 | Lint, typecheck | Pass (only the 2 existing lint warnings) |
 
+#### Step 10: preview database (2026-11-14)
+
+- Preview project `interndex-preview` (us-east-1). All 10 migrations applied
+  through the Supabase management API (this session cannot open database
+  connections), each in its own transaction and recorded in
+  `supabase_migrations.schema_migrations`, so `supabase db push` will not
+  run them again. 14 public tables, all with RLS on; the private `resumes`
+  bucket exists.
+- David's preview account was created before the schema, so the sign-up
+  trigger never made his `profiles` row. Backfilled once with the trigger's
+  own name rule.
+- pgTAP on the preview: 203 of 203 pass. One older assertion in
+  `001_foundation_rls` counted every profile in the database and expected
+  2, which only holds on an empty database; it now counts its own two test
+  users, so the suite gives the same answer on the preview. Local: 203 pass.
+
 #### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's
