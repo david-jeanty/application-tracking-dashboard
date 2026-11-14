@@ -1,7 +1,8 @@
 import type { McpServer, ToolAnnotations } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 import { buildApplicationBrief, type BriefSource } from "@/lib/agent/brief";
-import { serializeCapped, truncate, type CappedTool } from "@/lib/agent/caps";
+import { byteLength, serializeCapped, truncate, type CappedTool } from "@/lib/agent/caps";
+import { boldProblems } from "@/lib/agent/checks/bold";
 import { checkBullets, lineFillCheck, type LineTargets } from "@/lib/agent/checks/bullets";
 import { phrasesFromRules } from "@/lib/agent/checks/text-rules";
 import { pickDuplicate } from "@/lib/agent/dedupe";
@@ -13,11 +14,11 @@ import {
   type RunStep,
 } from "@/lib/agent/ledger";
 import { rankStories, tokenize, type LibraryStory, type VariantUsability } from "@/lib/agent/library/scoring";
-import { assessFit, VERDICT_LABELS, verdictAllowed } from "@/lib/agent/fit";
+import { assessFit, degreeRisks, VERDICT_LABELS, verdictAllowed } from "@/lib/agent/fit";
 import { isAgentOwner } from "@/lib/agent/owner";
 import { buildPlaybook, type PlaybookContext } from "@/lib/agent/playbook";
 import { allowsOneLine } from "@/lib/agent/resume/line-rules";
-import { entriesMissingBullets } from "@/lib/agent/resume/page-fill";
+import { bulletCountProblems } from "@/lib/agent/resume/page-fill";
 import {
   buildResume,
   calibrateTemplate,
@@ -114,6 +115,21 @@ export type AgentApplicationPatch = Partial<
   AgentApplicationExtras & { job_description: string; application_url: string }
 >;
 
+/**
+ * A run's usage as the server can see it: tool calls, and the bytes they sent
+ * in and got back (estimated tokens are bytes / 4). Calls that named no
+ * application but fell between this run's first and last call count too.
+ * It cannot see the chat's own tokens (the conversation, reasoning, project
+ * files), so it is a lower bound.
+ */
+export type RunUsage = {
+  tool_calls: number;
+  request_bytes: number;
+  response_bytes: number;
+  est_tokens: number;
+  by_tool: Record<string, number>;
+};
+
 export type BriefRows = Omit<BriefSource, "runState"> & { ledger: LedgerRow[] };
 
 export type NewVariant = {
@@ -198,7 +214,9 @@ export type AgentRepository = {
   /** Every template's base resume id, so the resume.lol client never writes one. */
   listTemplateRefs: () => Read<string[]>;
   /** Never throws: a usage-log failure must not fail the tool call. */
-  logUsage: (applicationId: string | null, tool: string, bytes: number) => Promise<void>;
+  logUsage: (applicationId: string | null, tool: string, bytes: number, requestBytes?: number) => Promise<void>;
+  /** What one application's run has used so far, from usage_log. */
+  readRunUsage: (applicationId: string) => Read<RunUsage>;
 } & BuildRepository;
 
 /**
@@ -222,6 +240,12 @@ export type AgentRepositoryFactory = (identity: {
 const NOT_SIGNED_IN = "Not signed in to Interndex.";
 const NOT_AVAILABLE = "This tool is not available for this account.";
 const NOT_IN_TRACKER = "No application with that id is in this tracker.";
+
+/** The run's usage for a result, or nothing when it cannot be read. */
+async function usageField(repository: AgentRepository, applicationId: string) {
+  const usage = await repository.readRunUsage(applicationId);
+  return usage.data ? { usage: usage.data } : {};
+}
 
 type Outcome =
   | { ok: true; value: unknown; applicationId?: string | null }
@@ -298,7 +322,7 @@ function registerAgentTool<Schema extends z.ZodObject>(
       const applicationId =
         outcome.applicationId ??
         ((args as { application_id?: string }).application_id ?? null);
-      await repository.logUsage(applicationId, name, serialized.bytes);
+      await repository.logUsage(applicationId, name, serialized.bytes, byteLength(JSON.stringify(rawArgs ?? {})));
 
       if (!serialized.ok) {
         return toolError(
@@ -370,6 +394,7 @@ export function registerAgentTools(
         value: {
           application_id,
           ...summarizeRunState(brief.data.ledger),
+          ...(await usageField(repository, application_id)),
           resume: brief.data.resume
             ? {
                 status: brief.data.resume.status,
@@ -861,7 +886,7 @@ export function registerAgentTools(
       // Check everything before saving anything. Headings come from the library.
       const resolved = await resolveTemplateSkeleton(repository, layout.skeleton);
       if (!resolved.ok) return fail(`Nothing was saved. ${resolved.message}`);
-      const rendered = renderTailoredResume(resolved.value.skeleton, args.resume);
+      const rendered = renderTailoredResume(resolved.value.skeleton, args.resume, { interests: resolved.value.interests });
       if (!rendered.ok) return fail(`Nothing was saved. ${rendered.problems.join(" ")}`);
       // The verdict follows from the must-have gaps (decision record 0019).
       const brief = await repository.readBriefRows(args.application_id);
@@ -871,6 +896,21 @@ export function registerAgentTools(
       const outOfRange = args.fit_read.gap_requirements.filter((index) => index >= requirements.length);
       if (outOfRange.length) {
         return fail(`Nothing was saved: gap_requirements ${outOfRange.join(", ")} are not requirements of this posting (it has ${requirements.length}).`);
+      }
+      // A degree in fields David's degree does not cover is a risk the fit
+      // read must name and count (decision record 0019).
+      const sources = await repository.readResumeSources();
+      const degreeGaps = degreeRisks(requirements, sources.data?.profile ?? null).filter(
+        (index) => !args.fit_read.gap_requirements.includes(index),
+      );
+      if (degreeGaps.length) {
+        return fail(
+          `Nothing was saved: the posting asks for ${degreeGaps
+            .map((index) => `"${requirements[index].text}"`)
+            .join(" and ")}, which David's degree (${[sources.data?.profile?.degree_level, sources.data?.profile?.program]
+            .filter(Boolean)
+            .join(", ")}) does not cover. Add it to gap_requirements and name it as a risk in the fit read.`,
+        );
       }
       const fit = assessFit(requirements, args.fit_read.gap_requirements);
       if (!verdictAllowed(args.fit_read.verdict, fit)) {
@@ -884,16 +924,36 @@ export function registerAgentTools(
       // Every entry gets at least one bullet when the library has a story for it.
       const library = await repository.listLibrary();
       if (library.error || !library.data) return dbFail("Reading the library", library.error);
-      const bare = entriesMissingBullets(
+      // Bold only what mirrors the posting (decision record 0022).
+      const bold = boldProblems(
+        args.resume.entries.filter((entry) => !entry.omit).flatMap((entry) => entry.bullets),
+        requirements.map((requirement) => requirement.text),
+        args.fit_read.mirror_words,
+      );
+      if (bold.length) {
+        return fail(
+          `Nothing was saved: bold only what mirrors the posting or proves a requirement it lists. Unbold or reword: ${bold
+            .slice(0, 6)
+            .map((problem) => `"**${problem.phrase}**"`)
+            .join(", ")}.`,
+        );
+      }
+
+      // David's layout: each experience's bullet count (config/bullet-counts.ts).
+      const counts = bulletCountProblems(
         args.resume,
         resolved.value.skeleton.sections.flatMap((section) => section.entries),
         library.data,
       );
-      if (bare.length) {
+      if (counts.length) {
         return fail(
-          `Nothing was saved: these entries have no bullets, but the library has stories for them: ${bare
-            .map((entry) => `${entry.key}${allowsOneLine(entry) ? " (one line is fine here)" : ""}`)
-            .join(", ")}. Give each at least one bullet, or omit: true.`,
+          `Nothing was saved: bullet counts are off. ${counts
+            .map((problem) =>
+              problem.min === problem.max
+                ? `${problem.entry} takes ${problem.min} (has ${problem.has})`
+                : `${problem.entry} takes ${problem.min} to ${problem.max} (has ${problem.has})`,
+            )
+            .join("; ")}. Bullets under entries marked one_line_ok may be one line.`,
         );
       }
       const extraBlocked = phrasesFromRules(rules.data.map((rule) => rule.text));
@@ -951,6 +1011,8 @@ export function registerAgentTools(
       value.build = built.ok
         ? built.value
         : { built: false, message: `${built.message} The run is saved; retry with build_resume.` };
+      // The run's tool usage so far, for the last line of the summary.
+      Object.assign(value, await usageField(repository, args.application_id));
       return { ok: true, value, applicationId: args.application_id };
     },
   );

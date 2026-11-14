@@ -48,9 +48,11 @@ import {
   fullLineLengths,
   type LayoutIssue,
 } from "@/lib/agent/resume/layout";
-import { allowsOneLine, type BulletOwner } from "@/lib/agent/resume/line-rules";
+import { allowsOneLine, bulletCountFor, type BulletOwner } from "@/lib/agent/resume/line-rules";
+import { nextLineHeight, readLineHeight, setLineHeight } from "@/lib/agent/resume/line-height";
 import {
   addBullet,
+  bulletMinimums,
   cutBullet,
   pickNextBullet,
   pickWeakestBullet,
@@ -78,6 +80,9 @@ export const MAX_PAGE_ADJUSTMENTS = 3;
 
 /** No new page-fill change starts after this long, so a build ends inside the MCP time limit. */
 export const PAGE_ADJUST_BUDGET_MS = 50_000;
+
+/** Line-height steps one build may try after adding or cutting bullets. */
+export const MAX_LINE_HEIGHT_STEPS = 3;
 
 /** Which resume.lol roles each template is for, until David changes them. */
 export const DEFAULT_USE_FOR: Readonly<Record<TemplateName, readonly string[]>> = {
@@ -133,8 +138,10 @@ export type LayoutReport = {
   line_check?: "characters" | "none";
   /** Empty space below the last line, as a share of the page height. */
   bottom_gap?: number | null;
-  /** Bullets the build added or cut to fill one page. */
+  /** Bullets the build added or cut, and line-height steps, to fill one page. */
   page_adjustments?: PageAdjustment[];
+  /** The bullet and paragraph line height the resume ended with. */
+  line_height?: number;
   /** Why page filling stopped early, when it did. */
   adjust_stop?: string;
   reason?: string;
@@ -251,7 +258,7 @@ export async function resolveTemplateSkeleton(
   repository: Pick<BuildRepository, "readResumeSources">,
   base: ResumeSkeleton,
   log?: (event: Record<string, unknown>) => void,
-): Promise<Success<{ skeleton: ResumeSkeleton; source: "library" | "base"; notes: string[] }> | Failure> {
+): Promise<Success<{ skeleton: ResumeSkeleton; source: "library" | "base"; notes: string[]; interests: string | null }> | Failure> {
   const sources = await repository.readResumeSources();
   if (sources.error || !sources.data) return dbFail("Reading the library", sources.error);
   const resolved = resolveSkeleton(base, sources.data);
@@ -261,7 +268,15 @@ export async function resolveTemplateSkeleton(
   if (resolved.source === "base" || resolved.notes.length) {
     log?.({ event: "resume_experiences", source: resolved.source, notes: resolved.notes });
   }
-  return { ok: true, value: { skeleton: resolved.skeleton, source: resolved.source, notes: resolved.notes } };
+  return {
+    ok: true,
+    value: {
+      skeleton: resolved.skeleton,
+      source: resolved.source,
+      notes: resolved.notes,
+      interests: sources.data.profile?.interests ?? null,
+    },
+  };
 }
 
 /** The entry keys a tailored resume can use, for the playbook and calibration. */
@@ -273,6 +288,7 @@ export function summarizeLayout(skeleton: ResumeSkeleton): TemplateSectionSummar
       title: entry.title,
       org: entry.org,
       needs_bullets: entry.base_bullet_count > 0,
+      bullets: bulletCountFor(entry),
       ...(allowsOneLine(entry) ? { one_line_ok: true } : {}),
     })),
   }));
@@ -499,7 +515,8 @@ export async function buildResume(
   if (!resolved.ok) return fail(`Not built. ${resolved.message}`);
   const skeleton = resolved.value.skeleton;
 
-  const firstRender = renderTailoredResume(skeleton, content);
+  const renderOptions = { interests: resolved.value.interests };
+  const firstRender = renderTailoredResume(skeleton, content, renderOptions);
   if (!firstRender.ok) return fail(`The resume content does not fit the template. ${firstRender.problems.join(" ")}`);
   let rendered = firstRender;
 
@@ -589,6 +606,7 @@ export async function buildResume(
   let storedHtmlPath: string | null = null;
   let storedPdfPath: string | null = null;
   const adjustments: PageAdjustment[] = [];
+  let lineHeight = readLineHeight(layout.css);
   let adjustStop: string | undefined;
   // What resume.lol holds now; recorded so a later rebuild can tell David's
   // own changes in resume.lol from Interndex's.
@@ -611,12 +629,13 @@ export async function buildResume(
     });
     return { outcome, result, pdf: outcome.pdf, pdfPages };
   };
-  const writeRemote = async (markdown: string): Promise<boolean> => {
+  const writeRemote = async (markdown: string, css?: string): Promise<boolean> => {
     try {
       const updated = await deps.resumeLol.updateResumeMarkdown({
         resume_id: resumeId,
         markdown,
         expected_updated_at: updatedAt,
+        ...(css === undefined ? {} : { css }),
       });
       updatedAt = updated.updated_at;
       remoteMarkdown = markdown;
@@ -654,9 +673,14 @@ export async function buildResume(
       let nextContent: TailoredContent;
       let record: PageAdjustment;
       if (overflow) {
-        const weakest = pickWeakestBullet(state.content, resume.requirements, keep);
+        if (library === null) {
+          const listed = await repository.listLibrary();
+          library = listed.data ?? [];
+        }
+        // Cut only above David's counts here; line height comes next.
+        const weakest = pickWeakestBullet(state.content, resume.requirements, keep, bulletMinimums(entries, library));
         if (!weakest) {
-          adjustStop = "nothing_to_cut";
+          adjustStop = "at_minimum_counts";
           break;
         }
         nextContent = cutBullet(state.content, weakest.entry, weakest.index);
@@ -675,7 +699,7 @@ export async function buildResume(
           requirements: resume.requirements,
           template: resume.template.name,
           accepts: (entryKey, text) => {
-            const trial = renderTailoredResume(skeleton, addBullet(current.content, entryKey, text));
+            const trial = renderTailoredResume(skeleton, addBullet(current.content, entryKey, text), renderOptions);
             if (!trial.ok) return false;
             const trialCheck = checkBullets(trial.bullets, { targets: null, extraBlocked });
             if (!trialCheck.pass) return false;
@@ -695,7 +719,7 @@ export async function buildResume(
         record = { action: "added", entry: pick.entry, text: pick.text, explain_note: pick.explain_note };
       }
 
-      const nextRendered = renderTailoredResume(skeleton, nextContent);
+      const nextRendered = renderTailoredResume(skeleton, nextContent, renderOptions);
       if (!nextRendered.ok) break;
       const previousMarkdown = state.rendered.markdown;
       if (!(await writeRemote(nextRendered.markdown))) {
@@ -714,6 +738,72 @@ export async function buildResume(
       }
       state = { content: nextContent, rendered: nextRendered, html: fetched.html, measured };
       adjustments.push(record);
+    }
+
+    // Room left after the bullets: the interests line from David's profile
+    // goes in, unless the run already chose it (decision record 0022).
+    const shortNow = state.measured.result?.failures.some((failure) => failure.rule === "page_not_full");
+    if (shortNow && !state.content.include_interests && resolved.value.interests && skeleton.skills) {
+      const withInterests: TailoredContent = { ...state.content, include_interests: true };
+      const interestsRendered = renderTailoredResume(skeleton, withInterests, renderOptions);
+      if (interestsRendered.ok && (await writeRemote(interestsRendered.markdown))) {
+        const fetched = await fetchHtml();
+        const measured = "error" in fetched ? null : await measure(fetched.html, interestsRendered);
+        const ranOver = measured?.result?.failures.some((failure) => failure.rule === "one_page");
+        if ("error" in fetched || !measured?.result || ranOver) {
+          await writeRemote(state.rendered.markdown);
+        } else {
+          state = { content: withInterests, rendered: interestsRendered, html: fetched.html, measured };
+          adjustments.push({ action: "interests_added" });
+        }
+      }
+    }
+
+    // Last, close what is left with line height, as David does by hand
+    // (decision record 0020). Only on a resume this build created: a
+    // rebuild sends markdown alone, so design changes David made survive.
+    if (input.mode === "build") {
+      for (let step = 0; step < MAX_LINE_HEIGHT_STEPS && state.measured.result && state.measured.outcome.ok; step += 1) {
+        const failures = state.measured.result.failures;
+        const overflow = failures.some((failure) => failure.rule === "one_page");
+        const short = !overflow && failures.some((failure) => failure.rule === "page_not_full");
+        if (!overflow && !short) break;
+        if (Date.now() - startedAt > PAGE_ADJUST_BUDGET_MS) {
+          adjustStop = "time_budget";
+          break;
+        }
+        const next = nextLineHeight(lineHeight, state.measured.outcome.measurement, overflow);
+        if (next === null) {
+          // Still over a page at the tightest line height: one page comes
+          // first, so cut the weakest bullet even below David's counts.
+          if (!overflow) break;
+          const weakest = pickWeakestBullet(state.content, resume.requirements, keep);
+          const cutContent = weakest ? cutBullet(state.content, weakest.entry, weakest.index) : null;
+          const cutRendered = cutContent ? renderTailoredResume(skeleton, cutContent, renderOptions) : null;
+          if (!weakest || !cutContent || !cutRendered?.ok) break;
+          if (!(await writeRemote(cutRendered.markdown, setLineHeight(layout.css, lineHeight)))) break;
+          const refetched = await fetchHtml();
+          const remeasured = "error" in refetched ? null : await measure(refetched.html, cutRendered);
+          if ("error" in refetched || !remeasured?.result) break;
+          state = { content: cutContent, rendered: cutRendered, html: refetched.html, measured: remeasured };
+          adjustments.push({ action: "cut", entry: weakest.entry, text: weakest.text });
+          adjustStop = "cut_below_counts_to_fit_one_page";
+          continue;
+        }
+        const css = setLineHeight(layout.css, next);
+        if (!(await writeRemote(state.rendered.markdown, css))) break;
+        const fetched = await fetchHtml();
+        const measured = "error" in fetched ? null : await measure(fetched.html, state.rendered);
+        const ranOver = short && measured?.result?.failures.some((failure) => failure.rule === "one_page");
+        if ("error" in fetched || !measured?.result || ranOver) {
+          await writeRemote(state.rendered.markdown, setLineHeight(layout.css, lineHeight));
+          if (ranOver) adjustStop = "line_height_ran_over";
+          break;
+        }
+        lineHeight = next;
+        state = { ...state, html: fetched.html, measured };
+        adjustments.push({ action: "line_height", value: next });
+      }
     }
 
     content = state.content;
@@ -735,6 +825,7 @@ export async function buildResume(
         failures: result.failures,
         warnings: result.warnings,
         duration_ms: outcome.durationMs,
+        line_height: lineHeight,
         ...(adjustments.length ? { page_adjustments: adjustments } : {}),
         ...(adjustStop ? { adjust_stop: adjustStop } : {}),
       };

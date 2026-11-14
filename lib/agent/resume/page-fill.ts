@@ -15,7 +15,7 @@
 
 import { rankStories, tokenize, type LibraryStory } from "@/lib/agent/library/scoring";
 import type { TailoredContent } from "@/lib/agent/resume/content";
-import type { BulletOwner } from "@/lib/agent/resume/line-rules";
+import { bulletCountFor, type BulletOwner } from "@/lib/agent/resume/line-rules";
 import type { ResumeEntry } from "@/lib/agent/resume/skeleton";
 import type { TemplateName } from "@/lib/agent/types";
 
@@ -27,7 +27,9 @@ const SAME_STORY_SHARE = 0.6;
 
 export type PageAdjustment =
   | { action: "added"; entry: string; text: string; explain_note: string | null }
-  | { action: "cut"; entry: string; text: string };
+  | { action: "cut"; entry: string; text: string }
+  | { action: "line_height"; value: number }
+  | { action: "interests_added" };
 
 export type PageBullet = { text: string; owner: BulletOwner };
 
@@ -62,6 +64,8 @@ export function pickWeakestBullet(
   content: TailoredContent,
   requirements: readonly string[],
   keep: ReadonlySet<string> = new Set(),
+  /** When given, an entry is never cut below its minimum count. */
+  minimums?: ReadonlyMap<string, number>,
 ): { entry: string; index: number; text: string } | null {
   const candidates = content.entries.flatMap((entry, entryOrder) =>
     entry.omit
@@ -74,7 +78,12 @@ export function pickWeakestBullet(
           alone: entry.bullets.length === 1,
           score: relevance(text, requirements),
         })),
-  ).filter((candidate) => !keep.has(candidate.text));
+  ).filter((candidate) => {
+    if (keep.has(candidate.text)) return false;
+    if (!minimums) return true;
+    const entry = content.entries.find((listed) => listed.key === candidate.entry)!;
+    return entry.bullets.length > (minimums.get(candidate.entry) ?? 0);
+  });
   if (!candidates.length) return null;
   const pool = candidates.some((candidate) => !candidate.alone)
     ? candidates.filter((candidate) => !candidate.alone)
@@ -150,7 +159,8 @@ export function pickNextBullet(input: {
     if (!story || storyOnPage(story, input.pageBullets)) continue;
     const entry = entryForStory(story, input.entries);
     const listed = entry ? shown.get(entry.key) : undefined;
-    if (!entry || !listed || listed.bullets.length >= MAX_BULLETS_PER_ENTRY) continue;
+    if (!entry || !listed) continue;
+    if (listed.bullets.length >= Math.min(MAX_BULLETS_PER_ENTRY, bulletCountFor(entry).max)) continue;
     for (const variant of ranked.variants) {
       if (input.accepts(entry.key, variant.text)) {
         return { entry: entry.key, text: variant.text, explain_note: variant.explain_note };
@@ -166,20 +176,36 @@ export function addBullet(content: TailoredContent, entry: string, text: string)
   return next;
 }
 
+/** How many stories the library has for an entry (each can give one bullet). */
+function storiesFor(entry: ResumeEntry, library: readonly LibraryStory[]): number {
+  return library.filter((story) => story.variants.length > 0 && entryForStory(story, [entry]) !== null).length;
+}
+
+export type BulletCountProblem = { entry: string; has: number; min: number; max: number };
+
 /**
- * Entries shown with no bullets although the library has a story for them.
- * Every entry gets at least one bullet (one line where its experience
- * allows it); leaving one bare is only possible with omit: true.
+ * Entries whose bullet count is outside David's layout (config/bullet-counts.ts).
+ * The minimum is lowered to what the library holds for that experience, so a
+ * count is never asked for that the stories cannot fill. Omitted entries are
+ * left alone.
  */
-export function entriesMissingBullets(
+export function bulletCountProblems(
   content: TailoredContent,
   entries: readonly ResumeEntry[],
   library: readonly LibraryStory[],
-): ResumeEntry[] {
+): BulletCountProblem[] {
   const listed = new Map(content.entries.map((entry) => [entry.key, entry]));
-  return entries.filter((entry) => {
+  return entries.flatMap((entry) => {
     const tailored = listed.get(entry.key);
-    if (!tailored || tailored.omit || tailored.bullets.length > 0) return false;
-    return library.some((story) => story.variants.length > 0 && entryForStory(story, [entry]) !== null);
+    if (!tailored || tailored.omit) return [];
+    const range = bulletCountFor(entry);
+    const min = Math.min(range.min, storiesFor(entry, library));
+    const has = tailored.bullets.length;
+    return has < min || has > range.max ? [{ entry: entry.key, has, min, max: range.max }] : [];
   });
+}
+
+/** The least each entry may be cut to, for `pickWeakestBullet`. */
+export function bulletMinimums(entries: readonly ResumeEntry[], library: readonly LibraryStory[]): Map<string, number> {
+  return new Map(entries.map((entry) => [entry.key, Math.min(bulletCountFor(entry).min, storiesFor(entry, library))]));
 }

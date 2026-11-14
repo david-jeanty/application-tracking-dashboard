@@ -7,3 +7,5 @@
 **Alternatives.** A weighted score per requirement (more knobs, same outcome on real postings). Leaving it to the playbook text (it was in the playbook already).
 
 **Why.** A verdict David can predict from the gaps, the same on every model and effort setting.
+
+**Update (2026-11-14, Ramp).** A degree requirement is its own requirement. When it names fields that share none with David's degree and program (a B.S. in Computer Science or a related technical field, against a BCom in Business Technology Management), `complete_run` requires it in `gap_requirements` and the fit read names it as a degree risk (`degreeRisks` in `lib/agent/fit.ts`).

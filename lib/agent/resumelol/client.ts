@@ -11,7 +11,8 @@
  *
  * - `getResume` and `getResumeHtml`, reads,
  * - `createResume`, every build makes a new resume,
- * - `updateResumeMarkdown`, for rebuilds of a resume Interndex created. It
+ * - `updateResumeMarkdown`, for rebuilds of a resume Interndex created (and,
+ *   within the build that created it, its line height). It
  *   sends only the markdown, so design tweaks David makes in resume.lol
  *   survive, and always with `expected_updated_at`, so an edit he made there
  *   is never overwritten. Base resumes are refused before any call.
@@ -71,6 +72,12 @@ export type ResumeLolClient = {
     resume_id: string;
     markdown: string;
     expected_updated_at: string;
+    /**
+     * Only for a resume this build just created, to tune its line height
+     * (decision record 0020). Never sent on rebuilds, so design changes David
+     * makes in resume.lol survive.
+     */
+    css?: string;
   }) => Promise<{ updated_at: string }>;
 };
 
@@ -237,11 +244,16 @@ export function createResumeLolClient(options: ResumeLolClientOptions): ResumeLo
       );
     },
 
-    updateResumeMarkdown: async ({ resume_id, markdown, expected_updated_at }) => {
+    updateResumeMarkdown: async ({ resume_id, markdown, expected_updated_at, css }) => {
       if (protectedIds.has(resume_id)) {
         throw new ResumeLolError("protected", "That resume is a template base and is never changed.");
       }
-      const text = await callTool("update_resume", { resume_id, markdown, expected_updated_at });
+      const text = await callTool("update_resume", {
+        resume_id,
+        markdown,
+        expected_updated_at,
+        ...(css === undefined ? {} : { css }),
+      });
       try {
         const value = JSON.parse(text) as { updated_at?: unknown };
         if (isString(value.updated_at)) return { updated_at: value.updated_at };

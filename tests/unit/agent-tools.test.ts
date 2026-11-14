@@ -56,6 +56,7 @@ describe("get_playbook", () => {
       academic_standing: 3,
       study_start: null,
       school_location: null,
+      interests: null,
       notes: null,
     };
     const playbook = json<{
@@ -202,6 +203,19 @@ describe("get_run_state and get_application_brief", () => {
     expect(state.steps).toEqual({ application: "done", fit_read: null, tailor: null, build: null });
     expect(state.next_step).toBe("fit_read");
     expect(state.resume).toBeNull();
+  });
+
+  it("reports the run's usage: its own calls and unattributed calls made during it", async () => {
+    const { application_id } = json<{ application_id: string }>(await call("create_application_from_jd", TINDER));
+    json(await call("check_bullets", { template: "zero2sudo", bullets: ["Reduced the backlog by 35%."] }));
+    json(await call("get_playbook", { phase: "run" }));
+    json(await call("check_bullets", { template: "zero2sudo", bullets: ["Cut costs by 10%."], application_id }));
+    const state = json<{ usage: { tool_calls: number; request_bytes: number; response_bytes: number; est_tokens: number; by_tool: Record<string, number> } }>(
+      await call("get_run_state", { application_id }),
+    );
+    expect(state.usage.by_tool).toEqual({ create_application_from_jd: 1, check_bullets: 2, get_playbook: 1 });
+    expect(state.usage.request_bytes).toBeGreaterThan(0);
+    expect(state.usage.est_tokens).toBe(Math.ceil((state.usage.request_bytes + state.usage.response_bytes) / 4));
   });
 
   it("keeps the brief under 300 words, must-haves first", async () => {
@@ -458,6 +472,7 @@ describe("usage log and responses", () => {
       applicationId: application_id,
       tool: "get_application_brief",
       bytes: byteLength(brief.content[0].text),
+      requestBytes: byteLength(JSON.stringify({ application_id })),
     });
     expect(store.usage.find((entry) => entry.tool === "create_application_from_jd")?.applicationId).toBe(
       application_id,

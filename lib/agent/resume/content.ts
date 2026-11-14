@@ -23,6 +23,8 @@ import type { BulletOwner } from "@/lib/agent/resume/line-rules";
 import {
   asciiFold,
   decodeEntities,
+  SKILLS_HTML_LINE,
+  SKILLS_MARKDOWN_LINE,
   type ResumeEntry,
   type ResumeSkeleton,
 } from "@/lib/agent/resume/skeleton";
@@ -59,7 +61,11 @@ export const tailoredContentSchema = z.object({
     .array(z.object({ label: oneLine(60), items: oneLine(500) }))
     .max(10)
     .optional()
-    .describe("Replaces the skills lines. Omit to keep the base skills."),
+    .describe("Replaces the skills lines. Omit to keep the base skills. An interests line is added only with include_interests."),
+  include_interests: z
+    .boolean()
+    .default(false)
+    .describe("Add the interests line from David's profile. Off by default; on when the culture fits. The build also adds it when the page has room."),
 });
 
 export type TailoredContent = z.infer<typeof tailoredContentSchema>;
@@ -112,9 +118,24 @@ function renderSkills(
   return [...format.before, body, ...format.after].join("\n");
 }
 
+const INTERESTS_LABEL = /interest|hobb/i;
+
+/** The skills lines a base resume's skills section holds, as label and items. */
+function baseSkillLines(skeleton: ResumeSkeleton, intro: string): { label: string; items: string }[] {
+  const pattern = skeleton.skills?.style === "html" ? SKILLS_HTML_LINE : SKILLS_MARKDOWN_LINE;
+  return intro.split("\n").flatMap((line) => {
+    const match = pattern.exec(line.trim());
+    return match ? [{ label: decodeEntities(match[1]), items: decodeEntities(match[2]) }] : [];
+  });
+}
+
 export function renderTailoredResume(
   skeleton: ResumeSkeleton,
   content: TailoredContent,
+  options: {
+    /** David's interests line from the profile; shown only with include_interests. */
+    interests?: string | null;
+  } = {},
 ): RenderResult {
   const problems: string[] = [];
   const allEntries = skeleton.sections.flatMap((section) => section.entries);
@@ -163,8 +184,15 @@ export function renderTailoredResume(
     if (section.entries.length && !kept.length) continue;
 
     const parts = [section.heading];
-    if (content.skills && skeleton.skills?.section_key === section.key) {
-      parts.push(renderSkills(skeleton, content.skills));
+    if (skeleton.skills?.section_key === section.key) {
+      // The interests line is off by default (decision record 0022): dropped
+      // from the base or the run's skills, and added from the profile only
+      // when include_interests is set.
+      const lines = (content.skills ?? baseSkillLines(skeleton, section.intro)).filter(
+        (line) => !INTERESTS_LABEL.test(line.label),
+      );
+      if (content.include_interests && options.interests) lines.push({ label: "Interests", items: options.interests });
+      parts.push(renderSkills(skeleton, lines));
     } else if (section.intro) {
       parts.push(section.intro);
     }

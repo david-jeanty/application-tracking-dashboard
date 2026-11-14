@@ -66,7 +66,7 @@ export class FakeAgentStore {
   profile: AgentProfile | null = null;
   answers: SavedAnswer[] = [];
   edits: { before_text: string; after_text: string }[] = [];
-  usage: { applicationId: string | null; tool: string; bytes: number }[] = [];
+  usage: { applicationId: string | null; tool: string; bytes: number; requestBytes?: number }[] = [];
   /** How many repositories were created, so tests can prove none was. */
   repositoriesCreated = 0;
   /** Tailored resumes, for the build tools. */
@@ -237,6 +237,7 @@ export class FakeAgentStore {
             academic_standing: input.profile.academic_standing ?? null,
             study_start: input.profile.study_start ? toMonthDate(input.profile.study_start) : null,
             school_location: input.profile.school_location ?? null,
+            interests: input.profile.interests ?? null,
             notes: null,
           };
         }
@@ -303,8 +304,21 @@ export class FakeAgentStore {
           profile_saved: Boolean(input.profile),
         });
       },
-      logUsage: async (applicationId, tool, bytes) => {
-        this.usage.push({ applicationId, tool, bytes });
+      logUsage: async (applicationId, tool, bytes, requestBytes) => {
+        this.usage.push({ applicationId, tool, bytes, requestBytes: requestBytes ?? 0 });
+      },
+      readRunUsage: async (applicationId) => {
+        const indexes = this.usage.flatMap((row, index) => (row.applicationId === applicationId ? [index] : []));
+        const rows = indexes.length
+          ? this.usage
+              .slice(indexes[0], indexes[indexes.length - 1] + 1)
+              .filter((row) => row.applicationId === applicationId || row.applicationId === null)
+          : [];
+        const by_tool: Record<string, number> = {};
+        for (const row of rows) by_tool[row.tool] = (by_tool[row.tool] ?? 0) + 1;
+        const request_bytes = rows.reduce((sum, row) => sum + (row.requestBytes ?? 0), 0);
+        const response_bytes = rows.reduce((sum, row) => sum + row.bytes, 0);
+        return { data: { tool_calls: rows.length, request_bytes, response_bytes, est_tokens: Math.ceil((request_bytes + response_bytes) / 4), by_tool }, error: null };
       },
       completeRun: (input) => {
         const application = owned().find((row) => row.id === input.application_id);

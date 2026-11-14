@@ -328,6 +328,7 @@ export const importLibraryInputSchema = z.object({
         .describe("Year of academic standing (credits), when it differs from year_of_study."),
       study_start: z.string().regex(MONTH_OR_DATE).optional().describe("First month of the degree, YYYY-MM."),
       school_location: z.string().trim().min(1).max(200).optional().describe("Where the school is, as resumes show it."),
+      interests: z.string().trim().min(1).max(300).optional().describe("Interests line, used only when the page has room or the culture fits."),
     })
     .optional()
     .describe("The fit-read profile. Send it once; later imports may leave it out."),

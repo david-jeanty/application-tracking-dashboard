@@ -807,6 +807,25 @@ recruiter will not know; `Never use "ADO"`, which also blocks it in
 | Render tests (real Chrome) | 10 pass (1 new: an empty full-height block does not make the page look full) |
 | Repro on the real Legrand page | Gap measured 9.3% (was 0%); search finds the Fidus campaign stories and every experience |
 
+#### Second real run: Ramp, Risk Strategy Intern (2026-11-14)
+
+One build, Moderate fit, IBM and BTA covered, a fuller page. David's
+remaining changes:
+
+| Change | What was found | Done |
+| --- | --- | --- |
+| Density like his example | Same font, size, margins and line length as the base; differences were the 80% two-line floor and line height (example 1.24, base 1.2) | Two-liners aim for 90% before the build; the build tunes line height 1.15 to 1.30 on its own resume (0020) |
+| Bullet counts | Runs chose counts | `config/bullet-counts.ts`, enforced in `complete_run` and page fill (0021) |
+| BTA framing | Plain logistics wording | Playbook: frame club roles toward the posting's scope from the story's facts; saved rule |
+| Bold follows the posting | Every number bolded | Checked in `complete_run` (0022) |
+| Interests optional | Base line always shown | Off by default, from `agent_profile.interests`; added by the build when room remains (0022) |
+| Rewordings after Chrome | Run asked David | Playbook: exact rewordings in the summary |
+| Degree risk | Fit read named only domain gaps | `degreeRisks` enforced in `complete_run` (0019 update) |
+| Usage per run | Only per-tool bytes | `usage_log.request_bytes`; `get_run_state` and `complete_run` report the run's tool calls and estimated tokens; the summary ends with it |
+
+Migration `20261114000100_run_feedback` (additive): `usage_log.request_bytes`,
+`agent_profile.interests`.
+
 #### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's

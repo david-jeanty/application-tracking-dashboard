@@ -48,6 +48,8 @@ export type AgentProfile = {
   study_start: string | null;
   /** Where the school is, as the resume shows it. */
   school_location: string | null;
+  /** The interests line, used only when the page has room or the culture fits. */
+  interests: string | null;
   notes: string | null;
 };
 
@@ -58,6 +60,8 @@ export type TemplateEntrySummary = {
   org: string | null;
   /** True when the base had bullets here: give bullets or omit it. */
   needs_bullets: boolean;
+  /** How many bullets this entry takes (config/bullet-counts.ts). */
+  bullets?: { min: number; max: number };
   /** Present when bullets here may be one line (see the one-line list). */
   one_line_ok?: true;
 };

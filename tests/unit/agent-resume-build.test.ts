@@ -25,6 +25,11 @@ const RESUME_ID = "f0000000-0000-4000-8000-000000000001";
 const APPLICATION_ID = "a0000000-0000-4000-8000-000000000001";
 const BASE_ID = "base-zero2sudo";
 
+const PROFILE_FIXTURE = {
+  school: null, program: null, degree_level: null, expected_graduation: null, year_of_study: null,
+  academic_standing: null, study_start: null, school_location: null, interests: null, notes: null,
+};
+
 const BULLET_A = "Reduced the open ticket backlog by 35% by redesigning service request triage.";
 const BULLET_B = "Grew the tracker to 100 student sign-ups in its first month.";
 
@@ -75,6 +80,8 @@ class Fakes {
   logs: Record<string, unknown>[] = [];
   resumeLolCalls: string[] = [];
   remote = { markdown: "", updated_at: "t0" };
+  /** The CSS resume.lol holds for the built resume, when a build changed it. */
+  remoteCss: string | null = null;
   renderOutcome: (html: string) => RenderOutcome = () => ({
     ok: true,
     measurement: goodMeasurement([BULLET_A, BULLET_B]),
@@ -176,6 +183,7 @@ class Fakes {
       this.resumeLolCalls.push(`update_resume:${input.resume_id}:${input.expected_updated_at}`);
       if (this.updateError) throw this.updateError;
       this.remote = { markdown: input.markdown, updated_at: "t2" };
+      if (input.css !== undefined) this.remoteCss = input.css;
       return { updated_at: "t2" };
     },
   };
@@ -205,7 +213,7 @@ describe("calibrateTemplate", () => {
     const result = await calibrateTemplate(fakes.deps(), { template: "zero2sudo", base_resume_id: BASE_ID });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value.targets).toEqual({ one_line_chars: 130, two_line_min: 236, two_line_max: 265 });
+    expect(result.value.targets).toEqual({ one_line_chars: 130, two_line_min: 250, two_line_max: 265 });
     expect(result.value.lines_measured).toBe(6);
     expect(result.value.sections.flatMap((section) => section.entries.map((entry) => entry.key))).toContain("tracker-app");
     expect(fakes.resumeLolCalls).toEqual([`get_resume:${BASE_ID}`, `get_resume_html:${BASE_ID}`]);
@@ -577,19 +585,78 @@ describe("buildResume: one full page", () => {
     expect(result.ok && result.value.layout_failures?.map((failure) => failure.rule)).toEqual(["page_not_full"]);
     const final = fakes.saved[fakes.saved.length - 1];
     expect(final.layout_report).toMatchObject({ adjust_stop: "added_bullet_ran_over" });
-    expect(final.layout_report?.page_adjustments).toBeUndefined();
+    // No bullet was kept; line height may still have been tried.
+    expect(final.layout_report?.page_adjustments?.filter((change) => change.action !== "line_height") ?? []).toEqual([]);
     // resume.lol was put back to the last page that was checked.
     expect(fakes.remote.markdown).not.toContain("Eliminated manual weekly");
     expect(final.built_markdown_sha256).toBe(sha256(fakes.remote.markdown));
   });
 
-  it("stops when the library has nothing left that fits", async () => {
+  it("stops adding bullets when the library has nothing left that fits", async () => {
     const fakes = new Fakes();
     fakes.renderOutcome = pageFor(fakes, () => ({ pages: 1, gap: 0.2 }));
     const result = await build(fakes);
     expect(result.ok && result.value.layout_check).toBe("failed");
-    expect(fakes.saved[fakes.saved.length - 1].layout_report).toMatchObject({ adjust_stop: "no_library_bullet_fits" });
-    expect(fakes.resumeLolCalls.filter((call) => call.startsWith("update_resume"))).toHaveLength(0);
+    const report = fakes.saved[fakes.saved.length - 1].layout_report;
+    expect(report).toMatchObject({ adjust_stop: "no_library_bullet_fits" });
+    // Line height then goes as far as it may (1.3) and the page is still short.
+    expect(report?.page_adjustments).toEqual([{ action: "line_height", value: 1.3 }]);
+  });
+
+  /** A page whose gap shrinks as the line height grows, like a real one. */
+  const pageByLineHeight = (fakes: Fakes, gapAt: (lineHeight: number) => number, pagesAt: (lineHeight: number) => number = () => 1) => () => {
+    const lineHeight = Number(/line-height:\s*([\d.]+)/.exec(fakes.remoteCss ?? "")?.[1] ?? 1.2);
+    const texts = fakes.remote.markdown.split("\n").filter((line) => line.startsWith("- ")).map((line) => line.slice(2).replace(/&amp;/g, "&"));
+    return page(texts, pagesAt(lineHeight), gapAt(lineHeight));
+  };
+
+  it("fills the last of a short page with line height, on the resume it just created", async () => {
+    const fakes = new Fakes();
+    fakes.renderOutcome = pageByLineHeight(fakes, (lineHeight) => Math.max(0.01, 0.08 - (lineHeight - 1.2) * 1.2));
+    const result = await build(fakes);
+    expect(result.ok && result.value.layout_check).toBe("passed");
+    const report = fakes.saved[fakes.saved.length - 1].layout_report;
+    expect(report?.line_height).toBeGreaterThan(1.2);
+    expect(report?.line_height).toBeLessThanOrEqual(1.3);
+    expect(fakes.remoteCss).toContain(`line-height: ${report?.line_height}`);
+    // The base resume's CSS was only ever read.
+    expect(LAYOUT.css).not.toContain("line-height");
+  });
+
+  it("adds the interests line from the profile when the page still has room after the bullets", async () => {
+    const fakes = new Fakes();
+    fakes.sources = { experiences: [], profile: { ...PROFILE_FIXTURE, interests: "Guitar, rock climbing, baking" } };
+    fakes.renderOutcome = pageByLineHeight(fakes, () => (fakes.remote.markdown.includes("**Interests**") ? 0.03 : 0.07));
+    const result = await build(fakes);
+    expect(result.ok && result.value.layout_check).toBe("passed");
+    const final = fakes.saved[fakes.saved.length - 1];
+    expect(final.layout_report?.page_adjustments).toContainEqual({ action: "interests_added" });
+    expect(final.content?.include_interests).toBe(true);
+    expect(fakes.remote.markdown).toContain("**Interests** | Guitar, rock climbing, baking");
+  });
+
+  it("tightens line height when the page runs just over, before giving up", async () => {
+    const fakes = new Fakes();
+    fakes.row.content = content([BULLET_A], [BULLET_B]);
+    fakes.renderOutcome = pageByLineHeight(fakes, () => 0.02, (lineHeight) => (lineHeight > 1.18 ? 2 : 1));
+    const result = await build(fakes);
+    expect(result.ok && result.value.layout_check).toBe("passed");
+    expect(fakes.saved[fakes.saved.length - 1].layout_report?.line_height).toBeLessThanOrEqual(1.18);
+  });
+
+  it("never touches the CSS on a rebuild", async () => {
+    const fakes = new Fakes();
+    fakes.renderOutcome = pageByLineHeight(fakes, () => 0.08);
+    const first = await build(fakes);
+    expect(first.ok).toBe(true);
+    fakes.remoteCss = null;
+    const rebuilt = await buildResume(fakes.deps(), {
+      tailored_resume_id: RESUME_ID,
+      mode: "rebuild",
+      edits: [{ before_text: BULLET_A, after_text: BULLET_A.replace("35%", "36%") }],
+    });
+    expect(rebuilt.ok).toBe(true);
+    expect(fakes.remoteCss).toBeNull();
   });
 });
 

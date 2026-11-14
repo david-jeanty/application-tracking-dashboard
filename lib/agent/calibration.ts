@@ -15,7 +15,7 @@
  * - The **median** is the best estimate of a line's real capacity, which is
  *   what "at least 80% full" is measured against.
  *
- * With full lines of 108 to 111 characters this gives 108 / 196 / 220, close to
+ * With full lines of 108 to 111 characters this gives 108 / 207 / 220, close to
  * the seed values in STANDARDS.md (about 108 to 110 per line, two-liners from
  * 199 to 220), which is the check that the method is sound.
  */
@@ -25,8 +25,15 @@ import type { LineTargets } from "@/lib/agent/checks/bullets";
 /** Fewer measurements than this cannot tell a typical line from an outlier. */
 export const MIN_CALIBRATION_LINES = 5;
 
-/** The share of a line the last line of a bullet must fill (STANDARDS.md). */
+/** The share of a line the last line of a bullet must fill (STANDARDS.md). Chrome checks this. */
 export const LAST_LINE_FILL = 0.8;
+
+/**
+ * The share the last line of a two-line bullet aims for before the build,
+ * so pages match David's density (two-liners of 255 to 280 characters on
+ * zero2sudo; decision record 0020). Chrome still passes anything from 80%.
+ */
+export const TWO_LINE_TARGET_FILL = 0.9;
 
 function median(sorted: readonly number[]): number {
   const middle = Math.floor(sorted.length / 2);
@@ -52,7 +59,7 @@ export function deriveLineTargets(fullLineLengths: readonly number[]): LineTarge
 
   return {
     oneLineChars,
-    twoLineMin: oneLineChars + Math.ceil(capacity * LAST_LINE_FILL),
+    twoLineMin: oneLineChars + Math.ceil(capacity * TWO_LINE_TARGET_FILL),
     // Twice the typical line, not twice the shortest: the shortest-line
     // ceiling flagged two-liners that fit (decision record 0015). This only
     // matters on the fallback path; Chrome measures the real lines.

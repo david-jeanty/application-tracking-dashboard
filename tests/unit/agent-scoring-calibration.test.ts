@@ -175,7 +175,7 @@ describe("deriveLineTargets", () => {
   it("lands near the narrow seed values in STANDARDS.md", () => {
     expect(deriveLineTargets([110, 108, 111, 109, 110])).toEqual({
       oneLineChars: 108,
-      twoLineMin: 196,
+      twoLineMin: 207,
       twoLineMax: 220,
     });
   });
@@ -191,14 +191,14 @@ describe("deriveLineTargets", () => {
   it("lands near the wide seed values in STANDARDS.md", () => {
     expect(deriveLineTargets([138, 139, 140, 140, 141, 139])).toEqual({
       oneLineChars: 138,
-      twoLineMin: 250,
+      twoLineMin: 264,
       twoLineMax: 279,
     });
   });
 
   it("gives targets the bullet checker can use directly", () => {
     const targets = deriveLineTargets([110, 108, 111, 109, 110]);
-    expect(lineFillIssue(200, targets)).toBeNull();
+    expect(lineFillIssue(210, targets)).toBeNull();
     expect(lineFillIssue(150, targets)).toMatch(/^Widow/);
   });
 

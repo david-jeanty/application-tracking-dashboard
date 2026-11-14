@@ -40,6 +40,7 @@ const PROFILE: AgentProfile = {
   academic_standing: 3,
   study_start: "2023-09-01",
   school_location: "Ottawa, Ontario",
+  interests: null,
   notes: null,
 };
 
@@ -236,5 +237,26 @@ describe("the one-line list in the playbook's entry list", () => {
     expect(allowsOneLine({ title: "Pro-Bono Consultant", org: "IBM" })).toBe(false);
     expect(allowsOneLine({ title: "Incoming Business Transformation Consulting Intern", org: "IBM" })).toBe(true);
     expect(allowsOneLine({ title: "Anything", org: "Business Technology Association, uOttawa" })).toBe(true);
+  });
+});
+
+describe("David's bullet counts in the playbook's entry list", () => {
+  it("shows each experience's count from config/bullet-counts.ts", () => {
+    const { skeleton } = resolved(JAKES_BASE);
+    const counts = Object.fromEntries(
+      summarizeLayout(skeleton)
+        .flatMap((section) => section.entries)
+        .filter((entry) => entry.bullets)
+        .map((entry) => [entry.title, `${entry.bullets!.min}-${entry.bullets!.max}`]),
+    );
+    expect(counts).toMatchObject({
+      "Incoming Business Transformation Consulting Intern": "1-1",
+      "Information Management Analyst Intern": "2-2",
+      "Marketing Analyst Intern": "3-3",
+      "Business Development & Strategy Intern": "2-2",
+      Interndex: "3-3",
+      "Pro-Bono Consultant": "2-3",
+      "Vice President, Internal Affairs": "2-2",
+    });
   });
 });

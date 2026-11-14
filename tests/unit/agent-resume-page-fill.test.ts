@@ -4,7 +4,8 @@ import { tailoredContentSchema } from "@/lib/agent/resume/content";
 import {
   addBullet,
   cutBullet,
-  entriesMissingBullets,
+  bulletCountProblems,
+  bulletMinimums,
   pickNextBullet,
   pickWeakestBullet,
   relevance,
@@ -134,22 +135,38 @@ describe("addBullet", () => {
   });
 });
 
-describe("entriesMissingBullets", () => {
-  it("names an entry shown with no bullets when the library has a story for it", () => {
-    const page = content([IRB.bullets[0]], []);
-    expect(entriesMissingBullets(page, ENTRIES, LIBRARY).map((entry) => entry.key)).toEqual(["marketing-analyst-intern"]);
+describe("bulletCountProblems (David's layout)", () => {
+  it("asks for each experience's count, lowered to the stories the library has", () => {
+    // IRB takes 2 and the library has 2 stories; Fidus takes 3 but the library has 1.
+    expect(bulletCountProblems(content([IRB.bullets[0]], []), ENTRIES, LIBRARY)).toEqual([
+      { entry: "information-management-analyst-intern", has: 1, min: 2, max: 2 },
+      { entry: "marketing-analyst-intern", has: 0, min: 1, max: 3 },
+    ]);
   });
 
-  it("accepts an entry left out on purpose, or one the library has nothing for", () => {
+  it("refuses more than the maximum", () => {
+    const page = content([IRB.bullets[0], IRB.bullets[2], IRB.bullets[3]], [FIDUS.bullets[0]]);
+    expect(bulletCountProblems(page, ENTRIES, LIBRARY)).toEqual([
+      { entry: "information-management-analyst-intern", has: 3, min: 2, max: 2 },
+    ]);
+  });
+
+  it("accepts the layout, and an entry left out on purpose", () => {
     const omitted = tailoredContentSchema.parse({
       entries: [
-        { key: "information-management-analyst-intern", bullets: [IRB.bullets[0]] },
+        { key: "information-management-analyst-intern", bullets: [IRB.bullets[0], IRB.bullets[2]] },
         { key: "marketing-analyst-intern", bullets: [], omit: true },
       ],
     });
-    expect(entriesMissingBullets(omitted, ENTRIES, LIBRARY)).toEqual([]);
-    const noStories = LIBRARY.filter((story) => story.org !== "Fidus Systems");
-    expect(entriesMissingBullets(content([IRB.bullets[0]], []), ENTRIES, noStories)).toEqual([]);
+    expect(bulletCountProblems(omitted, ENTRIES, LIBRARY)).toEqual([]);
+  });
+
+  it("never cuts an entry below its minimum when minimums are given", () => {
+    const page = content([IRB.bullets[0], IRB.bullets[2]], [FIDUS.bullets[0], FIDUS.bullets[1]]);
+    const minimums = bulletMinimums(ENTRIES, LIBRARY);
+    expect(pickWeakestBullet(page, ["Ticket backlog"], new Set(), minimums)?.entry).toBe("marketing-analyst-intern");
+    const atMinimum = content([IRB.bullets[0], IRB.bullets[2]], [FIDUS.bullets[0]]);
+    expect(pickWeakestBullet(atMinimum, ["Ticket backlog"], new Set(), minimums)).toBeNull();
   });
 });
 

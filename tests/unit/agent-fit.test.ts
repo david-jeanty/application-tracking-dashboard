@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessFit, verdictAllowed } from "@/lib/agent/fit";
+import { assessFit, degreeRisks, verdictAllowed } from "@/lib/agent/fit";
 
 /** The Legrand Product Management Intern posting, as the first real run saved it. */
 const LEGRAND = [
@@ -41,5 +41,26 @@ describe("assessFit", () => {
   it("counts every requirement as core when none is marked must-have", () => {
     const unmarked = LEGRAND.map((requirement) => ({ ...requirement, must_have: false }));
     expect(assessFit(unmarked, [6]).allowed).toBe("moderate_fit");
+  });
+});
+
+describe("degreeRisks", () => {
+  const DAVID = { degree_level: "Honours Bachelor of Commerce", program: "Business Technology Management (French Immersion)" };
+
+  it("flags Ramp's B.S. in Computer Science for a BCom in Business Technology Management", () => {
+    const ramp = [
+      { text: "Pursuing a B.S. in Computer Science or a related technical field", must_have: true },
+      { text: "Experience with SQL and Python", must_have: true },
+    ];
+    expect(degreeRisks(ramp, DAVID)).toEqual([0]);
+  });
+
+  it("does not flag Legrand's business-related degree", () => {
+    expect(degreeRisks([LEGRAND[0]], DAVID)).toEqual([]);
+  });
+
+  it("does not flag a degree in any field, or a requirement that is not about a degree", () => {
+    expect(degreeRisks([{ text: "Currently pursuing a bachelor's degree", must_have: true }], DAVID)).toEqual([]);
+    expect(degreeRisks([{ text: "Strong engineering partnerships", must_have: true }], DAVID)).toEqual([]);
   });
 });

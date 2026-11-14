@@ -115,7 +115,7 @@ describe("complete_run", () => {
     expect(store.resumeLolCalls).toHaveLength(0);
   });
 
-  it("saves nothing when an entry is left bare although the library has a story for it", async () => {
+  it("saves nothing when an entry's bullet count is off, such as a bare entry the library has a story for", async () => {
     store.library.push({
       id: "50000000-0000-4000-8000-000000000002",
       label: "Federal practice placement",
@@ -140,8 +140,8 @@ describe("complete_run", () => {
       }),
     );
     expect(response.isError).toBe(true);
-    expect(response.content[0].text).toContain("these entries have no bullets");
-    expect(response.content[0].text).toContain("incoming-consulting-intern");
+    expect(response.content[0].text).toContain("bullet counts are off");
+    expect(response.content[0].text).toContain("incoming-consulting-intern takes 1 to 3 (has 0)");
     expect(store.completedRuns).toHaveLength(0);
   });
 
@@ -156,6 +156,37 @@ describe("complete_run", () => {
     expect(response.content[0].text).toContain("1 of 1 must-have requirements are gaps");
     expect(response.content[0].text).toContain("at most Long shot");
     expect(store.completedRuns).toHaveLength(0);
+  });
+
+  it("requires a degree the profile does not cover to be named as a gap", async () => {
+    store.profile = {
+      school: "Example University", program: "Business Technology Management", degree_level: "Bachelor of Commerce",
+      expected_graduation: "2028-04-01", year_of_study: 4, academic_standing: 3, study_start: null,
+      school_location: null, interests: null, notes: null,
+    };
+    const ramp = json<{ application_id: string }>(
+      await client.call("create_application_from_jd", {
+        company: "Ramp",
+        title: "Risk Strategy Intern",
+        location: "New York, NY",
+        jd_text: "We are hiring.",
+        requirements: [
+          { text: "Pursuing a B.S. in Computer Science or a related technical field", must_have: true },
+          { text: "Program management", must_have: true },
+        ],
+      }),
+    );
+    const missing = await client.call("complete_run", payload({ application_id: ramp.application_id }));
+    expect(missing.isError).toBe(true);
+    expect(missing.content[0].text).toContain("Add it to gap_requirements and name it as a risk");
+    const named = await client.call(
+      "complete_run",
+      payload({
+        application_id: ramp.application_id,
+        fit_read: { verdict: "moderate_fit", summary: "Degree risk: B.S. in Computer Science asked; BCom in BTM.", gaps: ["Degree field"], gap_requirements: [0] },
+      }),
+    );
+    expect(named.isError).toBeFalsy();
   });
 
   it("refuses gap numbers that are not requirements of the posting", async () => {

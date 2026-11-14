@@ -268,3 +268,39 @@ describe("content helpers", () => {
     expect(resumeNameFor(null, "Café Société", "PM")).toBe("Resume_CafeSociete_PM");
   });
 });
+
+describe("the interests line (off by default)", () => {
+  const withInterests = ZERO2SUDO_BASE.replace(
+    "**Languages** | English (native), French (B2)",
+    "**Languages** | English (native), French (B2)\n\n**Interests and Hobbies** | Old base interests",
+  );
+  const entries = [
+    { key: "information-management-analyst-intern", bullets: ["Cut weekly summaries."] },
+    { key: "tracker-app", bullets: ["Grew the app to 100 sign-ups."] },
+  ];
+
+  it("drops the base resume's interests line unless the run asks for it", () => {
+    const rendered = renderTailoredResume(skeletonOf(withInterests), tailoredContentSchema.parse({ entries }), { interests: "Guitar, rock climbing" });
+    expect(rendered.ok && rendered.markdown).not.toMatch(/Interests/);
+    expect(rendered.ok && rendered.markdown).toContain("**Technical** | Python, SQL, Power BI");
+  });
+
+  it("adds the interests line from the profile with include_interests", () => {
+    const rendered = renderTailoredResume(
+      skeletonOf(withInterests),
+      tailoredContentSchema.parse({ entries, include_interests: true }),
+      { interests: "Guitar, rock climbing" },
+    );
+    expect(rendered.ok && rendered.markdown).toContain("**Interests** | Guitar, rock climbing");
+    expect(rendered.ok && rendered.markdown).not.toContain("Old base interests");
+  });
+
+  it("drops an interests line the run wrote into skills unless asked", () => {
+    const rendered = renderTailoredResume(
+      skeletonOf(withInterests),
+      tailoredContentSchema.parse({ entries, skills: [{ label: "Technical", items: "SQL" }, { label: "Interests", items: "Chess" }] }),
+      { interests: "Guitar" },
+    );
+    expect(rendered.ok && rendered.markdown).not.toContain("Chess");
+  });
+});

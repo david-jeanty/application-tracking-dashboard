@@ -38,7 +38,7 @@ import { toMonthDate, type ImportLibraryInput } from "@/lib/validation/agent";
  */
 
 const PROFILE_COLUMNS =
-  "school,program,degree_level,expected_graduation,year_of_study,academic_standing,study_start,school_location,notes";
+  "school,program,degree_level,expected_graduation,year_of_study,academic_standing,study_start,school_location,interests,notes";
 const TEMPLATE_COLUMNS =
   "id,name,use_for,one_line_chars,two_line_min,two_line_max,calibrated_at";
 const VARIANT_COLUMNS =
@@ -625,13 +625,59 @@ export function createAgentRepositoryForClient(
       return { error };
     },
 
-    logUsage: async (applicationId, tool, bytes) => {
+    readRunUsage: async (applicationId) => {
+      const own = await supabase
+        .from("usage_log")
+        .select("created_at")
+        .eq("user_id", userId)
+        .eq("application_id", applicationId)
+        .order("created_at", { ascending: true })
+        .returns<{ created_at: string }[]>();
+      if (own.error) return { data: null, error: own.error };
+      const first = own.data?.[0]?.created_at;
+      const last = own.data?.at(-1)?.created_at;
+      if (!first || !last) {
+        return { data: { tool_calls: 0, request_bytes: 0, response_bytes: 0, est_tokens: 0, by_tool: {} }, error: null };
+      }
+      // The run's own calls, and calls that named no application made while
+      // it ran (search_stories and check_bullets often do not pass one).
+      const rows = await supabase
+        .from("usage_log")
+        .select("tool,response_bytes,request_bytes,application_id")
+        .eq("user_id", userId)
+        .gte("created_at", first)
+        .lte("created_at", last)
+        .or(`application_id.eq.${applicationId},application_id.is.null`)
+        .returns<{ tool: string; response_bytes: number; request_bytes: number | null }[]>();
+      if (rows.error || !rows.data) return { data: null, error: rows.error };
+      const byTool: Record<string, number> = {};
+      let requestBytes = 0;
+      let responseBytes = 0;
+      for (const row of rows.data) {
+        byTool[row.tool] = (byTool[row.tool] ?? 0) + 1;
+        requestBytes += row.request_bytes ?? 0;
+        responseBytes += row.response_bytes;
+      }
+      return {
+        data: {
+          tool_calls: rows.data.length,
+          request_bytes: requestBytes,
+          response_bytes: responseBytes,
+          est_tokens: Math.ceil((requestBytes + responseBytes) / 4),
+          by_tool: byTool,
+        },
+        error: null,
+      };
+    },
+
+    logUsage: async (applicationId, tool, bytes, requestBytes) => {
       try {
         await supabase.from("usage_log").insert({
           user_id: userId,
           application_id: applicationId,
           tool,
           response_bytes: bytes,
+          request_bytes: requestBytes ?? null,
         });
       } catch {
         // The usage log is a record, not a dependency of the tool call.
