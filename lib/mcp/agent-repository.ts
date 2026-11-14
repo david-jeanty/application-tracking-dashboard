@@ -19,6 +19,7 @@ import {
 import { displayOptionalText, toApplicationInsert } from "@/lib/applications/mapper";
 import type { AgentRepositoryFactory, BriefRows, ImportSummary } from "@/lib/mcp/agent-tools";
 import { RESUME_FILES_BUCKET } from "@/lib/agent/storage";
+import { RUN_GAP_MS, summarizeRunUsage, type UsageRow } from "@/lib/agent/usage";
 import { timeDbCall } from "@/lib/mcp/telemetry";
 import { createBearerClient } from "@/lib/supabase/bearer";
 import { toMonthDate, type ImportLibraryInput } from "@/lib/validation/agent";
@@ -49,8 +50,8 @@ const BUILD_TEMPLATE_COLUMNS =
 
 /** The most applications read to look for a duplicate posting. */
 const DEDUPE_SCAN_LIMIT = 2000;
-/** How far before a run's first call its opening get_playbook read can be. */
-const RUN_START_WINDOW_MS = 15 * 60 * 1000;
+const USAGE_COLUMNS = "created_at,tool,application_id,response_bytes,request_bytes";
+const USAGE_SCAN_LIMIT = 2000;
 
 export function createAgentRepositoryForClient(
   supabase: SupabaseClient,
@@ -630,62 +631,30 @@ export function createAgentRepositoryForClient(
     readRunUsage: async (applicationId) => {
       const own = await supabase
         .from("usage_log")
-        .select("created_at")
+        .select(USAGE_COLUMNS)
         .eq("user_id", userId)
         .eq("application_id", applicationId)
         .order("created_at", { ascending: true })
-        .returns<{ created_at: string }[]>();
-      if (own.error) return { data: null, error: own.error };
-      const firstOwn = own.data?.[0]?.created_at;
-      const last = own.data?.at(-1)?.created_at;
-      if (!firstOwn || !last) {
-        return { data: { tool_calls: 0, request_bytes: 0, response_bytes: 0, est_tokens: 0, by_tool: {} }, error: null };
-      }
-      // A run starts with get_playbook, before its application exists. The
-      // latest playbook read shortly before the first own call belongs to it.
-      const windowStart = new Date(Date.parse(firstOwn) - RUN_START_WINDOW_MS).toISOString();
-      const opening = await supabase
+        .limit(USAGE_SCAN_LIMIT)
+        .returns<UsageRow[]>();
+      if (own.error || !own.data) return { data: null, error: own.error };
+      const first = own.data[0]?.created_at;
+      const last = own.data.at(-1)?.created_at;
+      if (!first || !last) return { data: summarizeRunUsage([], applicationId), error: null };
+      // Calls that named no application, from the opening playbook read on.
+      // summarizeRunUsage keeps only the ones that belong to the run.
+      const unattributed = await supabase
         .from("usage_log")
-        .select("created_at")
+        .select(USAGE_COLUMNS)
         .eq("user_id", userId)
-        .eq("tool", "get_playbook")
         .is("application_id", null)
-        .gte("created_at", windowStart)
-        .lte("created_at", firstOwn)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .returns<{ created_at: string }[]>();
-      if (opening.error) return { data: null, error: opening.error };
-      const first = opening.data?.[0]?.created_at ?? firstOwn;
-      // The run's own calls, and calls that named no application made while
-      // it ran (search_stories and check_bullets often do not pass one).
-      const rows = await supabase
-        .from("usage_log")
-        .select("tool,response_bytes,request_bytes,application_id")
-        .eq("user_id", userId)
-        .gte("created_at", first)
+        .gte("created_at", new Date(Date.parse(first) - RUN_GAP_MS).toISOString())
         .lte("created_at", last)
-        .or(`application_id.eq.${applicationId},application_id.is.null`)
-        .returns<{ tool: string; response_bytes: number; request_bytes: number | null }[]>();
-      if (rows.error || !rows.data) return { data: null, error: rows.error };
-      const byTool: Record<string, number> = {};
-      let requestBytes = 0;
-      let responseBytes = 0;
-      for (const row of rows.data) {
-        byTool[row.tool] = (byTool[row.tool] ?? 0) + 1;
-        requestBytes += row.request_bytes ?? 0;
-        responseBytes += row.response_bytes;
-      }
-      return {
-        data: {
-          tool_calls: rows.data.length,
-          request_bytes: requestBytes,
-          response_bytes: responseBytes,
-          est_tokens: Math.ceil((requestBytes + responseBytes) / 4),
-          by_tool: byTool,
-        },
-        error: null,
-      };
+        .order("created_at", { ascending: true })
+        .limit(USAGE_SCAN_LIMIT)
+        .returns<UsageRow[]>();
+      if (unattributed.error || !unattributed.data) return { data: null, error: unattributed.error };
+      return { data: summarizeRunUsage([...own.data, ...unattributed.data], applicationId), error: null };
     },
 
     logUsage: async (applicationId, tool, bytes, requestBytes) => {

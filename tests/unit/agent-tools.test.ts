@@ -481,6 +481,7 @@ describe("usage log and responses", () => {
     const brief = await call("get_application_brief", { application_id });
     const logged = store.usage.find((entry) => entry.tool === "get_application_brief")!;
     expect(logged).toEqual({
+      at: expect.any(String),
       applicationId: application_id,
       tool: "get_application_brief",
       bytes: byteLength(brief.content[0].text),

@@ -122,13 +122,9 @@ export type AgentApplicationPatch = Partial<
  * It cannot see the chat's own tokens (the conversation, reasoning, project
  * files), so it is a lower bound.
  */
-export type RunUsage = {
-  tool_calls: number;
-  request_bytes: number;
-  response_bytes: number;
-  est_tokens: number;
-  by_tool: Record<string, number>;
-};
+import type { RunUsage } from "@/lib/agent/usage";
+
+export type { RunUsage };
 
 export type BriefRows = Omit<BriefSource, "runState"> & { ledger: LedgerRow[] };
 

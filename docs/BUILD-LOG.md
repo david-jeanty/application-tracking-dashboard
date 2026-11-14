@@ -826,6 +826,20 @@ remaining changes:
 Migration `20261114000100_run_feedback` (additive): `usage_log.request_bytes`,
 `agent_profile.interests`.
 
+**What counts as one run's usage** (`lib/agent/usage.ts`, tested on the real
+Ramp log): the run's own calls, grouped into sessions with no pause over 15
+minutes; the calls that named no application inside a session
+(`search_stories`, `check_bullets`); and the `get_playbook` read that opened
+the session, up to 15 minutes before it. A first version counted only the
+span between the run's first and last own calls, so it missed the opening
+playbook read (25 KB, the largest result) and would have grown when the
+posting was read again days later.
+
+**Ramp run, from the log:** 6 tool calls, 42,979 bytes of tool results
+(about 10,700 tokens): `get_playbook` 25,468, `search_stories` 14,808,
+two `check_bullets` 1,601, `complete_run` 933, `create_application_from_jd`
+169. Request bytes were not logged yet.
+
 #### Still open for step 10
 
 - **Preview Supabase project.** Needed before step 10. Once it exists, David's

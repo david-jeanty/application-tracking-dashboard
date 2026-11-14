@@ -27,6 +27,7 @@ import type {
 } from "@/lib/mcp/agent-tools";
 import { configureMcpServer, type McpServerKind } from "@/lib/mcp/servers";
 import type { JobTrackRepositoryFactory } from "@/lib/mcp/tools";
+import { summarizeRunUsage } from "@/lib/agent/usage";
 import { toMonthDate } from "@/lib/validation/agent";
 
 export const OWNER = "0aaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -66,7 +67,9 @@ export class FakeAgentStore {
   profile: AgentProfile | null = null;
   answers: SavedAnswer[] = [];
   edits: { before_text: string; after_text: string }[] = [];
-  usage: { applicationId: string | null; tool: string; bytes: number; requestBytes?: number }[] = [];
+  usage: { applicationId: string | null; tool: string; bytes: number; requestBytes?: number; at: string }[] = [];
+  /** Fake clock for the usage log: one second per call. */
+  private usageClock = Date.parse("2026-11-14T10:00:00Z");
   /** How many repositories were created, so tests can prove none was. */
   repositoriesCreated = 0;
   /** Tailored resumes, for the build tools. */
@@ -305,27 +308,22 @@ export class FakeAgentStore {
         });
       },
       logUsage: async (applicationId, tool, bytes, requestBytes) => {
-        this.usage.push({ applicationId, tool, bytes, requestBytes: requestBytes ?? 0 });
+        this.usageClock += 1000;
+        this.usage.push({ applicationId, tool, bytes, requestBytes: requestBytes ?? 0, at: new Date(this.usageClock).toISOString() });
       },
-      readRunUsage: async (applicationId) => {
-        const indexes = this.usage.flatMap((row, index) => (row.applicationId === applicationId ? [index] : []));
-        // The run opens with the latest get_playbook read before its first own call.
-        const opening = indexes.length
-          ? this.usage.findLastIndex(
-              (row, index) => index < indexes[0] && row.tool === "get_playbook" && row.applicationId === null,
-            )
-          : -1;
-        const rows = indexes.length
-          ? this.usage
-              .slice(opening >= 0 ? opening : indexes[0], indexes[indexes.length - 1] + 1)
-              .filter((row) => row.applicationId === applicationId || row.applicationId === null)
-          : [];
-        const by_tool: Record<string, number> = {};
-        for (const row of rows) by_tool[row.tool] = (by_tool[row.tool] ?? 0) + 1;
-        const request_bytes = rows.reduce((sum, row) => sum + (row.requestBytes ?? 0), 0);
-        const response_bytes = rows.reduce((sum, row) => sum + row.bytes, 0);
-        return { data: { tool_calls: rows.length, request_bytes, response_bytes, est_tokens: Math.ceil((request_bytes + response_bytes) / 4), by_tool }, error: null };
-      },
+      readRunUsage: async (applicationId) => ({
+        data: summarizeRunUsage(
+          this.usage.map((row) => ({
+            created_at: row.at,
+            tool: row.tool,
+            application_id: row.applicationId,
+            response_bytes: row.bytes,
+            request_bytes: row.requestBytes ?? 0,
+          })),
+          applicationId,
+        ),
+        error: null,
+      }),
       completeRun: (input) => {
         const application = owned().find((row) => row.id === input.application_id);
         if (!application) return Promise.resolve({ data: null, error: { code: "P0002" } });
