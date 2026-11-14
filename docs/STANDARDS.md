@@ -22,7 +22,7 @@ The biggest failure in the past was endless back and forth: David correcting the
 - **Reuse before writing.** Library variants first. At most 2 drafts per new bullet.
 - **Short outputs.** One summary at the end of the run. No restating, no explanations unless asked.
 - **Search only in the people step.** At most 4 web queries per run, snippets only, never open full pages. No research on posting details Interndex already has. Stop as soon as the shortlist is full. Run at a low effort setting.
-- **Run in the Job Search project** (STANDARDS.md as cached project knowledge) with only Interndex and web search on. Turn off unrelated connectors; they add cost to every message.
+- **Run in the Job Search project** with only Interndex and web search on. The standards arrive through `get_playbook`, so they are not added to the project's files (that would load them twice). Turn off unrelated connectors; they add cost to every message.
 - **Low effort setting** for runs; the work is step-by-step, not deep reasoning.
 
 ---

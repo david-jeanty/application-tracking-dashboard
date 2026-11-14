@@ -7,3 +7,5 @@
 **Alternatives.** Read `docs/STANDARDS.md` from disk at runtime (a serverless deployment may not ship the docs folder). Keep the skill as a separate document (it would drift from what the server serves).
 
 **Why.** David edits one Markdown file and one steps file; everything that depends on them is regenerated or fails a test.
+
+**Update (2026-11-14).** STANDARDS.md is no longer kept as a file in the Job Search project. Each run was loading the standards twice, once from the project and once from `get_playbook`, and the project copy could go stale. The playbook is now the only place Claude gets them. The larger redesign suggested at the same time was skipped: removing the project file saves about 3,900 tokens per run with no code change.

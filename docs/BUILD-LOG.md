@@ -267,7 +267,10 @@ hold up step 6.
    previews, or the preview MCP URL has to be allowed through.
 5. **Claude:** add a second custom connector pointing at
    `{preview alias}/api/mcp`, sign in with David's preview account, in a Job
-   Search project with only that connector and web search on.
+   Search project with only that connector and web search on. Do not add
+   STANDARDS.md to the project's files: `get_playbook` already serves it, and a
+   project copy loads the standards twice per run (about 3,900 tokens) and goes
+   stale when the code changes.
 
 **Automated checks on the preview**
 
@@ -323,6 +326,9 @@ Results go in this log. The PR is opened only after these pass.
   re-read on every later turn of the chat. The default would keep them, so the
   tools stay assistant-agnostic. Worth doing if David's usage meter shows runs
   near his 10% target.
+  **Decided 2026-11-14: not building.** STANDARDS.md comes out of the
+  Job Search project's files instead. That saves the same tokens with no code
+  change, and the playbook copy stays current with the code. See decision 0006.
 
 ### 8. What I need from David
 
@@ -903,8 +909,9 @@ Chrome binary (see `docs/testing.md`). `build` needs the three public
    can reach the preview MCP URL.
 5. **Claude:** add a custom connector at `{preview alias}/api/mcp`, sign in
    with the preview account, and use it in a Job Search project with only that
-   connector and web search on. Add `docs/STANDARDS.md` as project knowledge
-   and install the skill from `skill/interndex-pipeline/SKILL.md`.
+   connector and web search on. Install the skill from
+   `skill/interndex-pipeline/SKILL.md`. Do not add `docs/STANDARDS.md` to the
+   project's files: `get_playbook` serves the standards on every run.
 6. **In that project, calibrate both templates** (see step 6's setup for the
    exact sentence and ids).
 7. **Run the import.** The payload is prepared (see "Import decisions
