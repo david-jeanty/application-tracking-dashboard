@@ -329,6 +329,13 @@ Results go in this log. The PR is opened only after these pass.
   **Decided 2026-11-14: not building.** STANDARDS.md comes out of the
   Job Search project's files instead. That saves the same tokens with no code
   change, and the playbook copy stays current with the code. See decision 0006.
+- **Keep loose bridges past the run's chat.** `loose_bridges` come back in
+  `complete_run`'s result only. If David reviews them in a later chat, they
+  are gone; storing them on the tailored resume and showing them in
+  `get_application_brief` would keep them.
+- **Check that phrases come from the posting.** A phrase could be compared
+  with `jd_text` at `create_application_from_jd`, so a paraphrase cannot pass
+  as the posting's words.
 
 ### 8. What I need from David
 
@@ -865,6 +872,49 @@ two `check_bullets` 1,601, `complete_run` 933, `create_application_from_jd`
 | Saved rules | 9, the BTA framing rule included |
 | Profile interests | Saved from the latest resume: "Guitar, rock climbing, baking, learning pickleball, Ottawa Senators hockey"; David can change it with `import_library` |
 | Ramp usage from `get_run_state` | The run's 6 calls (opening playbook read included) plus one later `get_run_state` read; calls made later for other work left out |
+
+#### Phrases, bridging and bold spans (2026-11-14)
+
+David asked that bold and bullet choice follow the posting's phrases, not
+its keywords, and that close experience be bridged into the posting's
+language (decision record 0023).
+
+| Change | Where |
+| --- | --- |
+| Requirement phrases ("led a group project"), 1 to 3 per requirement, 2+ words each; `complete_run` refuses a posting with none | `lib/agent/types.ts`, `create_application_from_jd`, `complete_run` |
+| Phrase matcher: direct (every word, or a close neighbour, in one short window) or partial (at least half) | `lib/agent/library/phrases.ts`; word helpers moved to `lib/agent/library/words.ts` |
+| `search_stories` takes `phrases`, ranks direct answers first, and lists `answers` / `partly` per story and variant plus `unanswered_phrases` | `lib/agent/library/scoring.ts` |
+| Page fill adds and keeps the bullets that answer phrases first | `lib/agent/resume/page-fill.ts`, `build.ts` |
+| Bold: a span that answers a phrase, 8 words at most, 5 per resume; postings without phrases keep the old rule | `lib/agent/checks/bold.ts` |
+| Numbers: every number in a run's bullets comes from a story of that experience (10% rounding allowed) | `lib/agent/checks/numbers.ts`, `complete_run` |
+| `loose_bridges` in `complete_run`: returned after the build with a ready revert edit; refused if also in `new_variants` | `lib/validation/agent.ts`, `complete_run` |
+| Playbook and standards: phrases, move 8 (answer phrases), move 9 (bridge adjacent experience), the new bold rule | `phases.ts`, `docs/STANDARDS.md` |
+
+**Found and fixed on the way:** the build kept `page_adjustments` in its saved
+layout report but never returned it, although the playbook told Claude to read
+it from the build result. The result now carries it (needed here too, so a
+loose bridge the build cut is not shown for review).
+
+**Cost:** the run playbook grows about 1.5 KB (about 400 tokens per run). The
+stress test (playbook plus 60 long saved rules) still fits the 40 KB cap; the
+first wording did not, so the steps point at the standards' moves instead of
+repeating them. No migration: phrases live in the existing `jd_requirements`
+JSON.
+
+**Tests:** `tests/unit/agent-phrases.test.ts` (matcher, ranking, page-fill
+relevance), `agent-check-bold.test.ts` (span rules), `agent-check-numbers.test.ts`,
+`agent-complete-run.test.ts` (missing phrases, bold on a single word, an
+invented number, loose bridges and their revert). Fixtures are the gold set in
+`docs/STANDARDS.md`, with the IBM Pro Bono workstreams bullet as the bridging
+example. 1,969 unit tests pass.
+
+**How David tests it (one real run on the preview):** paste a posting that
+asks for leadership or teamwork in so many words. Check that (1) the bold on
+the PDF covers short spans such as "led a team of five", 5 at most, and no
+lone nouns or numbers; (2) the Pro Bono bullet reads in the posting's
+language when the posting asks for leading a group; (3) the summary lists any
+loose bridges with the wording a revert restores; (4) no number on the page
+is new.
 
 #### Still open for step 10
 

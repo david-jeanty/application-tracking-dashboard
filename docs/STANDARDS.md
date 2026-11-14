@@ -71,6 +71,8 @@ The goal of every tailored resume is to make David the best possible match for t
 5. **Mirror the posting's nouns, skills and, when David asks, the role title.**
 6. **Promote the strongest match.** Projects (Interndex) can outrank jobs when they fit the posting better.
 7. **Find the hidden match.** Before calling anything a gap, search the whole story library for adjacent proof and frame it in the requirement's terms.
+8. **Answer the posting's phrases, not its keywords.** Pull short phrases from the posting ("led a group project", "worked cross-functionally"), never single words, and use the story that answers each most directly.
+9. **Bridge adjacent experience.** When the posting asks for X and a story shows something close to X, reword it in the posting's language: asked for leading a group, "Structured the engagement and proposed client-aligned workstreams" becomes leading the team's client workstreams. Reframe and infer freely; add no fact, number, title or scope the library does not hold **[checked: numbers]**. A loosely related bridge still goes in, and David gets the rewording after the build to accept or revert.
 
 **Where to stretch, and how far**
 
@@ -95,7 +97,7 @@ Employers, employment dates, degrees, schools, certifications, and outcomes that
 
 - Reverse-chronological order within each section, always.
 - **Bullet counts [checked]:** David's layout, set in `lib/agent/config/bullet-counts.ts`: incoming IBM role 1, IRB 2, Fidus 3, StraNexus 2, Interndex 3, IBM Pro Bono 2 to 3, BTA 2. The page must be fully used.
-- **Bold [checked]:** only the phrases and numbers that mirror the posting's language or prove a requirement it lists, so a recruiter skimming against the posting sees the matches first. Never bold every number.
+- **Bold [checked]:** the span that answers a requirement phrase, such as "led a team of five", so a recruiter skimming against the posting sees the matches first. Never an isolated noun, a bare number or a whole bullet (8 words at most); 5 spans per resume at most.
 - **Interests line:** off by default; added from the profile only when the page has room or the company's culture fits.
 - **Page fill [checked]:** one page, with no more than 5% of the page height empty below the last line or above the first. When the page is short, the build adds the next best library bullet for the posting; when it runs over, it cuts the weakest bullet.
 - **Templates:** zero2sudo for technical roles (PM, TPM, data, AI), Jake's for consulting and business roles.

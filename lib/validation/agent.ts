@@ -7,6 +7,7 @@ import { FIT_VERDICTS } from "@/lib/agent/fit";
 import { LIBRARY_SECTIONS } from "@/lib/agent/resume/library-entries";
 import { tailoredContentSchema } from "@/lib/agent/resume/content";
 import {
+  requirementPhraseSchema,
   requirementSchema,
   RULE_SCOPES,
   TEMPLATE_NAMES,
@@ -66,7 +67,7 @@ export const createApplicationFromJdInputSchema = z.object({
   requirements: z
     .array(requirementSchema)
     .max(40)
-    .describe("The posting's stated requirements, each marked must_have or not."),
+    .describe("The posting's stated requirements, each marked must_have or not, with the phrases a bullet could answer."),
   partner_functions: z
     .array(z.string().trim().min(1).max(80))
     .max(20)
@@ -95,6 +96,11 @@ export const searchStoriesInputSchema = z.object({
     .min(1)
     .max(40)
     .describe("The posting's requirements, in the posting's words."),
+  phrases: z
+    .array(requirementPhraseSchema)
+    .max(40)
+    .default([])
+    .describe("Every requirement phrase sent to create_application_from_jd, such as \"led a group project\". Ranks first the wordings that answer them."),
   angles: z
     .array(z.string().trim().min(1).max(40))
     .max(10)
@@ -230,7 +236,18 @@ export const completeRunInputSchema = z.object({
     )
     .max(30)
     .default([])
-    .describe("Bullets written for this run, saved to the library. Any with a number needs an explain_note."),
+    .describe("Bullets written for this run, saved to the library. Any with a number needs an explain_note. Leave loose bridges out."),
+  loose_bridges: z
+    .array(
+      z.object({
+        bullet: bulletText.describe("The bridged bullet, exactly as in resume."),
+        phrase: requirementPhraseSchema.describe("The requirement phrase it was reworded toward."),
+        variant_id: z.uuid().describe("The library variant it was reworded from. Reverting restores that wording."),
+      }),
+    )
+    .max(10)
+    .default([])
+    .describe("Bullets reworded toward a phrase from only loosely related experience. Returned after the build for David to accept or revert."),
   answers: z
     .array(
       z.object({

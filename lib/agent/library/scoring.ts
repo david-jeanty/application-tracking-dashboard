@@ -10,7 +10,17 @@
  * It also reports which requirements no story touched. Those are where the
  * assistant should look harder before calling something a gap (STANDARDS.md,
  * "find the hidden match").
+ *
+ * When the query carries requirement phrases ("led a group project"), a
+ * story or variant that answers a phrase directly outranks one that only
+ * shares its words, and the result says which phrases each one answers
+ * (decision record 0023).
  */
+
+import { answerScore, answersIn, type PhraseAnswers } from "@/lib/agent/library/phrases";
+import { RELATED, relatedTo, tokenize } from "@/lib/agent/library/words";
+
+export { relatedTo, tokenize };
 
 export type LibraryVariant = {
   id: string;
@@ -38,6 +48,8 @@ export type StoryQuery = {
   requirements: readonly string[];
   angles: readonly string[];
   template: string;
+  /** Requirement phrases in the posting's words, such as "led a group project". */
+  phrases?: readonly string[];
 };
 
 export type RankedVariant = {
@@ -46,6 +58,10 @@ export type RankedVariant = {
   style: "house" | "story_voice";
   char_count: number;
   explain_note: string | null;
+  /** Indexes of the query's phrases this wording answers directly. Only with phrases. */
+  answers?: number[];
+  /** Indexes of the phrases it answers in part. Only with phrases. */
+  partly?: number[];
 };
 
 export type RankedStory = {
@@ -58,6 +74,10 @@ export type RankedStory = {
   score: number;
   /** Indexes into the query's requirements this story speaks to. */
   matches: number[];
+  /** Phrase indexes the story's facts or wordings answer directly. Only with phrases. */
+  answers?: number[];
+  /** Phrase indexes they answer in part. Only with phrases. */
+  partly?: number[];
   variants: RankedVariant[];
 };
 
@@ -65,41 +85,37 @@ export type StoryRanking = {
   stories: RankedStory[];
   /** Requirement indexes that no story in the whole library matched. */
   unmatched: number[];
+  /** Phrase indexes no story answered, even in part. Only with phrases. */
+  unanswered_phrases?: number[];
 };
+
+/** A phrase answer counts this many times its `answerScore` in the ranking. */
+const PHRASE_WEIGHT = 2;
+
+/** The best answer each phrase gets from any of the texts. */
+function bestAnswers(texts: readonly string[], phrases: readonly string[]): PhraseAnswers {
+  const direct = new Set<number>();
+  const partial = new Set<number>();
+  for (const text of texts) {
+    const answers = answersIn(text, phrases);
+    answers.direct.forEach((index) => direct.add(index));
+    answers.partial.forEach((index) => partial.add(index));
+  }
+  return {
+    direct: [...direct].sort((a, b) => a - b),
+    partial: [...partial].filter((index) => !direct.has(index)).sort((a, b) => a - b),
+  };
+}
+
+function answerFields(answers: PhraseAnswers | null): { answers?: number[]; partly?: number[] } {
+  return answers ? { answers: answers.direct, partly: answers.partial } : {};
+}
 
 /** Stories ranked for the posting; every other experience then gets its best story too. */
 export const MAX_STORIES = 8;
 export const MAX_VARIANTS_PER_STORY = 2;
 /** Longest story summary (its facts) a search result carries. */
 export const MAX_SUMMARY_CHARS = 700;
-
-const STOPWORDS = new Set([
-  "a", "an", "the", "and", "or", "of", "in", "on", "at", "to", "for", "by",
-  "with", "from", "as", "is", "are", "be", "will", "you", "your", "our", "we",
-  "ability", "able", "experience", "skills", "skill", "strong", "excellent",
-  "knowledge", "understanding", "proficiency", "proficient", "familiarity",
-  "work", "working", "including", "etc", "plus", "preferred", "required",
-  "years", "year", "related", "using", "use",
-]);
-
-/** A crude, fixed stemmer: enough to match "analyzing" with "analyzed". */
-function stem(token: string): string {
-  if (token.length > 5 && token.endsWith("ing")) return token.slice(0, -3);
-  if (token.length > 4 && token.endsWith("ed")) return token.slice(0, -2);
-  if (token.length > 4 && token.endsWith("es")) return token.slice(0, -2);
-  if (token.length > 3 && token.endsWith("s") && !token.endsWith("ss")) {
-    return token.slice(0, -1);
-  }
-  return token;
-}
-
-export function tokenize(text: string): string[] {
-  return text
-    .toLowerCase()
-    .split(/[^a-z0-9+#]+/)
-    .filter((token) => token.length >= 2 && !STOPWORDS.has(token))
-    .map(stem);
-}
 
 function overlap(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
   let count = 0;
@@ -110,42 +126,6 @@ function overlap(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
 function lower(values: readonly string[]): Set<string> {
   return new Set(values.map((value) => value.trim().toLowerCase()));
 }
-
-/**
- * Words a posting uses for work David's stories describe in other words
- * (decision record 0018). Keys and values are stems, as `tokenize` makes
- * them. Only true neighbours belong here: a synonym that turns a real gap
- * (forecasting, pricing, inventory) into a match would mislead the fit read.
- */
-const RELATED: Readonly<Record<string, readonly string[]>> = {
-  collateral: ["content", "case", "studi", "video", "youtube", "title", "description"],
-  catalog: ["content", "case", "studi", "video", "title", "description"],
-  bulletin: ["content", "case", "studi", "video", "title", "description"],
-  brochure: ["content", "case", "studi", "video", "title", "description"],
-  promotional: ["content", "campaign", "outreach", "audience", "visibility"],
-  campaign: ["outreach", "audience", "linkedin", "reddit", "visibility", "email", "hubspot"],
-  marcomm: ["marketing", "content"],
-  marketing: ["seo", "visibility", "audience", "content"],
-  launch: ["launch", "launched"],
-  metric: ["kpi", "dashboard", "track", "metric"],
-  kpi: ["kpi", "dashboard", "metric"],
-  process: ["triage", "workflow", "redesign", "backlog", "standard"],
-  workflow: ["workflow", "triage", "automat"],
-  improvement: ["reduc", "cut", "improv", "eliminat", "redesign"],
-  roadmap: ["priorit", "requirement", "rescop"],
-  customer: ["user", "interview", "feedback", "client"],
-  user: ["user", "interview", "feedback"],
-  stakeholder: ["stakeholder", "requirement", "director", "client"],
-  engineer: ["engineer", "engineering"],
-  engineering: ["engineer", "engineering"],
-  requirement: ["requirement", "scope", "rescop"],
-  detail: ["audit", "tracker", "timeline", "data", "quality"],
-  organizational: ["tracker", "timeline", "deliverable", "event", "logistic"],
-  communication: ["present", "document", "email", "call", "outreach"],
-  analytic: ["dashboard", "data", "sql", "power", "kpi"],
-  data: ["data", "record", "sql", "dashboard"],
-  ai: ["ai", "claude", "llm", "mcp"],
-};
 
 /** A requirement word is present when it, or a related word, is in the story. */
 function hits(token: string, documentTokens: ReadonlySet<string>): boolean {
@@ -189,16 +169,19 @@ function rankVariants(
   usability?: VariantUsability,
 ): RankedVariant[] {
   const template = query.template.trim().toLowerCase();
+  const phrases = query.phrases ?? [];
   return story.variants
     .map((variant) => {
+      const answers = phrases.length ? answersIn(variant.text, phrases) : null;
       const score =
+        (answers ? PHRASE_WEIGHT * answerScore(answers) : 0) +
         (usability ? usability(variant, story) : 0) +
         (variant.style === "house" ? 3 : 0) +
         2 * overlap(lower(variant.angles), queryAngles) +
         (lower(variant.template_fit).has(template) ? 2 : 0) +
         (variant.is_gold ? 1 : 0) +
         overlap(new Set(tokenize(variant.text)), queryTokens);
-      return { variant, score };
+      return { variant, score, answers };
     })
     .sort(
       (a, b) =>
@@ -207,12 +190,13 @@ function rankVariants(
         a.variant.id.localeCompare(b.variant.id),
     )
     .slice(0, MAX_VARIANTS_PER_STORY)
-    .map(({ variant }) => ({
+    .map(({ variant, answers }) => ({
       id: variant.id,
       text: variant.text,
       style: variant.style,
       char_count: variant.char_count,
       explain_note: variant.explain_note,
+      ...answerFields(answers),
     }));
 }
 
@@ -241,6 +225,9 @@ export function rankStories(
   const queryAngles = lower(query.angles);
   const matchedAnywhere = new Set<number>();
 
+  const phrases = query.phrases ?? [];
+  const answeredAnywhere = new Set<number>();
+
   const scored = stories.map((story) => {
     const documentTokens = new Set(
       tokenize(
@@ -268,12 +255,19 @@ export function rankStories(
       ...story.variants.flatMap((variant) => [...lower(variant.angles)]),
     ]);
 
+    // A story answers a phrase through its facts or any of its wordings.
+    const answers = phrases.length
+      ? bestAnswers([story.summary ?? "", ...story.variants.map((variant) => variant.text)], phrases)
+      : null;
+    if (answers) [...answers.direct, ...answers.partial].forEach((index) => answeredAnywhere.add(index));
+
     const score =
+      (answers ? PHRASE_WEIGHT * answerScore(answers) : 0) +
       3 * matches.length +
       Math.min(overlap(queryTokens, documentTokens), 10) +
       2 * overlap(storyAngles, queryAngles);
 
-    return { story, matches, score };
+    return { story, matches, score, answers };
   });
 
   const ordered = scored
@@ -316,7 +310,7 @@ export function rankStories(
     ...top.map((entry) => ({ entry, variants: MAX_VARIANTS_PER_STORY })),
     // Stories added only so an experience has material carry one wording.
     ...coverage.map((entry) => ({ entry, variants: 1 })),
-  ].map(({ entry: { story, matches, score }, variants }) => ({
+  ].map(({ entry: { story, matches, score, answers }, variants }) => ({
     story_id: story.id,
     label: story.label,
     summary: shorten(story.summary, MAX_SUMMARY_CHARS),
@@ -324,6 +318,7 @@ export function rankStories(
     title: story.official_title,
     score,
     matches,
+    ...answerFields(answers),
     variants: rankVariants(story, query, queryTokens, queryAngles, options.usability).slice(0, variants),
   }));
 
@@ -331,5 +326,7 @@ export function rankStories(
     .map((_, index) => index)
     .filter((index) => !matchedAnywhere.has(index));
 
-  return { stories: ranked, unmatched };
+  if (!phrases.length) return { stories: ranked, unmatched };
+  const unanswered_phrases = phrases.map((_, index) => index).filter((index) => !answeredAnywhere.has(index));
+  return { stories: ranked, unmatched, unanswered_phrases };
 }

@@ -125,6 +125,8 @@ export type BuildRow = {
   built_markdown_sha256: string | null;
   /** The posting's requirements, for choosing what to add or cut. */
   requirements: string[];
+  /** The posting's requirement phrases, for the same choice (decision record 0023). */
+  phrases?: string[];
   template: BuildTemplate;
 };
 
@@ -463,6 +465,8 @@ export type BuildResult = {
   layout_warnings?: LayoutIssue[];
   has_pdf: boolean;
   edits_recorded?: number;
+  /** Bullets the build added or cut to fill the page, and line-height steps. */
+  page_adjustments?: PageAdjustment[];
 };
 
 export async function buildResume(
@@ -678,7 +682,13 @@ export async function buildResume(
           library = listed.data ?? [];
         }
         // Cut only above David's counts here; line height comes next.
-        const weakest = pickWeakestBullet(state.content, resume.requirements, keep, bulletMinimums(entries, library));
+        const weakest = pickWeakestBullet(
+          state.content,
+          resume.requirements,
+          keep,
+          bulletMinimums(entries, library),
+          resume.phrases,
+        );
         if (!weakest) {
           adjustStop = "at_minimum_counts";
           break;
@@ -697,6 +707,7 @@ export async function buildResume(
           entries,
           library,
           requirements: resume.requirements,
+          phrases: resume.phrases,
           template: resume.template.name,
           accepts: (entryKey, text) => {
             const trial = renderTailoredResume(skeleton, addBullet(current.content, entryKey, text), renderOptions);
@@ -777,7 +788,7 @@ export async function buildResume(
           // Still over a page at the tightest line height: one page comes
           // first, so cut the weakest bullet even below David's counts.
           if (!overflow) break;
-          const weakest = pickWeakestBullet(state.content, resume.requirements, keep);
+          const weakest = pickWeakestBullet(state.content, resume.requirements, keep, undefined, resume.phrases);
           const cutContent = weakest ? cutBullet(state.content, weakest.entry, weakest.index) : null;
           const cutRendered = cutContent ? renderTailoredResume(skeleton, cutContent, renderOptions) : null;
           if (!weakest || !cutContent || !cutRendered?.ok) break;
@@ -901,6 +912,7 @@ export async function buildResume(
       ...(report.pages !== undefined ? { pages: report.pages } : {}),
       ...(report.failures?.length ? { layout_failures: report.failures.slice(0, 10) } : {}),
       ...(report.warnings?.length ? { layout_warnings: report.warnings.slice(0, 5) } : {}),
+      ...(report.page_adjustments?.length ? { page_adjustments: report.page_adjustments } : {}),
       has_pdf: storedPdfPath !== null,
       ...(recordedEdits.length ? { edits_recorded: recordedEdits.length } : {}),
     },

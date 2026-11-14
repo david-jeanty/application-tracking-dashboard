@@ -12,6 +12,7 @@ import {
 } from "@/lib/agent/resume/library-entries";
 import {
   parseStoredRequirements,
+  requirementPhrases,
   type AgentProfile,
   type AgentRule,
   type AgentTemplate,
@@ -546,6 +547,7 @@ export function createAgentRepositoryForClient(
           company: application.data.company_name,
           title: application.data.original_job_title,
           requirements: parseStoredRequirements(application.data.jd_requirements).map((requirement) => requirement.text),
+          phrases: requirementPhrases(parseStoredRequirements(application.data.jd_requirements)),
           template: template.data,
         },
         error: null,

@@ -2,7 +2,8 @@ import type { McpServer, ToolAnnotations } from "@modelcontextprotocol/server";
 import type { z } from "zod";
 import { buildApplicationBrief, type BriefSource } from "@/lib/agent/brief";
 import { byteLength, serializeCapped, truncate, type CappedTool } from "@/lib/agent/caps";
-import { boldProblems } from "@/lib/agent/checks/bold";
+import { boldProblems, describeBoldProblem } from "@/lib/agent/checks/bold";
+import { untracedNumbers } from "@/lib/agent/checks/numbers";
 import { checkBullets, lineFillCheck, type LineTargets } from "@/lib/agent/checks/bullets";
 import { phrasesFromRules } from "@/lib/agent/checks/text-rules";
 import { pickDuplicate } from "@/lib/agent/dedupe";
@@ -27,9 +28,10 @@ import {
   type BuildDependencies,
   type BuildRepository,
 } from "@/lib/agent/resume/build";
-import { renderTailoredResume, type TailoredContent } from "@/lib/agent/resume/content";
+import { plainBulletText, renderTailoredResume, type TailoredContent } from "@/lib/agent/resume/content";
 import type { ResumeRenderer } from "@/lib/agent/resume/render";
 import type { ResumeLolClient } from "@/lib/agent/resumelol/client";
+import { requirementPhrases } from "@/lib/agent/types";
 import type {
   AgentRule,
   AgentTemplate,
@@ -523,11 +525,11 @@ export function registerAgentTools(
     {
       title: "Search story library",
       description:
-        "Finds the library's best stories for the requirements in one call: up to 8 ranked stories, each with its facts (summary) and best 2 variants with explain notes, then the best story of every other experience on the resume (1 variant), plus the requirements no story matched. Deterministic.",
+        "Finds the library's best stories for the requirements and their phrases in one call: up to 8 ranked stories, each with its facts (summary) and best 2 variants with explain notes, then the best story of every other experience on the resume (1 variant), plus the requirements no story matched. With phrases, each story and variant lists the phrases it answers (answers: directly, partly: in part). Deterministic.",
       inputSchema: searchStoriesInputSchema,
       annotations: READ_ONLY,
     },
-    async ({ requirements, angles, template }, repository) => {
+    async ({ requirements, phrases, angles, template }, repository) => {
       const [library, templateRow, rules] = await Promise.all([
         repository.listLibrary(),
         repository.readTemplate(template),
@@ -550,7 +552,7 @@ export function registerAgentTools(
             lineFillCheck(plain.length, targets, { oneLineAllowed: allowsOneLine({ title: story.org, org: null }) }) === null);
         return (fits ? 4 : 0) - (isBlocked ? 8 : 0);
       };
-      return { ok: true, value: rankStories(library.data, { requirements, angles, template }, { usability }) };
+      return { ok: true, value: rankStories(library.data, { requirements, phrases, angles, template }, { usability }) };
     },
   );
 
@@ -917,23 +919,57 @@ export function registerAgentTools(
         );
       }
 
+      // Bullets answer the posting's phrases, not its single words (decision record 0023).
+      const phrases = requirementPhrases(requirements);
+      if (!phrases.length) {
+        return fail(
+          "Nothing was saved: the posting's requirements have no phrases. Call create_application_from_jd again with phrases on each requirement (it updates the saved posting), then call complete_run again.",
+        );
+      }
+
       // Every entry gets at least one bullet when the library has a story for it.
       const library = await repository.listLibrary();
       if (library.error || !library.data) return dbFail("Reading the library", library.error);
-      // Bold only what mirrors the posting (decision record 0022).
+      // Bold marks the spans that answer the posting's phrases (decision records 0022 and 0023).
       const bold = boldProblems(
         args.resume.entries.filter((entry) => !entry.omit).flatMap((entry) => entry.bullets),
         requirements.map((requirement) => requirement.text),
         args.fit_read.mirror_words,
+        phrases,
       );
       if (bold.length) {
         return fail(
-          `Nothing was saved: bold only what mirrors the posting or proves a requirement it lists. Unbold or reword: ${bold
-            .slice(0, 6)
-            .map((problem) => `"**${problem.phrase}**"`)
-            .join(", ")}.`,
+          `Nothing was saved: bold only the spans that answer a requirement phrase. Phrases: ${phrases
+            .map((phrase) => `"${phrase}"`)
+            .join(", ")}. ${bold.slice(0, 6).map(describeBoldProblem).join(" ")}`,
         );
       }
+
+      // Reframe the words, never the facts: every number comes from the library.
+      const untraced = untracedNumbers(rendered.bullets, rendered.bullet_owners, library.data);
+      if (untraced.length) {
+        return fail(
+          `Nothing was saved: ${untraced
+            .slice(0, 6)
+            .map((problem) => `"${problem.number}" (${problem.entry})`)
+            .join(", ")} ${untraced.length === 1 ? "is" : "are"} not in that experience's stories. Use the library's numbers; bridging rewords the work, it never adds a number, fact, title or scope.`,
+        );
+      }
+
+      // Loose bridges come back after the build for David to accept or revert.
+      const pageBullets = args.resume.entries.filter((entry) => !entry.omit).flatMap((entry) => entry.bullets);
+      const variantText = new Map(library.data.flatMap((story) => story.variants.map((variant) => [variant.id, variant.text] as const)));
+      const bridgeProblems = args.loose_bridges.flatMap((bridge, index) => {
+        if (!pageBullets.some((bullet) => bullet === bridge.bullet || plainBulletText(bullet) === bridge.bullet)) {
+          return [`loose_bridges[${index}].bullet is not a bullet on the resume.`];
+        }
+        if (!variantText.has(bridge.variant_id)) return [`loose_bridges[${index}].variant_id is not in the library.`];
+        if (args.new_variants.some((variant) => plainBulletText(variant.text) === plainBulletText(bridge.bullet))) {
+          return [`loose_bridges[${index}] is also in new_variants; leave it out until David accepts it.`];
+        }
+        return [];
+      });
+      if (bridgeProblems.length) return fail(`Nothing was saved. ${bridgeProblems.slice(0, 6).join(" ")}`);
 
       // David's layout: each experience's bullet count (config/bullet-counts.ts).
       const counts = bulletCountProblems(
@@ -1007,6 +1043,18 @@ export function registerAgentTools(
       value.build = built.ok
         ? built.value
         : { built: false, message: `${built.message} The run is saved; retry with build_resume.` };
+      const cut = new Set(
+        (built.ok ? built.value.page_adjustments ?? [] : [])
+          .flatMap((adjustment) => (adjustment.action === "cut" ? [plainBulletText(adjustment.text)] : [])),
+      );
+      const review = args.loose_bridges
+        .filter((bridge) => !cut.has(plainBulletText(bridge.bullet)))
+        .map((bridge) => ({
+          bullet: bridge.bullet,
+          phrase: bridge.phrase,
+          revert: { before_text: bridge.bullet, after_text: variantText.get(bridge.variant_id)!, variant_id: bridge.variant_id },
+        }));
+      if (review.length) value.loose_bridges = review;
       // The run's tool usage so far, for the last line of the summary.
       Object.assign(value, await usageField(repository, args.application_id));
       return { ok: true, value, applicationId: args.application_id };

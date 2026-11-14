@@ -23,12 +23,48 @@ export type VariantSource = (typeof VARIANT_SOURCES)[number];
 export const RULE_SCOPES = ["bullets", "outreach", "all"] as const;
 export type RuleScope = (typeof RULE_SCOPES)[number];
 
+/** Most phrases one requirement carries. */
+export const MAX_PHRASES_PER_REQUIREMENT = 3;
+
+/**
+ * A short span of the posting a bullet can answer, in the posting's words:
+ * "led a group project", never the single word "group" (decision record 0023).
+ */
+export const requirementPhraseSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(80)
+  .refine((phrase) => /\S\s+\S/.test(phrase), "A phrase has at least two words, not one.");
+
 /** One stated requirement of a posting, as stored in `jd_requirements`. */
 export const requirementSchema = z.object({
   text: z.string().trim().min(1).max(300),
   must_have: z.boolean(),
+  phrases: z
+    .array(requirementPhraseSchema)
+    .max(MAX_PHRASES_PER_REQUIREMENT)
+    .optional()
+    .describe(
+      "1 to 3 short phrases in the posting's own words that a bullet could answer, 2 to 6 words each, such as \"led a group project\" or \"worked cross-functionally\". Not single words.",
+    ),
 });
 export type Requirement = z.infer<typeof requirementSchema>;
+
+/** Every requirement phrase of a posting, in requirement order, without repeats. */
+export function requirementPhrases(requirements: readonly Requirement[]): string[] {
+  const seen = new Set<string>();
+  const phrases: string[] = [];
+  for (const requirement of requirements) {
+    for (const phrase of requirement.phrases ?? []) {
+      const key = phrase.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      phrases.push(phrase);
+    }
+  }
+  return phrases;
+}
 
 /** Reads `jd_requirements` defensively: anything malformed becomes empty. */
 export function parseStoredRequirements(value: unknown): Requirement[] {

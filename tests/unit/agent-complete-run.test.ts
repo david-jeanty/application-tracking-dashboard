@@ -8,6 +8,7 @@ import { ZERO2SUDO_BASE } from "./fixtures/resume-bases";
 const BULLET_A = "Reduced the open ticket backlog by 35% by redesigning service request triage.";
 const BULLET_B = "Grew the tracker to 100 student sign-ups in its first month.";
 const STORY_ID = "50000000-0000-4000-8000-000000000001";
+const VARIANT_ID = "60000000-0000-4000-8000-000000000001";
 
 function layout(): TemplateLayout {
   const parsed = parseBaseResume(ZERO2SUDO_BASE);
@@ -54,7 +55,15 @@ beforeEach(async () => {
     },
   ];
   store.library = [
-    { id: STORY_ID, label: "Backlog", summary: null, tags: [], org: "IRB", official_title: "Analyst", variants: [] },
+    {
+      id: STORY_ID,
+      label: "Backlog",
+      summary: "Redesigned service request triage; the open backlog fell 35%. The tracker reached 100 student sign-ups in a month.",
+      tags: [],
+      org: "IRB",
+      official_title: "Analyst",
+      variants: [],
+    },
   ];
   client = await connect("agent", store);
   const created = json<{ application_id: string }>(
@@ -63,7 +72,7 @@ beforeEach(async () => {
       title: "Technical Program Manager Intern",
       location: "Los Angeles, CA",
       jd_text: "We are hiring.",
-      requirements: [{ text: "Program management", must_have: true }],
+      requirements: [{ text: "Program management", must_have: true, phrases: ["redesigned service request triage"] }],
     }),
   );
   applicationId = created.application_id;
@@ -172,7 +181,7 @@ describe("complete_run", () => {
         jd_text: "We are hiring.",
         requirements: [
           { text: "Pursuing a B.S. in Computer Science or a related technical field", must_have: true },
-          { text: "Program management", must_have: true },
+          { text: "Program management", must_have: true, phrases: ["redesigned service request triage"] },
         ],
       }),
     );
@@ -222,6 +231,100 @@ describe("complete_run", () => {
   it("refuses the people section until Spec 2", async () => {
     const response = await client.call("complete_run", payload({ people: [{ name: "Someone" }] }));
     expect(response.isError).toBe(true);
+    expect(store.completedRuns).toHaveLength(0);
+  });
+
+  it("refuses a posting saved without requirement phrases", async () => {
+    const bare = json<{ application_id: string }>(
+      await client.call("create_application_from_jd", {
+        company: "Acme",
+        title: "Operations Intern",
+        jd_text: "We are hiring.",
+        requirements: [{ text: "Program management", must_have: true }],
+      }),
+    );
+    const response = await client.call("complete_run", payload({ application_id: bare.application_id }));
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain("have no phrases");
+    expect(store.completedRuns).toHaveLength(0);
+  });
+
+  it("refuses bold on an isolated word, naming the posting's phrases", async () => {
+    const bolded = "Reduced the open ticket **backlog** by 35% by redesigning service request triage.";
+    const response = await client.call(
+      "complete_run",
+      payload({
+        resume: { entries: [{ key: "information-management-analyst-intern", bullets: [bolded] }, { key: "tracker-app", bullets: [BULLET_B] }] },
+        new_variants: [],
+      }),
+    );
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain('"redesigned service request triage"');
+    expect(response.content[0].text).toContain('"**backlog**" answers none');
+    expect(store.completedRuns).toHaveLength(0);
+  });
+
+  it("passes bold on the span that answers a phrase", async () => {
+    const bolded = "Reduced the open ticket backlog by 35% by **redesigning service request triage**.";
+    const response = await client.call(
+      "complete_run",
+      payload({
+        resume: { entries: [{ key: "information-management-analyst-intern", bullets: [bolded] }, { key: "tracker-app", bullets: [BULLET_B] }] },
+        new_variants: [],
+        build: false,
+      }),
+    );
+    expect(response.isError).toBeFalsy();
+  });
+
+  it("refuses a number the story library does not hold", async () => {
+    const invented = "Reduced the open ticket backlog by 60% by redesigning service request triage.";
+    const response = await client.call(
+      "complete_run",
+      payload({
+        resume: { entries: [{ key: "information-management-analyst-intern", bullets: [invented] }, { key: "tracker-app", bullets: [BULLET_B] }] },
+        new_variants: [],
+      }),
+    );
+    expect(response.isError).toBe(true);
+    expect(response.content[0].text).toContain('"60%"');
+    expect(response.content[0].text).toContain("never adds a number");
+    expect(store.completedRuns).toHaveLength(0);
+  });
+
+  it("returns loose bridges after the build, each with its revert edit", async () => {
+    const original = "Cut the backlog 35% by redesigning triage.";
+    store.library[0].variants = [
+      { id: VARIANT_ID, text: original, style: "house", angles: [], template_fit: [], char_count: original.length, is_gold: false, explain_note: null, created_at: "2026-11-01T00:00:00Z" },
+    ];
+    const response = await client.call(
+      "complete_run",
+      payload({ new_variants: [], loose_bridges: [{ bullet: BULLET_A, phrase: "redesigned service request triage", variant_id: VARIANT_ID }] }),
+    );
+    const result = json<{ loose_bridges: unknown[] }>(response);
+    expect(result.loose_bridges).toEqual([
+      {
+        bullet: BULLET_A,
+        phrase: "redesigned service request triage",
+        revert: { before_text: BULLET_A, after_text: original, variant_id: VARIANT_ID },
+      },
+    ]);
+  });
+
+  it("refuses a loose bridge that is not on the resume or is also saved as a variant", async () => {
+    store.library[0].variants = [
+      { id: VARIANT_ID, text: "Cut the backlog 35%.", style: "house", angles: [], template_fit: [], char_count: 20, is_gold: false, explain_note: null, created_at: "2026-11-01T00:00:00Z" },
+    ];
+    const missing = await client.call(
+      "complete_run",
+      payload({ new_variants: [], loose_bridges: [{ bullet: "Not on the page at all.", phrase: "redesigned service request triage", variant_id: VARIANT_ID }] }),
+    );
+    expect(missing.content[0].text).toContain("is not a bullet on the resume");
+    const saved = await client.call(
+      "complete_run",
+      payload({ loose_bridges: [{ bullet: BULLET_A, phrase: "redesigned service request triage", variant_id: VARIANT_ID }] }),
+    );
+    expect(saved.content[0].text).toContain("leave it out until David accepts it");
     expect(store.completedRuns).toHaveLength(0);
   });
 

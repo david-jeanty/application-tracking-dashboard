@@ -612,7 +612,7 @@ and row-level security limits every row to its owner.
 | `save_answer`, `search_answers` | Application answers. |
 | `import_library` | The one-time library import. |
 | `calibrate_template` | Measures a template's base resume on resume.lol (read only) in headless Chrome and saves its line targets and skeleton. |
-| `complete_run` | Checks the page, then saves the run in one transaction, then builds. |
+| `complete_run` | Checks the page (phrases, bold spans, numbers from the library), then saves the run in one transaction, then builds. Returns loose bridges with a ready revert edit. |
 | `build_resume` | Builds a saved resume once: new resume on resume.lol, PDF printed and checked on the server, stored privately. |
 | `rebuild_with_edits` | David's edits at apply time: updates the same resume.lol resume in place, never over his own edits there. |
 

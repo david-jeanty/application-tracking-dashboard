@@ -10,9 +10,11 @@
  * choice.
  *
  * "Best" and "weakest" use the same scoring as `search_stories`: how well the
- * text matches the posting's requirements.
+ * text matches the posting's requirements, and how directly it answers the
+ * requirement phrases (decision record 0023).
  */
 
+import { answerScore, answersIn } from "@/lib/agent/library/phrases";
 import { rankStories, tokenize, type LibraryStory } from "@/lib/agent/library/scoring";
 import type { TailoredContent } from "@/lib/agent/resume/content";
 import { bulletCountFor, type BulletOwner } from "@/lib/agent/resume/line-rules";
@@ -43,15 +45,16 @@ function requirementTokens(requirements: readonly string[]): Set<string>[] {
   return requirements.map((requirement) => new Set(tokenize(requirement)));
 }
 
-/** How well a bullet speaks to the posting: matched requirements first, then shared words. */
-export function relevance(text: string, requirements: readonly string[]): number {
+/** How well a bullet speaks to the posting: answered phrases and matched requirements first, then shared words. */
+export function relevance(text: string, requirements: readonly string[], phrases: readonly string[] = []): number {
   const tokens = new Set(tokenize(text));
   const perRequirement = requirementTokens(requirements);
   const matched = perRequirement.filter(
     (set) => set.size > 0 && overlapCount(set, tokens) * 2 >= set.size,
   ).length;
   const all = new Set(perRequirement.flatMap((set) => [...set]));
-  return matched * 3 + overlapCount(tokens, all);
+  const answered = phrases.length ? answerScore(answersIn(text, phrases)) : 0;
+  return answered + matched * 3 + overlapCount(tokens, all);
 }
 
 /**
@@ -66,6 +69,8 @@ export function pickWeakestBullet(
   keep: ReadonlySet<string> = new Set(),
   /** When given, an entry is never cut below its minimum count. */
   minimums?: ReadonlyMap<string, number>,
+  /** The posting's requirement phrases: a bullet that answers one is cut last. */
+  phrases: readonly string[] = [],
 ): { entry: string; index: number; text: string } | null {
   const candidates = content.entries.flatMap((entry, entryOrder) =>
     entry.omit
@@ -76,7 +81,7 @@ export function pickWeakestBullet(
           text,
           order: entryOrder * 100 + index,
           alone: entry.bullets.length === 1,
-          score: relevance(text, requirements),
+          score: relevance(text, requirements, phrases),
         })),
   ).filter((candidate) => {
     if (keep.has(candidate.text)) return false;
@@ -139,6 +144,8 @@ export function pickNextBullet(input: {
   entries: readonly ResumeEntry[];
   library: readonly LibraryStory[];
   requirements: readonly string[];
+  /** The posting's requirement phrases, so a story that answers one comes first. */
+  phrases?: readonly string[];
   template: TemplateName;
   accepts: (entry: string, text: string) => boolean;
 }): { entry: string; text: string; explain_note: string | null } | null {
@@ -147,7 +154,7 @@ export function pickNextBullet(input: {
   );
   const ranking = rankStories(
     input.library,
-    { requirements: input.requirements, angles: [], template: input.template },
+    { requirements: input.requirements, phrases: input.phrases, angles: [], template: input.template },
     // Every story is a candidate: a page with room takes the best match first,
     // then any story whose experience is on the page (decision record 0018).
     { limit: Number.MAX_SAFE_INTEGER, includeUnscored: true, coverEveryExperience: false },
