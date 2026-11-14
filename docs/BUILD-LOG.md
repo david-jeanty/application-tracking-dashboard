@@ -315,6 +315,14 @@ Results go in this log. The PR is opened only after these pass.
 - **Self-host the Jake's font.** The Jake's base loads Computer Modern from
   `cdn.jsdelivr.net/gh/...@latest`. If that file moves, every Jake's build is
   skipped. Pinning a version in the base resume's CSS would remove the risk.
+- **Smaller run playbook (usage).** `get_playbook` for a run is about 26 KB,
+  and 15.6 KB of it is the standards, which the Job Search project already
+  holds as project knowledge. On the Ramp run the playbook was 59% of all tool
+  traffic. A `standards: false` argument (or leaving the standards out of the
+  run phase when the project has them) would save about 3,900 tokens per run,
+  re-read on every later turn of the chat. The default would keep them, so the
+  tools stay assistant-agnostic. Worth doing if David's usage meter shows runs
+  near his 10% target.
 
 ### 8. What I need from David
 
@@ -839,6 +847,18 @@ posting was read again days later.
 (about 10,700 tokens): `get_playbook` 25,468, `search_stories` 14,808,
 two `check_bullets` 1,601, `complete_run` 933, `create_application_from_jd`
 169. Request bytes were not logged yet.
+
+**Verified on the preview after the deploy (2026-11-14)**
+
+| Check | Result |
+| --- | --- |
+| Migration `20261114000100` | Applied; pgTAP 007, 010, 011, 012 pass on the preview |
+| Recalibration (90% two-line target) | zero2sudo 130 / 254 / 274 (David's example: full lines 130 to 142, two-liners 255 to 280); Jake's 107 / 212 / 232 |
+| Bullet counts in the playbook | Every entry shows its range: IBM incoming 1, IRB 2, Fidus 3, StraNexus 2, Interndex 3, Pro Bono 2 to 3, BTA 2 |
+| Run steps | Degree risk, club-role framing, bold, bullet counts, interests, exact rewordings and the usage line are all served |
+| Saved rules | 9, the BTA framing rule included |
+| Profile interests | Saved from the latest resume: "Guitar, rock climbing, baking, learning pickleball, Ottawa Senators hockey"; David can change it with `import_library` |
+| Ramp usage from `get_run_state` | 6 run calls plus the opening playbook read counted; calls made later for other work left out |
 
 #### Still open for step 10
 
