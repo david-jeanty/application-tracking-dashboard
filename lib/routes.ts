@@ -5,6 +5,8 @@ export const protectedRoutes = [
   "/analytics",
   "/archive",
   "/settings",
+  // The recruiting agent's resumes. Owner only; a 404 for everyone else.
+  "/resumes",
   // The OAuth consent screen must know who is granting access, so it is
   // protected like any other authenticated page.
   "/oauth/consent",

@@ -23,6 +23,12 @@ export type DeleteAccountDependencies = {
   getSessionUser: () => Promise<SessionUser | null>;
   /** Re-proves the caller still holds the account's credential. */
   verifyPassword: (email: string, password: string) => Promise<boolean>;
+  /**
+   * Removes files the account stored (the recruiting agent's resumes), which
+   * database cascades do not reach. Optional, and a no-op for every account
+   * but the agent's owner.
+   */
+  removeStoredFiles?: (userId: string) => Promise<{ error: { message: string } | null }>;
   /** The one admin-API call: permanently deletes the account and cascades. */
   deleteUser: (userId: string) => Promise<{ error: { message: string } | null }>;
   /** Clears the now-dead session's cookies. */
@@ -65,6 +71,11 @@ export async function deleteOwnAccount(
 
   const passwordValid = await deps.verifyPassword(user.email, input.password);
   if (!passwordValid) return { outcome: "invalid_password" };
+
+  if (deps.removeStoredFiles) {
+    const removed = await deps.removeStoredFiles(user.id);
+    if (removed.error) return { outcome: "error", message: removed.error.message };
+  }
 
   const { error } = await deps.deleteUser(user.id);
   if (error) return { outcome: "error", message: error.message };

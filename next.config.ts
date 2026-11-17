@@ -3,6 +3,21 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
+  // The owner's resume tools print PDFs in headless Chrome
+  // (lib/agent/resume/render.ts). Both packages ship binaries and must load
+  // from node_modules at runtime instead of being bundled, and Vercel must
+  // copy @sparticuz/chromium's compressed Chrome into the MCP function.
+  // playwright-core reads files such as browsers.json by computed paths that
+  // file tracing cannot follow, so the whole package (13 MB) is copied too;
+  // without it Chrome never launches on Vercel ("Cannot find module
+  // .../playwright-core/browsers.json").
+  serverExternalPackages: ["@sparticuz/chromium", "playwright-core"],
+  outputFileTracingIncludes: {
+    "/api/mcp": [
+      "./node_modules/@sparticuz/chromium/bin/**",
+      "./node_modules/playwright-core/**",
+    ],
+  },
   async headers() {
     return [
       /*

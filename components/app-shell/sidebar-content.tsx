@@ -7,6 +7,7 @@ import { InterndexLogo } from "@/components/branding/interndex-logo";
 import { signOutAction } from "@/lib/auth/actions";
 import { cn } from "@/lib/utils";
 import {
+  agentNavigationItems,
   demoNavigationItems,
   isNavigationItemActive,
   primaryNavigationItems,
@@ -24,7 +25,8 @@ import {
  * two from being one component with six optional props.
  */
 export type WorkspaceIdentity =
-  | { kind: "account"; displayName: string; email: string }
+  // agentOwner is true only for the OWNER_USER_ID account (the recruiting agent).
+  | { kind: "account"; displayName: string; email: string; agentOwner?: boolean }
   | { kind: "demo" };
 
 type SidebarContentProps = {
@@ -149,6 +151,12 @@ export function SidebarContent({
             <ul className="flex flex-col gap-0.5">
               {renderItems(primaryNavigationItems)}
             </ul>
+
+            {identity.agentOwner ? (
+              <ul className="mt-6 flex flex-col gap-0.5">
+                {renderItems(agentNavigationItems)}
+              </ul>
+            ) : null}
 
             {/* Archive is finished work, so it sits apart from the live workflow. */}
             <ul className="mt-6 flex flex-col gap-0.5">

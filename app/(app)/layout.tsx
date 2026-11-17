@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { AppShell } from "@/components/app-shell/app-shell";
+import { isAgentOwner } from "@/lib/agent/owner";
 import { hasSupabaseEnvironment } from "@/lib/env";
 import { createClient } from "@/lib/supabase/server";
 
@@ -30,7 +31,9 @@ export default async function ProtectedLayout({
     "Student";
 
   return (
-    <AppShell identity={{ kind: "account", displayName, email }}>
+    <AppShell
+      identity={{ kind: "account", displayName, email, agentOwner: isAgentOwner(user.id) }}
+    >
       {children}
     </AppShell>
   );

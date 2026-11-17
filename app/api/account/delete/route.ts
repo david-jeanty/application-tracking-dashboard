@@ -5,6 +5,7 @@ import {
   deleteOwnAccount,
   type DeleteAccountDependencies,
 } from "@/lib/account/delete-account";
+import { removeAgentFiles, RESUME_FILES_BUCKET } from "@/lib/agent/storage";
 import { getPublicEnvironment } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -110,6 +111,9 @@ export async function POST(request: Request) {
       });
       return !error;
     },
+    // A no-op for every account but the recruiting agent's owner.
+    removeStoredFiles: (userId) =>
+      removeAgentFiles(admin.storage.from(RESUME_FILES_BUCKET), userId),
     deleteUser: (userId) => admin.auth.admin.deleteUser(userId),
     signOutSession: async () => {
       await sessionClient.auth.signOut();
