@@ -8,9 +8,9 @@ has to set up by hand.
 
 ## Spec 1: Foundation and resume pipeline
 
-**Status:** steps 1 to 9 built and tested locally (2026-11-13). Step 10 (the
-preview test plan) is next and needs the preview Supabase user id from David.
-See section 9 for progress and section 10 for setup.
+**Status:** shipped to production 2026-11-17 (`agent-specs` merged into
+`main`). See section 11 for the release checks, the production setup steps and
+the open bugs. Sections 1 to 10 are the build history.
 **Branch:** `agent-specs`. One PR for all of Spec 1.
 
 ### 1. What I found
@@ -970,3 +970,151 @@ Chrome binary (see `docs/testing.md`). `build` needs the three public
    `OWNER_USER_ID`, and the migrations pushed to production.
 
 No Chrome extension reload is needed: Spec 1 does not change the extension.
+
+### 11. Release to production (2026-11-17)
+
+**What shipped:** all of Spec 1 as built and tested on the preview (sections 9
+and 10): the owner-only agent server (16 agent tools next to the 5 tracker
+tools), the story library, fit reads, `complete_run`, resume builds through
+resume.lol with the Chrome layout check, the private `resumes` bucket, and the
+owner-only Resumes page and application panel. `agent-specs` was merged into
+`main` with a merge commit, so the whole release can be undone with one
+`git revert -m 1` of that commit if needed.
+
+#### Pre-merge checks
+
+**Migrations production does not have yet.** Production runs `main`, whose
+last migration is `20260910000100_oauth_client_profile_reads`. These six come
+with the merge, in this order:
+
+| Migration | What it does to existing tables |
+| --- | --- |
+| `20261113000100_agent_foundation` | `applications`: adds 4 nullable columns (`jd_requirements`, `job_id`, `partner_functions`, `tailored_resume_id`), 3 check constraints and 1 foreign key that only look at those new columns, and 1 partial index (`where job_id is not null`). Everything else is 11 new tables with RLS. |
+| `20261113000200_resume_builds` | No existing table. New columns on the new `tailored_resumes`; new private `resumes` bucket (`on conflict do nothing`) and 4 new owner-only policies on `storage.objects`. |
+| `20261113000300_complete_run` | `applications`: adds 1 nullable column (`fit_read`) and its check constraint. One new function, `complete_run` (SECURITY INVOKER). |
+| `20261113000400_agent_profile_academic_standing` | No existing table (new `agent_profile` only). |
+| `20261113000500_library_resume_sources` | No existing table (new `experiences`, `agent_profile` only). |
+| `20261114000100_run_feedback` | No existing table (new `usage_log`, `agent_profile` only). |
+
+None of them drops, renames or changes the type of an existing column, and none
+changes an existing policy, grant, function or trigger (no `create or
+replace`). No migration updates or deletes a row. On existing rows the new
+`applications` columns are null, and every new constraint allows null, so
+validating them on existing rows cannot fail. The `applications` changes take a
+short table lock while they run (seconds at Interndex's size).
+
+Not checked from this session: production's own migration table. The session's
+Supabase management token was rejected, so the pending list above is from git.
+Step 1 of the production setup below confirms it before anything runs.
+
+**Code paths every student uses.** Checked that nothing a non-owner touches
+reads the new schema, so the deploy is safe even before the migrations run:
+
+- `lib/applications/*`, `lib/mcp/tools.ts`, `proxy.ts` and the extension are
+  unchanged. The Excel export reads `applications` with `select *` but writes
+  only its fixed column list, so the new columns never reach a student's file.
+- Account deletion gained a "remove stored resumes" step that returns at once
+  for any account that is not `OWNER_USER_ID` (`lib/agent/storage.ts`).
+- The MCP route now declares `maxDuration = 90` and loads the agent modules
+  for every request. Neither reads `RESUMELOL_API_KEY` or starts Chrome until
+  an owner tool is called.
+
+**Owner gate.** `lib/agent/owner.ts` fails closed (unset, empty or not a UUID
+means nobody). It decides the MCP server per verified token
+(`lib/mcp/servers.ts`), every agent tool checks it again
+(`lib/mcp/agent-tools.ts`), the Resumes pages return 404 for anyone else, the
+sidebar link and the application panel render only for the owner, and the panel
+query runs only for the owner. Every agent table has owner-scoped RLS
+underneath. On the preview a non-owner saw exactly the 5 tracker tools and
+byte-identical instructions (section 9, step 10).
+
+**Local quality gate on the merge commit:** lint 0 errors (the 2 existing
+warnings), typecheck pass, 1,969 unit tests pass, production build pass,
+extension checks 590 tests pass.
+
+#### Environment variables (Vercel, Production)
+
+| Name | Status | Notes |
+| --- | --- | --- |
+| `OWNER_USER_ID` | New, required for the agent | David's user id in the **production** Supabase project (not the preview id). Without it the agent stays off and nothing else changes. |
+| `RESUMELOL_API_KEY` | New, required for builds | Mark Sensitive. Server only, never `NEXT_PUBLIC_`. |
+| `CHROMIUM_EXECUTABLE_PATH` | Do **not** set | Local only. On Vercel the bundled Chrome is used. |
+| `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `NEXT_PUBLIC_SITE_URL`, `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_LOGO_DEV_TOKEN` | Already used by `main` | No change. `SUPABASE_SECRET_KEY` is now also used to remove the owner's stored resumes on account deletion. |
+
+Vercel applies new variables only to new deployments: redeploy production after
+adding them.
+
+#### Production setup, in order
+
+1. **Confirm what production has.** Supabase dashboard (project
+   `jbkrwbofrctithcjevxy`), SQL Editor:
+   `select version from supabase_migrations.schema_migrations order by version;`
+   The last row should be `20260910000100`. Also `show server_version;` should
+   be 15 or higher (the foreign key in `20261113000100` needs it; the preview
+   accepted it).
+2. **Backup.** Dashboard, Database, Backups: check there is one from today.
+3. **Apply the migrations** from an up-to-date clone of `main`:
+   `npx supabase link --project-ref jbkrwbofrctithcjevxy`, then
+   `npx supabase db push --dry-run` (it must list exactly the six migrations
+   above, nothing else), then `npx supabase db push`. Each migration runs in
+   its own transaction and is recorded, so a failure leaves that migration
+   undone, not half done.
+4. **Verify:** the query from step 1 now ends at `20261114000100`; the
+   `applications` row count is the same as before; Storage shows a private
+   `resumes` bucket.
+5. **Vercel Production variables** (table above), then redeploy.
+6. **Claude connector.** In the Job Search project, turn off the preview
+   connector ("interndex automate") and use the production Interndex connector
+   (`https://www.interndex.dev/api/mcp`, David's production account).
+   Disconnect and reconnect it so Claude fetches the new tool list; it should
+   show 21 tools, `get_playbook` among them.
+7. **Import the library:** `import_library` with the same payload as the
+   preview import (2026-11-13 session data), in one call. Expect 7
+   experiences, 22 stories and 94 variants added, profile saved. Run it once
+   more: 0 added.
+8. **Re-add what was added on the preview after its import:** the 9 saved
+   rules (`get_playbook` on the preview lists them) with `add_rule`, the three
+   Jake's-length one-liners (IBM, BTA events, BTA inquiries) with
+   `save_variant`, and the profile's interests line.
+9. **Calibrate both templates** after the import (calibration uses the
+   library's entries): "Calibrate the zero2sudo template with base resume
+   85f004fa-d780-4bef-9892-ad882dc61b7f, and the jakes template with base
+   resume 8157e84f-ffc6-4bf8-9c9e-17cf2b18314f." Expect about zero2sudo
+   130 / 254 / 274 and Jake's 107 / 212 / 232, as on the preview.
+10. **Check:** `get_playbook` with phase `run` shows the profile, 9 rules and
+    both templates calibrated. A student account (not David's) still sees
+    the tracker exactly as before.
+
+#### Open bugs (found on real runs, not fixed in this release)
+
+1. **"Python -based" spacing.** A hyphenated compound reaches the page with a
+   space before the hyphen. The server's text handling keeps hyphens, so the
+   space is either in the bullet text Claude sent or added where bold markup
+   meets the hyphen (`**Python**-based`) in resume.lol's rendering. Next step:
+   compare the stored bullet with the resume.lol markdown for an affected
+   resume. A `check_bullets` rule that fails a space before a hyphen inside a
+   word would catch it either way.
+2. **Connector shows an outdated `search_stories` schema.** The server serves
+   the current schema (with `phrases`); this session's connector to the
+   preview shows it (2026-11-17). Claude keeps the tool list from when the
+   connector was connected, so a connector added before the schema changed
+   keeps the old one. Workaround: disconnect and reconnect after a deploy that
+   changes tool inputs. Possible fix: note the reconnect in the release steps,
+   or check whether the MCP server can announce tool list changes.
+3. **Rewordings are not saved.** After a failed layout check the run gives
+   exact rewordings in its summary only (playbook step in `phases.ts`). Nothing
+   stores them: they are not variants, not edits, and not on the tailored
+   resume, so they are lost when the chat ends unless David applies them with
+   `rebuild_with_edits`.
+4. **Bullets cut before the second build.** The first build cuts bullets to fit
+   one page, and David's second build starts from the cut content. One cut
+   path ignores David's bullet counts: after line height reaches its limit,
+   `lib/agent/resume/build.ts` (about line 791) calls `pickWeakestBullet`
+   with no minimums, so an entry can drop below its count. Cut bullets are
+   listed in `page_adjustments` but are not offered back for the rebuild.
+5. **Single keywords bolded instead of the posting's phrases.** The phrase
+   rule in `lib/agent/checks/bold.ts` runs only in `complete_run`. Bullets
+   added by page fill (library variants keep the bold from the old resumes)
+   and edits through `rebuild_with_edits` are never checked. Also, the
+   two-word minimum counts tokens split on hyphens, so `**Python-based**`
+   passes as two words.
